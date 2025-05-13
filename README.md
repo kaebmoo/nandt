@@ -2,6 +2,7 @@
 
 Dialysis Scheduler
 
+```
 dialysis_scheduler/
 ├── app.py                  # ไฟล์หลักของแอปพลิเคชัน
 ├── config.py               # การตั้งค่าต่างๆ
@@ -19,3 +20,4 @@ dialysis_scheduler/
     ├── setup.html          # หน้าตั้งค่า API
     ├── appointments.html   # หน้าจัดการนัดหมาย
     └── import.html         # หน้านำเข้าข้อมูล
+```
