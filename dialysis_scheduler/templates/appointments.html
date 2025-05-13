@@ -51,7 +51,7 @@
                 <select class="form-select" id="subcalendar-filter">
                     <option value="">ทั้งหมด</option>
                     {% for subcal in subcalendars %}
-                    <option value="{{ subcal.id }}">{{ subcal.name }}</option>
+                    <option value="{{ subcal.id }}" {% if selected_subcalendar_id == subcal.id|string %}selected{% endif %}>{{ subcal.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -256,6 +256,15 @@
             $('#date-to').val(dateTo.toISOString().split('T')[0]);
         }
         
+        // ตรวจสอบพารามิเตอร์ URL สำหรับ subcalendar_id
+        const urlParams = new URLSearchParams(window.location.search);
+        const subcalendarId = urlParams.get('subcalendar_id');
+        
+        // ถ้ามี subcalendar_id ใน URL ให้ตั้งค่าตัวกรอง
+        if (subcalendarId) {
+            $('#subcalendar-filter').val(subcalendarId);
+        }
+        
         // โหลดรายการนัดหมาย
         function loadAppointments() {
             const container = $('#appointments-container');
@@ -315,6 +324,14 @@
                             <h4 class="mt-4 mb-3">
                                 <i class="far fa-calendar-alt me-2"></i>${formattedDate}
                             </h4>
+                        `);
+                        
+                        // คำนวณจำนวนกิจกรรมในวันนี้
+                        const dayEvents = eventsByDate[date];
+                        container.append(`
+                            <div class="mb-2">
+                                <span class="badge bg-primary">${dayEvents.length} รายการ</span>
+                            </div>
                         `);
                         
                         eventsByDate[date].forEach(event => {

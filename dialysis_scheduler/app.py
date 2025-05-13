@@ -115,9 +115,13 @@ def appointments():
     # สร้างวันที่ปัจจุบันสำหรับค่าเริ่มต้น
     today = datetime.now().strftime('%Y-%m-%d')
     
+    # รับพารามิเตอร์ subcalendar_id จาก URL (ถ้ามี)
+    selected_subcalendar_id = request.args.get('subcalendar_id', '')
+    
     return render_template('appointments.html', 
                           subcalendars=subcals.get('subcalendars', []),
-                          today=today)
+                          today=today,
+                          selected_subcalendar_id=selected_subcalendar_id)  # ส่งค่า subcalendar_id ไปยัง template
 
 @app.route('/get_events')
 def get_events():
@@ -128,12 +132,17 @@ def get_events():
     try:
         start_date = request.args.get('start_date', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
         end_date = request.args.get('end_date', (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
-        subcalendar_id = request.args.get('subcalendar_id')
+        subcalendar_id = request.args.get('subcalendar_id', '')
         
+        # แปลงวันที่
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # เรียก API และส่งพารามิเตอร์ subcalendar_id ถ้ามีค่า
         events = teamup_api.get_events(
-            start_date=datetime.strptime(start_date, '%Y-%m-%d'),
-            end_date=datetime.strptime(end_date, '%Y-%m-%d'),
-            subcalendar_id=subcalendar_id
+            start_date=start_dt,
+            end_date=end_dt,
+            subcalendar_id=subcalendar_id if subcalendar_id else None
         )
         
         return jsonify(events)

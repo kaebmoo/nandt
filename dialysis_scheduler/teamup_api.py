@@ -146,8 +146,16 @@ class TeamupAPI:
             'endDate': end_date.strftime('%Y-%m-%d')
         }
         
+        # ส่ง subcalendarId ในรูปแบบอาร์เรย์ตามที่ API ต้องการ
         if subcalendar_id:
-            params['subcalendarId'] = subcalendar_id
+            print(f"กรองตาม subcalendar_id: {subcalendar_id}")
+            # กรณีเป็น list
+            if isinstance(subcalendar_id, list):
+                for id in subcalendar_id:
+                    params.setdefault('subcalendarId[]', []).append(id)
+            # กรณีเป็นค่าเดียว
+            else:
+                params['subcalendarId[]'] = subcalendar_id # ใช้ subcalendarId[] แทน subcalendarId
         
         response = requests.get(
             f"{self.base_url}/events",
