@@ -1,0 +1,448 @@
+<!-- templates/appointments.html -->
+{% extends 'base.html' %}
+
+{% block head %}
+<style>
+    .calendar-container {
+        height: 600px;
+        overflow-y: auto;
+    }
+    .appointment-card {
+        margin-bottom: 10px;
+        border-left: 4px solid #007bff;
+    }
+    .appointment-card.status-completed {
+        border-left-color: #28a745;
+    }
+    .appointment-card.status-cancelled {
+        border-left-color: #dc3545;
+    }
+    .appointment-card.status-missed {
+        border-left-color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<ul class="nav nav-tabs mb-4" id="appointmentTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-pane" type="button" role="tab">
+            <i class="fas fa-list me-2"></i>รายการนัดหมาย
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="new-tab" data-bs-toggle="tab" data-bs-target="#new-pane" type="button" role="tab">
+            <i class="fas fa-plus me-2"></i>สร้างนัดหมายใหม่
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="status-tab" data-bs-toggle="tab" data-bs-target="#status-pane" type="button" role="tab">
+            <i class="fas fa-check-circle me-2"></i>อัปเดตสถานะ
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="appointmentTabsContent">
+    <!-- รายการนัดหมาย -->
+    <div class="tab-pane fade show active" id="list-pane" role="tabpanel">
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label for="subcalendar-filter" class="form-label">ปฏิทินย่อย:</label>
+                <select class="form-select" id="subcalendar-filter">
+                    <option value="">ทั้งหมด</option>
+                    {% for subcal in subcalendars %}
+                    <option value="{{ subcal.id }}">{{ subcal.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="date-from" class="form-label">จากวันที่:</label>
+                <input type="date" class="form-control" id="date-from" value="{{ today }}">
+            </div>
+            <div class="col-md-3">
+                <label for="date-to" class="form-label">ถึงวันที่:</label>
+                <input type="date" class="form-control" id="date-to">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="button" class="btn btn-primary w-100" id="filter-btn">
+                    <i class="fas fa-search me-2"></i>ค้นหา
+                </button>
+            </div>
+        </div>
+        
+        <div class="calendar-container" id="appointments-container">
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">กำลังโหลด...</span>
+                </div>
+                <p class="mt-2">กำลังโหลดรายการนัดหมาย...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- สร้างนัดหมายใหม่ -->
+    <div class="tab-pane fade" id="new-pane" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="h5 mb-0"><i class="fas fa-plus-circle me-2"></i>สร้างนัดหมายฟอกไตใหม่</h3>
+            </div>
+            <div class="card-body">
+                <form id="new-appointment-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title" class="form-label">ชื่อผู้ป่วย:</label>
+                            <input type="text" class="form-control" id="title" name="title" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="calendar_name" class="form-label">ปฏิทินย่อย:</label>
+                            <select class="form-select" id="calendar_name" name="calendar_name" required>
+                                <option value="">เลือกปฏิทินย่อย</option>
+                                {% for subcal in subcalendars %}
+                                <option value="{{ subcal.name }}">{{ subcal.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="start_date" class="form-label">วันที่นัดหมาย:</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ today }}" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="start_time" class="form-label">เวลาเริ่ม:</label>
+                            <input type="time" class="form-control" id="start_time" name="start_time" value="09:00" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="end_date" class="form-label">วันที่สิ้นสุด:</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ today }}" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="end_time" class="form-label">เวลาสิ้นสุด:</label>
+                            <input type="time" class="form-control" id="end_time" name="end_time" value="12:00" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="location" class="form-label">ตำแหน่ง:</label>
+                            <input type="text" class="form-control" id="location" name="location" placeholder="เช่น ห้องฟอกไตเตียง 3">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="who" class="form-label">ผู้ดูแล:</label>
+                            <input type="text" class="form-control" id="who" name="who" placeholder="เช่น คุณหมอสมศักดิ์">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">รายละเอียด:</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="เบอร์โทร: &#10;ความดันโลหิต: &#10;หมายเหตุ:"></textarea>
+                    </div>
+                    
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring" value="true">
+                                <label class="form-check-label" for="is_recurring">
+                                    <strong>นัดหมายเกิดซ้ำ</strong>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-body" id="recurring-options" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">วันในสัปดาห์:</label>
+                                <div class="d-flex flex-wrap">
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="mon" name="mon" value="true">
+                                        <label class="form-check-label" for="mon">จันทร์</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="tue" name="tue" value="true">
+                                        <label class="form-check-label" for="tue">อังคาร</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="wed" name="wed" value="true">
+                                        <label class="form-check-label" for="wed">พุธ</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="thu" name="thu" value="true">
+                                        <label class="form-check-label" for="thu">พฤหัสบดี</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="fri" name="fri" value="true">
+                                        <label class="form-check-label" for="fri">ศุกร์</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="sat" name="sat" value="true">
+                                        <label class="form-check-label" for="sat">เสาร์</label>
+                                    </div>
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" id="sun" name="sun" value="true">
+                                        <label class="form-check-label" for="sun">อาทิตย์</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="weeks" class="form-label">จำนวนสัปดาห์:</label>
+                                <input type="number" class="form-control" id="weeks" name="weeks" min="1" max="12" value="4">
+                                <div class="form-text">จำนวนสัปดาห์ที่ต้องการให้นัดหมายเกิดซ้ำ</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>บันทึกนัดหมาย
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- อัปเดตสถานะ -->
+    <div class="tab-pane fade" id="status-pane" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="h5 mb-0"><i class="fas fa-check-circle me-2"></i>อัปเดตสถานะนัดหมาย</h3>
+            </div>
+            <div class="card-body">
+                <form id="update-status-form">
+                    <div class="mb-3">
+                        <label for="event_id" class="form-label">Event ID:</label>
+                        <input type="text" class="form-control" id="event_id" name="event_id" required>
+                        <div class="form-text">ค้นหา Event ID ได้จากการคลิกที่นัดหมายในรายการนัดหมาย</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="status" class="form-label">สถานะ:</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="">เลือกสถานะ</option>
+                            <option value="มาตามนัด">มาตามนัด</option>
+                            <option value="ยกเลิก">ยกเลิก</option>
+                            <option value="ไม่มา">ไม่มา</option>
+                        </select>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>บันทึกสถานะ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // แสดง/ซ่อนตัวเลือกการนัดหมายเกิดซ้ำ
+        $('#is_recurring').change(function() {
+            if ($(this).is(':checked')) {
+                $('#recurring-options').slideDown();
+            } else {
+                $('#recurring-options').slideUp();
+            }
+        });
+        
+        // กำหนดวันที่สิ้นสุด (ค่าเริ่มต้น +30 วัน)
+        const dateFrom = $('#date-from').val();
+        if (dateFrom) {
+            const dateTo = new Date(dateFrom);
+            dateTo.setDate(dateTo.getDate() + 30);
+            $('#date-to').val(dateTo.toISOString().split('T')[0]);
+        }
+        
+        // โหลดรายการนัดหมาย
+        function loadAppointments() {
+            const container = $('#appointments-container');
+            const subcalendarId = $('#subcalendar-filter').val();
+            const startDate = $('#date-from').val();
+            const endDate = $('#date-to').val();
+            
+            container.html(`
+                <div class="text-center p-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">กำลังโหลด...</span>
+                    </div>
+                    <p class="mt-2">กำลังโหลดรายการนัดหมาย...</p>
+                </div>
+            `);
+            
+            $.ajax({
+                url: '/get_events',
+                data: {
+                    subcalendar_id: subcalendarId,
+                    start_date: startDate,
+                    end_date: endDate
+                },
+                success: function(data) {
+                    container.empty();
+                    
+                    if (!data.events || data.events.length === 0) {
+                        container.html(`
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>ไม่พบรายการนัดหมายในช่วงเวลาที่เลือก
+                            </div>
+                        `);
+                        return;
+                    }
+                    
+                    // จัดกลุ่มตามวันที่
+                    const eventsByDate = {};
+                    data.events.forEach(event => {
+                        const startDate = event.start_dt.split('T')[0];
+                        if (!eventsByDate[startDate]) {
+                            eventsByDate[startDate] = [];
+                        }
+                        eventsByDate[startDate].push(event);
+                    });
+                    
+                    // แสดงผลแยกตามวันที่
+                    Object.keys(eventsByDate).sort().forEach(date => {
+                        const dateObj = new Date(date);
+                        const formattedDate = dateObj.toLocaleDateString('th-TH', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        });
+                        
+                        container.append(`
+                            <h4 class="mt-4 mb-3">
+                                <i class="far fa-calendar-alt me-2"></i>${formattedDate}
+                            </h4>
+                        `);
+                        
+                        eventsByDate[date].forEach(event => {
+                            let statusClass = '';
+                            if (event.title.includes('(มาตามนัด)')) {
+                                statusClass = 'status-completed';
+                            } else if (event.title.includes('(ยกเลิก)')) {
+                                statusClass = 'status-cancelled';
+                            } else if (event.title.includes('(ไม่มา)')) {
+                                statusClass = 'status-missed';
+                            }
+                            
+                            const startTime = event.start_dt.split('T')[1].substring(0, 5);
+                            const endTime = event.end_dt.split('T')[1].substring(0, 5);
+                            
+                            container.append(`
+                                <div class="card appointment-card ${statusClass}" data-event-id="${event.id}">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <h5 class="card-title">${event.title}</h5>
+                                            <span class="badge bg-primary">${startTime} - ${endTime}</span>
+                                        </div>
+                                        <p class="card-text mb-1">
+                                            <i class="fas fa-map-marker-alt me-2"></i>${event.location || 'ไม่ระบุตำแหน่ง'}
+                                        </p>
+                                        <p class="card-text">
+                                            <i class="fas fa-user-md me-2"></i>${event.who || 'ไม่ระบุผู้ดูแล'}
+                                        </p>
+                                        <div class="text-end">
+                                            <button class="btn btn-sm btn-outline-primary copy-event-id" data-event-id="${event.id}">
+                                                <i class="fas fa-copy me-1"></i>คัดลอก Event ID
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary view-details" data-event-id="${event.id}">
+                                                <i class="fas fa-eye me-1"></i>ดูรายละเอียด
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+                        });
+                    });
+                    
+                    // จัดการการคลิกที่ปุ่มคัดลอก Event ID
+                    $('.copy-event-id').click(function() {
+                        const eventId = $(this).data('event-id');
+                        $('#event_id').val(eventId);
+                        $('#status-tab').tab('show');
+                    });
+                    
+                    // จัดการการคลิกที่ปุ่มดูรายละเอียด
+                    $('.view-details').click(function() {
+                        const eventId = $(this).data('event-id');
+                        // ดึงข้อมูลรายละเอียดและแสดงใน modal
+                        const event = data.events.find(e => e.id === eventId);
+                        if (event) {
+                            alert(`รายละเอียดของนัดหมาย: ${event.title}\n\nรายละเอียด: ${event.notes || 'ไม่มีรายละเอียด'}`);
+                        }
+                    });
+                },
+                error: function(xhr, status, error) {
+                    container.html(`
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>เกิดข้อผิดพลาดในการโหลดรายการนัดหมาย: ${error}
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // โหลดรายการนัดหมายเมื่อโหลดหน้า
+        loadAppointments();
+        
+        // โหลดรายการนัดหมายเมื่อคลิกปุ่มค้นหา
+        $('#filter-btn').click(function() {
+            loadAppointments();
+        });
+        
+        // จัดการการส่งฟอร์มสร้างนัดหมายใหม่
+        $('#new-appointment-form').submit(function(e) {
+            e.preventDefault();
+            
+            const formData = $(this).serialize();
+            
+            $.ajax({
+                url: '/create_appointment',
+                method: 'POST',
+                data: formData,
+                success: function(data) {
+                    if (data.success) {
+                        alert('สร้างนัดหมายสำเร็จ!');
+                        $('#new-appointment-form')[0].reset();
+                        $('#list-tab').tab('show');
+                        loadAppointments();
+                    } else {
+                        alert('เกิดข้อผิดพลาด: ' + data.error);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('เกิดข้อผิดพลาด: ' + xhr.responseJSON?.error || error);
+                }
+            });
+        });
+        
+        // จัดการการส่งฟอร์มอัปเดตสถานะ
+        $('#update-status-form').submit(function(e) {
+            e.preventDefault();
+            
+            const formData = $(this).serialize();
+            
+            $.ajax({
+                url: '/update_status',
+                method: 'POST',
+                data: formData,
+                success: function(data) {
+                    if (data.success) {
+                        alert('อัปเดตสถานะสำเร็จ!');
+                        $('#update-status-form')[0].reset();
+                        $('#list-tab').tab('show');
+                        loadAppointments();
+                    } else {
+                        alert('เกิดข้อผิดพลาด: ' + data.error);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('เกิดข้อผิดพลาด: ' + xhr.responseJSON?.error || error);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

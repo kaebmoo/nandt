@@ -1,0 +1,49 @@
+<!-- templates/setup.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h4 mb-0"><i class="fas fa-cog me-2"></i>ตั้งค่าการเชื่อมต่อกับ TeamUp API</h2>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('setup') }}">
+                    <div class="mb-3">
+                        <label for="api_key" class="form-label">API Key:</label>
+                        <input type="password" class="form-control" id="api_key" name="api_key" required>
+                        <div class="form-text">
+                            <a href="https://teamup.com/api-keys/request" target="_blank">
+                                <i class="fas fa-external-link-alt me-1"></i>คลิกที่นี่เพื่อขอ API Key
+                            </a>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="calendar_id" class="form-label">Calendar ID:</label>
+                        <input type="text" class="form-control" id="calendar_id" name="calendar_id" required>
+                        <div class="form-text">
+                            ตัวอย่าง: ks73ad7816e7a61b3a (ส่วนที่อยู่หลัง https://teamup.com/ ในลิงก์ปฏิทินของคุณ)
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plug me-2"></i>ทดสอบการเชื่อมต่อ
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="mt-4">
+                    <h5>วิธีการหา Calendar ID:</h5>
+                    <ol>
+                        <li>ล็อกอินเข้าสู่ <a href="https://teamup.com" target="_blank">TeamUp Calendar</a></li>
+                        <li>เปิดปฏิทินที่ต้องการเชื่อมต่อ</li>
+                        <li>ดูที่ URL ในเบราว์เซอร์ เช่น <code>https://teamup.com/ks73ad7816e7a61b3a</code></li>
+                        <li>Calendar ID คือส่วนที่อยู่หลัง <code>https://teamup.com/</code> ในตัวอย่างนี้คือ <code>ks73ad7816e7a61b3a</code></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

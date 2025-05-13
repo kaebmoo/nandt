@@ -1,0 +1,70 @@
+<!-- templates/import.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h4 mb-0"><i class="fas fa-file-import me-2"></i>นำเข้าข้อมูลจากไฟล์ CSV</h2>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('import_csv') }}" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="csv_file" class="form-label">เลือกไฟล์ CSV:</label>
+                        <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv" required>
+                        <div class="form-text">เลือกไฟล์ CSV ที่มีรูปแบบตามตัวอย่างด้านล่าง</div>
+                    </div>
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i>นำเข้าข้อมูล
+                        </button>
+                    </div>
+                </form>
+                
+                {% if results %}
+                <div class="mt-4">
+                    <h3 class="h5">ผลการนำเข้า</h3>
+                    <div class="alert alert-info">
+                        <p><strong>นำเข้าสำเร็จ:</strong> {{ results.success }} รายการ</p>
+                        <p><strong>ไม่สำเร็จ:</strong> {{ results.failed }} รายการ</p>
+                        
+                        {% if results.errors %}
+                        <hr>
+                        <h4 class="h6">ข้อผิดพลาด:</h4>
+                        <ul>
+                            {% for error in results.errors %}
+                            <li>
+                                {% if error.row %}แถวที่ {{ error.row }}{% endif %}
+                                {% if error.patient %}: {{ error.patient }}{% endif %}
+                                - {{ error.error }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="mt-4">
+                    <h3 class="h5">ตัวอย่างรูปแบบไฟล์ CSV</h3>
+                    <div class="alert alert-light">
+                        <pre>Subject,Start Date,Start Time,End Date,End Time,All Day Event,Location,Who,Description,Calendar Name
+นายสมชาย ใจดี - ฟอกไต,12/05/2025,09:00,12/05/2025,12:00,False,ห้องฟอกไตเตียง 3,คุณหมอสมศักดิ์,เบอร์โทร: 081-234-5678 ความดันโลหิต: ปกติ,หน่วยไตเทียม รพ.ท่าวังผา
+นางสาวสมหญิง รักดี - ฟอกไต,13/05/2025,13:00,13/05/2025,16:00,False,ห้องฟอกไตเตียง 5,คุณพยาบาลนงนุช,เบอร์โทร: 089-876-5432 ความดันโลหิต: สูง,หน่วยไตเทียม รพร.ปัว</pre>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>หมายเหตุ:
+                        <ul>
+                            <li>วันที่ต้องอยู่ในรูปแบบ DD/MM/YYYY เช่น 12/05/2025</li>
+                            <li>เวลาต้องอยู่ในรูปแบบ HH:MM เช่น 09:00</li>
+                            <li>ฟิลด์ Calendar Name ต้องตรงกับชื่อปฏิทินย่อยที่มีอยู่ หรือจะสร้างใหม่อัตโนมัติ</li>
+                            <li>ฟิลด์ที่จำเป็นต้องมีคือ Subject, Start Date, Start Time, End Date, End Time และ Calendar Name</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
