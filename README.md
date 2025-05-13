@@ -1,5 +1,7 @@
 # nandt
 
+Dialysis Scheduler
+
 dialysis_scheduler/
 ├── app.py                  # ไฟล์หลักของแอปพลิเคชัน
 ├── config.py               # การตั้งค่าต่างๆ
