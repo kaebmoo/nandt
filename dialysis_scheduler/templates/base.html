@@ -28,7 +28,7 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('index') }}">หน้าแรก</a>
                     </li>
-                    {% if session.get('api_key') %}
+                    {% if session.get('api_key') or api_connected %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('subcalendars') }}">ปฏิทินย่อย</a>
                     </li>
@@ -41,7 +41,7 @@
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav">
-                    {% if session.get('api_key') %}
+                    {% if session.get('api_key') or api_connected %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('logout') }}">
                             <i class="fas fa-sign-out-alt me-1"></i>ออกจากระบบ
@@ -50,7 +50,7 @@
                     {% else %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('setup') }}">
-                            <i class="fas fa-sign-in-alt me-1"></i>เข้าสู่ระบบ
+                            <i class="fas fa-cog me-1"></i>ตั้งค่าการเชื่อมต่อ
                         </a>
                     </li>
                     {% endif %}

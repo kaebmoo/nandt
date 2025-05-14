@@ -11,9 +11,33 @@
         <div class="alert alert-success mb-4">
             <i class="fas fa-check-circle me-2"></i>เชื่อมต่อกับ TeamUp API แล้ว
         </div>
-        <div class="row mt-5">
+        
+        <!-- ส่วนแสดงข้อมูลสรุป -->
+        {% if summary_data %}
+        <div class="row mb-5">
+            <div class="col-md-6">
+                <div class="card bg-light border-0 shadow-sm">
+                    <div class="card-body text-center py-4">
+                        <h1 class="display-4 text-primary mb-0">{{ summary_data.subcalendar_count }}</h1>
+                        <p class="lead mb-0">ปฏิทินย่อยทั้งหมด</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card bg-light border-0 shadow-sm">
+                    <div class="card-body text-center py-4">
+                        <h1 class="display-4 text-primary mb-0">{{ summary_data.today_appointments }}</h1>
+                        <p class="lead mb-0">นัดหมายวันนี้</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- ส่วนเมนูการใช้งาน (คงเดิม) -->
+        <div class="row mt-4">
             <div class="col-md-4">
-                <div class="card text-center h-100">
+                <div class="card text-center h-100 shadow-sm">
                     <div class="card-body">
                         <i class="fas fa-calendar-check fa-3x text-primary mb-3"></i>
                         <h5 class="card-title">จัดการปฏิทินย่อย</h5>
@@ -23,7 +47,7 @@
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card text-center h-100">
+                <div class="card text-center h-100 shadow-sm">
                     <div class="card-body">
                         <i class="fas fa-user-clock fa-3x text-primary mb-3"></i>
                         <h5 class="card-title">จัดการนัดหมาย</h5>
@@ -33,7 +57,7 @@
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card text-center h-100">
+                <div class="card text-center h-100 shadow-sm">
                     <div class="card-body">
                         <i class="fas fa-file-import fa-3x text-primary mb-3"></i>
                         <h5 class="card-title">นำเข้าข้อมูล</h5>
@@ -43,6 +67,55 @@
                 </div>
             </div>
         </div>
+        
+        <!-- แสดงปฏิทินย่อยล่าสุด (แก้ไขการแสดงสี) -->
+        {% if summary_data and summary_data.subcalendars %}
+        <div class="row mt-5">
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">ปฏิทินย่อยล่าสุด</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for subcal in summary_data.subcalendars %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-header text-white" style="background-color: 
+                                        {% if subcal.color == 1 %}#CF2A2A{% elif subcal.color == 2 %}#CF2A2A{% elif subcal.color == 3 %}#AD1A1A{% 
+                                        elif subcal.color == 4 %}#7E3838{% elif subcal.color == 5 %}#CA7609{% elif subcal.color == 6 %}#F16C20{% 
+                                        elif subcal.color == 7 %}#F58A4B{% elif subcal.color == 8 %}#D2B53B{% elif subcal.color == 9 %}#D96FBF{% 
+                                        elif subcal.color == 10 %}#B84E9D{% elif subcal.color == 11 %}#9D3283{% elif subcal.color == 12 %}#7A0F60{% 
+                                        elif subcal.color == 13 %}#542382{% elif subcal.color == 14 %}#7742A9{% elif subcal.color == 15 %}#8763CA{% 
+                                        elif subcal.color == 16 %}#B86AE2{% elif subcal.color == 17 %}#668CB3{% elif subcal.color == 18 %}#4770D8{% 
+                                        elif subcal.color == 19 %}#2951B9{% elif subcal.color == 20 %}#13389D{% elif subcal.color == 21 %}#1A5173{% 
+                                        elif subcal.color == 22 %}#1A699C{% elif subcal.color == 23 %}#0080A6{% elif subcal.color == 24 %}#4AAACE{% 
+                                        elif subcal.color == 25 %}#88B347{% elif subcal.color == 26 %}#5AB121{% elif subcal.color == 27 %}#2D850E{% 
+                                        elif subcal.color == 28 %}#176413{% elif subcal.color == 29 %}#0F4C30{% elif subcal.color == 30 %}#386651{% 
+                                        elif subcal.color == 31 %}#00855B{% elif subcal.color == 32 %}#4FB5A1{% elif subcal.color == 33 %}#537711{% 
+                                        elif subcal.color == 34 %}#724F22{% elif subcal.color == 35 %}#9C6013{% elif subcal.color == 36 %}#F6C811{% 
+                                        elif subcal.color == 37 %}#CE1212{% elif subcal.color == 38 %}#B20247{% elif subcal.color == 39 %}#DB135A{% 
+                                        elif subcal.color == 40 %}#E91F7B{% elif subcal.color == 41 %}#F569A9{% elif subcal.color == 42 %}#5C1C1C{% 
+                                        elif subcal.color == 43 %}#A55757{% elif subcal.color == 44 %}#C37070{% elif subcal.color == 45 %}#000000{% 
+                                        elif subcal.color == 46 %}#383838{% elif subcal.color == 47 %}#757575{% elif subcal.color == 48 %}#A3A3A3{% 
+                                        else %}#007bff{% endif %};">
+                                        {{ subcal.name }}
+                                    </div>
+                                    <div class="card-body">
+                                        <a href="{{ url_for('appointments') }}?subcalendar_id={{ subcal.id }}" class="btn btn-sm btn-outline-primary w-100">
+                                            <i class="fas fa-eye me-1"></i>ดูนัดหมาย
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
         {% else %}
         <div class="alert alert-warning mb-4">
             <i class="fas fa-exclamation-triangle me-2"></i>ยังไม่ได้เชื่อมต่อกับ TeamUp API

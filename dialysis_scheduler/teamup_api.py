@@ -255,7 +255,7 @@ class TeamupAPI:
             )
             
             if response.status_code != 200:
-                return False, "ไม่สามารถดึงข้อมูลนัดหมายได้"
+                return False, f"ไม่สามารถดึงข้อมูลนัดหมายได้: {response.text}"
                 
             current_event = response.json()['event']
             
@@ -271,7 +271,9 @@ class TeamupAPI:
             
             # กำหนดข้อมูลที่จะอัปเดต
             update_data = {
-                'title': new_title
+                'title': new_title,
+                'start_dt': current_event['start_dt'],  # เพิ่มบรรทัดนี้
+                'end_dt': current_event['end_dt']       # เพิ่มบรรทัดนี้
             }
             
             # เพิ่มบันทึกเกี่ยวกับการเปลี่ยนสถานะ

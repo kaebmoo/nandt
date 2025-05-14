@@ -6,26 +6,77 @@ import csv
 import io
 from datetime import datetime, timedelta
 import json
+import requests  # เพิ่มบรรทัดนี้
+from dotenv import load_dotenv, set_key
 
 from teamup_api import TeamupAPI
+from config import Config, TEAMUP_API_KEY, CALENDAR_ID
 
 app = Flask(__name__)
-app.secret_key = 'dialysis_scheduler_secret_key'  # สำหรับการใช้งาน flash และ session
+app.config.from_object(Config)
+Config.init_app()  # สร้างโฟลเดอร์ uploads ถ้ายังไม่มี
+# app.secret_key = 'dialysis_scheduler_secret_key'  # สำหรับการใช้งาน flash และ session
 
 # ตั้งค่า upload folder สำหรับไฟล์ CSV
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # จำกัดขนาดไฟล์ 16 MB
+# ลบส่วนนี้เนื่องจากซ้ำซ้อนกับ Config
+# app.secret_key = 'dialysis_scheduler_secret_key'  # สำหรับการใช้งาน flash และ session
+# 
+# # ตั้งค่า upload folder สำหรับไฟล์ CSV
+# UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+# if not os.path.exists(UPLOAD_FOLDER):
+#     os.makedirs(UPLOAD_FOLDER)
+# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # จำกัดขนาดไฟล์ 16 MB
 
 # สร้าง TeamupAPI instance (จะถูกกำหนดค่าเมื่อผู้ใช้ login)
 teamup_api = None
 
+# ลองใช้ค่าจาก .env file (ถ้ามี)
+if TEAMUP_API_KEY and CALENDAR_ID:
+    try:
+        print(f"กำลังเชื่อมต่อกับ TeamUp API โดยใช้ค่าจาก .env file...")
+        teamup_api = TeamupAPI(TEAMUP_API_KEY, CALENDAR_ID)
+        success, message = teamup_api.check_access()
+        if success:
+            print(f"เชื่อมต่อกับ TeamUp API สำเร็จ!")
+        else:
+            print(f"ไม่สามารถเชื่อมต่อกับ TeamUp API: {message}")
+            teamup_api = None
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดในการเชื่อมต่อกับ TeamUp API: {e}")
+        teamup_api = None
+
 @app.route('/')
 def index():
     """หน้าแรกของแอปพลิเคชัน"""
-    return render_template('index.html', api_connected=is_api_connected())
+    global teamup_api
+    api_connected = is_api_connected()
+    
+    summary_data = None
+    if api_connected:
+        try:
+            # ดึงข้อมูลปฏิทินย่อย
+            subcals = teamup_api.get_subcalendars()
+            subcalendar_count = len(subcals.get('subcalendars', []))
+            
+            # ดึงข้อมูลการนัดหมายวันนี้
+            today = datetime.now()
+            start_date = datetime(today.year, today.month, today.day)
+            end_date = start_date + timedelta(days=1)
+            
+            events = teamup_api.get_events(start_date=start_date, end_date=end_date)
+            today_appointments = len(events.get('events', []))
+            
+            # สร้าง summary_data
+            summary_data = {
+                'subcalendar_count': subcalendar_count,
+                'today_appointments': today_appointments,
+                'subcalendars': subcals.get('subcalendars', [])[:5]  # แสดง 5 ปฏิทินย่อยล่าสุด
+            }
+        except Exception as e:
+            print(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุป: {e}")
+    
+    return render_template('index.html', api_connected=api_connected, summary_data=summary_data)
 
 # ใน app.py, ฟังก์ชัน setup
 @app.route('/setup', methods=['GET', 'POST'])
@@ -33,41 +84,73 @@ def setup():
     """หน้าตั้งค่าการเชื่อมต่อ API"""
     global teamup_api
     
+    # ตรวจสอบการเชื่อมต่อที่มีอยู่
+    current_connection = {
+        'api_key': TEAMUP_API_KEY or '',
+        'calendar_id': CALENDAR_ID or '',
+        'is_connected': teamup_api is not None
+    }
+    
     if request.method == 'POST':
         api_key = request.form.get('api_key')
         calendar_id = request.form.get('calendar_id')
+        save_to_env = request.form.get('save_to_env') == 'true'
         
         if not api_key or not calendar_id:
             flash('กรุณากรอก API Key และ Calendar ID', 'danger')
-            return render_template('setup.html')
+            return render_template('setup.html', current=current_connection)
         
         # ทำความสะอาด Calendar ID
         if calendar_id.startswith('https://teamup.com/'):
             calendar_id = calendar_id.replace('https://teamup.com/', '')
         
         # สร้าง TeamupAPI instance
-        teamup_api = TeamupAPI(api_key, calendar_id)
+        test_api = TeamupAPI(api_key, calendar_id)
         
         # ทดสอบการเชื่อมต่อ
         try:
-            success, message = teamup_api.check_access()
+            success, message = test_api.check_access()
             
             if success:
+                # บันทึกลงไฟล์ .env ถ้าเลือกตัวเลือกนี้
+                if save_to_env:
+                    try:
+                        env_path = '.env'
+                        
+                        # สร้างไฟล์ .env ใหม่หากยังไม่มี
+                        if not os.path.exists(env_path):
+                            with open(env_path, 'w') as f:
+                                f.write("# Dialysis Scheduler Configuration\n")
+                        
+                        # บันทึกค่าลงไฟล์ .env
+                        set_key(env_path, 'TEAMUP_API', api_key)
+                        set_key(env_path, 'CALENDAR_ID', calendar_id)
+                        
+                        # โหลดค่าใหม่
+                        load_dotenv(override=True)
+                        
+                        flash('บันทึกการตั้งค่าลงในไฟล์ .env สำเร็จ!', 'success')
+                    except Exception as e:
+                        flash(f'ไม่สามารถบันทึกการตั้งค่าลงในไฟล์ .env: {e}', 'warning')
+                
+                # อัปเดต TeamupAPI instance
+                teamup_api = test_api
+                
                 # บันทึกข้อมูลลงใน session
                 session['api_key'] = api_key
                 session['calendar_id'] = calendar_id
                 
                 flash('เชื่อมต่อ API สำเร็จ!', 'success')
-                return redirect(url_for('subcalendars'))
+                return redirect(url_for('index'))
             else:
                 flash(f'เชื่อมต่อ API ไม่สำเร็จ: {message}', 'danger')
-                return render_template('setup.html')
+                return render_template('setup.html', current=current_connection)
                 
         except Exception as e:
             flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
-            return render_template('setup.html')
+            return render_template('setup.html', current=current_connection)
     
-    return render_template('setup.html')
+    return render_template('setup.html', current=current_connection)
 
 @app.route('/subcalendars')
 def subcalendars():
@@ -208,28 +291,53 @@ def create_appointment():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/update_status', methods=['POST'])
+@app.route('/update_status', methods=['GET', 'POST'])
 def update_status():
-    """API endpoint สำหรับอัปเดตสถานะนัดหมาย"""
+    """หน้าอัปเดตสถานะนัดหมาย"""
     if not is_api_connected():
-        return jsonify({'error': 'ไม่ได้เชื่อมต่อ API'}), 401
+        flash('กรุณาเชื่อมต่อ API ก่อน', 'warning')
+        return redirect(url_for('setup'))
     
-    try:
-        event_id = request.form.get('event_id')
-        status = request.form.get('status')
-        
-        if not event_id or not status:
-            return jsonify({'error': 'กรุณากรอก Event ID และเลือกสถานะ'}), 400
-        
-        success, result = teamup_api.update_appointment_status(event_id, status)
-        
-        if success:
-            return jsonify({'success': True, 'message': 'อัปเดตสถานะสำเร็จ'})
-        else:
-            return jsonify({'error': result}), 400
+    event_data = None
+    event_id = request.args.get('event_id', '')
+    
+    # ถ้ามี event_id ให้ดึงข้อมูลมาแสดง
+    if event_id:
+        try:
+            # ดึงข้อมูลกิจกรรม
+            response = requests.get(
+                f"{teamup_api.base_url}/events/{event_id}",
+                headers=teamup_api.headers
+            )
             
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            if response.status_code == 200:
+                event_data = response.json()['event']
+            else:
+                flash(f'ไม่สามารถดึงข้อมูลนัดหมาย: {response.text}', 'danger')
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+    
+    if request.method == 'POST':
+        try:
+            post_event_id = request.form.get('event_id')
+            status = request.form.get('status')
+            
+            if not post_event_id or not status:
+                flash('กรุณากรอก Event ID และเลือกสถานะ', 'danger')
+                return render_template('update_status.html', event_data=event_data, event_id=event_id)
+            
+            success, result = teamup_api.update_appointment_status(post_event_id, status)
+            
+            if success:
+                flash('อัปเดตสถานะสำเร็จ', 'success')
+                return redirect(url_for('appointments'))
+            else:
+                flash(f'การอัปเดตสถานะล้มเหลว: {result}', 'danger')
+                
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+    
+    return render_template('update_status.html', event_data=event_data, event_id=event_id)
 
 @app.route('/import', methods=['GET', 'POST'])
 def import_csv():
@@ -296,14 +404,25 @@ def is_api_connected():
     """ตรวจสอบว่าเชื่อมต่อ API แล้วหรือไม่"""
     global teamup_api
     
+    print(f"DEBUG is_api_connected: teamup_api = {teamup_api is not None}")
+    
     if teamup_api is None:
         # ถ้ายังไม่มี instance แต่มีข้อมูลใน session
         if 'api_key' in session and 'calendar_id' in session:
+            print(f"DEBUG is_api_connected: trying to connect with session data")
             # ลองเชื่อมต่ออีกครั้งจาก session
-            teamup_api = TeamupAPI(session['api_key'], session['calendar_id'])
+            try:
+                teamup_api = TeamupAPI(session['api_key'], session['calendar_id'])
+                success, _ = teamup_api.check_access()
+                if not success:
+                    teamup_api = None
+            except Exception as e:
+                print(f"DEBUG is_api_connected error: {e}")
+                teamup_api = None
     
-    # ตรวจสอบว่ามี instance แล้วหรือไม่
-    return teamup_api is not None
+    connected = teamup_api is not None
+    print(f"DEBUG is_api_connected result: {connected}")
+    return connected
 
 @app.before_request
 def check_api_connection():
@@ -323,6 +442,11 @@ def check_api_connection():
     if teamup_api is None:
         flash('กรุณาเชื่อมต่อ API ก่อน', 'warning')
         return redirect(url_for('setup'))
+    
+@app.context_processor
+def inject_api_status():
+    """เพิ่มตัวแปรสถานะการเชื่อมต่อ API ในทุกเทมเพลต"""
+    return dict(api_connected=is_api_connected())
 
 if __name__ == '__main__':
     app.run(debug=True)

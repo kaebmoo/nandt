@@ -1,0 +1,91 @@
+<!-- templates/update_status.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h4 mb-0"><i class="fas fa-check-circle me-2"></i>อัปเดตสถานะนัดหมาย</h2>
+            </div>
+            <div class="card-body">
+                {% if event_data %}
+                <div class="alert alert-info mb-4">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="mb-2">{{ event_data.title }}</h5>
+                            <p class="mb-1"><i class="fas fa-calendar-day me-2"></i>วันที่: {{ event_data.start_dt.split('T')[0] | replace('-', '/') }}</p>
+                            <p class="mb-1"><i class="fas fa-clock me-2"></i>เวลา: {{ event_data.start_dt.split('T')[1][:5] }} - {{ event_data.end_dt.split('T')[1][:5] }}</p>
+                            <p class="mb-1"><i class="fas fa-map-marker-alt me-2"></i>สถานที่: {{ event_data.location or 'ไม่ระบุ' }}</p>
+                            <p class="mb-0"><i class="fas fa-user-md me-2"></i>ผู้ดูแล: {{ event_data.who or 'ไม่ระบุ' }}</p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="mb-2">Event ID: {{ event_data.id }}</div>
+                            {% if '(มาตามนัด)' in event_data.title %}
+                                <span class="badge bg-success">มาตามนัด</span>
+                            {% elif '(ยกเลิก)' in event_data.title %}
+                                <span class="badge bg-danger">ยกเลิก</span>
+                            {% elif '(ไม่มา)' in event_data.title %}
+                                <span class="badge bg-secondary">ไม่มา</span>
+                            {% else %}
+                                <span class="badge bg-info">รอดำเนินการ</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="event_id" class="form-label">Event ID:</label>
+                        <input type="text" class="form-control" id="event_id" name="event_id" value="{{ event_id }}" required {% if event_data %}readonly{% endif %}>
+                        {% if not event_data %}
+                        <div class="form-text">กรอก Event ID หรือคลิกที่ปุ่ม "อัปเดตสถานะ" จากหน้ารายการนัดหมาย</div>
+                        <div class="mt-2">
+                            <button type="button" id="fetch-details" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-search me-1"></i>ค้นหาข้อมูลนัดหมาย
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="status" class="form-label">สถานะ:</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="">เลือกสถานะ</option>
+                            <option value="มาตามนัด">มาตามนัด</option>
+                            <option value="ยกเลิก">ยกเลิก</option>
+                            <option value="ไม่มา">ไม่มา</option>
+                        </select>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>บันทึกสถานะ
+                        </button>
+                        <a href="{{ url_for('appointments') }}" class="btn btn-outline-secondary ms-2">
+                            <i class="fas fa-arrow-left me-2"></i>กลับไปยังรายการนัดหมาย
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // จัดการการค้นหาข้อมูลนัดหมาย
+        $('#fetch-details').click(function() {
+            const eventId = $('#event_id').val();
+            if (eventId) {
+                window.location.href = "{{ url_for('update_status') }}?event_id=" + eventId;
+            } else {
+                alert('กรุณากรอก Event ID');
+            }
+        });
+    });
+</script>
+{% endblock %}
