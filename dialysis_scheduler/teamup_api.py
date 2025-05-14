@@ -237,13 +237,14 @@ class TeamupAPI:
         except Exception as e:
             return False, f"เกิดข้อผิดพลาด: {e}"
     
-    def update_appointment_status(self, event_id, status):
+    def update_appointment_status(self, event_id, status, calendar_id=None):
         """
         อัปเดตสถานะการนัดหมาย
         
         params:
             event_id: str - ID ของกิจกรรม
             status: str - สถานะใหม่ ("มาตามนัด", "ยกเลิก", "ไม่มา")
+            calendar_id: str - ID ของปฏิทินย่อย (ถ้ามี)
             
         returns: (boolean, str) - สถานะการอัปเดตและข้อความ
         """
@@ -269,11 +270,27 @@ class TeamupAPI:
             # เพิ่มสถานะใหม่
             new_title = f"{title} ({status})"
             
+            # แน่ใจว่า subcalendar_ids เป็นอาร์เรย์
+            subcalendar_ids = []
+            
+            # ถ้า current_event มี subcalendar_ids และเป็นอาร์เรย์
+            if 'subcalendar_ids' in current_event and isinstance(current_event['subcalendar_ids'], list):
+                subcalendar_ids = current_event['subcalendar_ids']
+            # ถ้า current_event มี subcalendar_id (เลขตัวเดียว)
+            elif 'subcalendar_id' in current_event:
+                subcalendar_ids = [current_event['subcalendar_id']]
+            # ถ้ามีการส่ง calendar_id มา
+            elif calendar_id:
+                subcalendar_ids = [int(calendar_id)]
+            
             # กำหนดข้อมูลที่จะอัปเดต
             update_data = {
+                'id': event_id,  # เพิ่ม field id ให้ตรงตามที่ API ต้องการ
                 'title': new_title,
-                'start_dt': current_event['start_dt'],  # เพิ่มบรรทัดนี้
-                'end_dt': current_event['end_dt']       # เพิ่มบรรทัดนี้
+                'start_dt': current_event['start_dt'],
+                'end_dt': current_event['end_dt'],
+                # กำหนด subcalendar_ids เป็นอาร์เรย์อย่างถูกต้อง
+                'subcalendar_ids': subcalendar_ids
             }
             
             # เพิ่มบันทึกเกี่ยวกับการเปลี่ยนสถานะ
@@ -287,12 +304,22 @@ class TeamupAPI:
             elif status == "ไม่มา":
                 update_data['color_id'] = "8"   # สีเทา
             
+            # แสดงข้อมูลที่จะส่งไป (เพื่อการตรวจสอบ)
+            print("ข้อมูลที่จะส่งไปยัง API (อัปเดตสถานะ):")
+            print(f"URL: {self.base_url}/events/{event_id}")
+            print(f"Headers: {self.headers}")
+            print(f"ข้อมูล: {json.dumps(update_data, indent=2, ensure_ascii=False)}")
+            
             # ส่งคำขออัปเดต
             response = requests.put(
                 f"{self.base_url}/events/{event_id}",
                 headers=self.headers,
                 data=json.dumps(update_data)
             )
+            
+            # แสดงข้อมูลการตอบกลับ
+            print(f"สถานะการตอบกลับ: {response.status_code}")
+            print(f"เนื้อหาการตอบกลับ: {response.text}")
             
             if response.status_code == 200:
                 return True, "อัปเดตสถานะสำเร็จ"

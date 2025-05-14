@@ -114,8 +114,17 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- ต่อท้ายเทมเพลต หรือก่อน </body> -->
+<script src="{{ url_for('static', filename='js/appointment-helper.js') }}"></script>
 <script>
+    // นิยามตัวแปรสำหรับข้อมูลนัดหมายเริ่มต้น
+    var initialEvents = {{ initial_events|tojson }};
+
     $(document).ready(function() {
+        // ถ้ามีข้อมูลนัดหมายเริ่มต้นที่ส่งมาจาก server
+        if (initialEvents && initialEvents.events) {
+            displayEvents(initialEvents);
+        }
         // แสดง/ซ่อนตัวเลือกการนัดหมายเกิดซ้ำ
         $('#is_recurring').change(function() {
             if ($(this).is(':checked')) {
@@ -273,75 +282,78 @@
         
         // แสดงรายละเอียดนัดหมายใน modal
         function showEventDetails(eventId) {
-            // ค้นหาข้อมูลนัดหมายตาม ID
-            const event = window.eventsData.find(e => e.id === eventId);
-            
-            if (!event) {
-                alert('ไม่พบข้อมูลนัดหมาย');
-                return;
-            }
-            
-            // แปลงรูปแบบวันที่
-            function formatDate(dateString) {
-                const date = new Date(dateString);
-                return date.toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    weekday: 'long'
-                });
-            }
-            
-            // สร้างเนื้อหา modal
-            let modalContent = `
-                <div class="modal-header">
-                    <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <h5>${event.title}</h5>
-                    <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
-                    <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
-                    <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
-                    <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
-            `;
-            
-            // เพิ่มบันทึกเพิ่มเติมถ้ามี
-            if (event.notes) {
-                modalContent += `
-                    <div class="mt-3">
-                        <h6>บันทึกเพิ่มเติม:</h6>
-                        <div class="border p-2 rounded">
-                            <pre class="mb-0">${event.notes}</pre>
+            // เรียกข้อมูล event แบบสดจาก backend
+            $.ajax({
+                url: '/get_event',
+                data: { event_id: eventId },
+                success: function(response) {
+                    const event = response.event;
+
+                    if (!event) {
+                        alert('ไม่พบข้อมูลนัดหมาย');
+                        return;
+                    }
+
+                    function formatDate(dateString) {
+                        const date = new Date(dateString);
+                        return date.toLocaleDateString('th-TH', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            weekday: 'long'
+                        });
+                    }
+
+                    let modalContent = `
+                        <div class="modal-header">
+                            <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                    </div>
-                `;
-            }
-            
-            // เพิ่ม Event ID
-            modalContent += `
-                    <div class="mt-3">
-                        <h6>Event ID:</h6>
-                        <div class="input-group">
-                            <input type="text" class="form-control" value="${event.id}" readonly>
+                        <div class="modal-body">
+                            <h5>${event.title}</h5>
+                            <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
+                            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                            <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
+                            <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
+                    `;
+
+                    if (event.notes) {
+                        modalContent += `
+                            <div class="mt-3">
+                                <h6>บันทึกเพิ่มเติม:</h6>
+                                <div class="border p-2 rounded">
+                                    <pre class="mb-0">${event.notes}</pre>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    modalContent += `
+                            <div class="mt-3">
+                                <h6>Event ID:</h6>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" value="${event.id}" readonly>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <a href="/update_status?event_id=${event.id}" class="btn btn-primary">
-                        <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
-                    </a>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                </div>
-            `;
-            
-            // กำหนดเนื้อหาให้กับ modal
-            $('#eventDetailsModal .modal-content').html(modalContent);
-            
-            // แสดง modal
-            const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
-            modal.show();
+                        <div class="modal-footer">
+                            <a href="/update_status?event_id=${event.id}" class="btn btn-primary">
+                                <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
+                            </a>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                        </div>
+                    `;
+
+                    $('#eventDetailsModal .modal-content').html(modalContent);
+                    const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
+                    modal.show();
+                },
+                error: function(xhr, status, error) {
+                    alert('ไม่สามารถโหลดข้อมูลนัดหมาย: ' + (xhr.responseJSON?.error || error));
+                }
+            });
         }
+
         
         // โหลดรายการนัดหมายเมื่อโหลดหน้า
         loadAppointments();

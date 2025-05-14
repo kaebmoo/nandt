@@ -30,13 +30,8 @@ function showAlert(message, type = 'success') {
     const container = document.querySelector('.container');
     if (container) {
         container.insertBefore(alertDiv, container.firstChild);
-        
-        // ซ่อนอัตโนมัติหลังจาก 5 วินาที
-        setTimeout(() => {
-            const bsAlert = new bootstrap.Alert(alertDiv);
-            bsAlert.close();
-        }, 5000);
     }
+    // ไม่ต้องซ่อนอัตโนมัติเพื่อให้ผู้ใช้อ่านได้ตลอด
 }
 
 // เมื่อโหลดหน้าเสร็จ
@@ -49,15 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // อัตโนมัติซ่อนการแจ้งเตือน
-    document.querySelectorAll('.alert').forEach(alert => {
-        setTimeout(() => {
-            if (alert && document.body.contains(alert)) {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            }
-        }, 5000);
-    });
+    // อย่าซ่อนการแจ้งเตือนอัตโนมัติ ให้ผู้ใช้กดปิดเอง
 
     // จัดการเหตุการณ์ของการเลือกวันเริ่มต้น - อัปเดตวันสิ้นสุดให้เป็นวันเดียวกันโดยอัตโนมัติ
     const startDateInput = document.getElementById('start_date');
@@ -109,6 +96,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('appointments-container')) {
         loadAppointments();
     }
+
+    // สำหรับหน้าอัปเดตสถานะ - การส่งฟอร์มอัปเดตสถานะ
+    const updateStatusForm = document.querySelector('form[action*="update_status"]');
+    if (updateStatusForm) {
+        updateStatusForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const eventId = document.getElementById('event_id').value;
+            const status = document.getElementById('status').value;
+            
+            if (!eventId || !status) {
+                showAlert('กรุณากรอก Event ID และเลือกสถานะ', 'danger');
+                return;
+            }
+            
+            // ใช้ HTML form ที่อยู่ในหน้าเว็บโดยตรง แทนการใช้ AJAX
+            // เพื่อให้แน่ใจว่าการจัดการข้อมูลทำโดย backend ซึ่งมีการตั้งค่าที่ถูกต้อง
+            this.submit();
+        });
+    }
 });
 
 // ตั้งค่า event handlers สำหรับปุ่มต่างๆ ในหน้ารายการนัดหมาย
@@ -133,89 +140,88 @@ function setupEventHandlers() {
 
 // แสดงรายละเอียดนัดหมายใน modal
 function showEventDetails(eventId) {
-    // ตรวจสอบว่ามีข้อมูล events หรือไม่
-    if (typeof window.eventsData === 'undefined') {
-        console.error('ไม่พบข้อมูล eventsData');
-        showAlert('ไม่สามารถแสดงรายละเอียดได้ กรุณาลองใหม่อีกครั้ง', 'danger');
-        return;
-    }
+    console.log("กำลังแสดงรายละเอียดสำหรับ event_id:", eventId);
     
-    // ค้นหาข้อมูลนัดหมายตาม ID
-    const event = window.eventsData.find(e => e.id === eventId);
+    // แสดง loading spinner
+    Swal.fire({
+        title: 'กำลังโหลด...',
+        text: 'กำลังโหลดข้อมูลนัดหมาย',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
-    if (!event) {
-        console.error('ไม่พบข้อมูลนัดหมายสำหรับ ID:', eventId);
-        showAlert('ไม่พบข้อมูลนัดหมาย', 'danger');
-        return;
-    }
-    
-    // ค้นหา modal ที่มีอยู่แล้ว หรือสร้างใหม่
-    let modalElement = document.getElementById('eventDetailsModal');
-    
-    if (!modalElement) {
-        // สร้าง modal ใหม่
-        const modalHTML = `
-            <div class="modal fade" id="eventDetailsModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <!-- เนื้อหา modal จะถูกเพิ่มด้วย JavaScript -->
+    // ดึงข้อมูลโดยตรงจาก API สำหรับกิจกรรมนี้เท่านั้น
+    fetch(`/get_events?event_id=${eventId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            Swal.close(); // ปิด loading spinner
+            
+            if (!data.events || data.events.length === 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'ไม่พบข้อมูล',
+                    text: 'ไม่พบข้อมูลนัดหมายสำหรับ ID นี้'
+                });
+                return;
+            }
+            
+            // ดึงข้อมูลนัดหมายจาก API response
+            const event = data.events[0]; // ควรมีเพียงกิจกรรมเดียว
+            
+            // สร้าง modal แสดงรายละเอียด
+            Swal.fire({
+                title: 'รายละเอียดนัดหมาย',
+                html: `
+                    <div class="text-start">
+                        <h5>${event.title}</h5>
+                        <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
+                        <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                        <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
+                        <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
+                        ${event.notes ? `
+                        <div class="mt-3">
+                            <h6>บันทึกเพิ่มเติม:</h6>
+                            <div class="border p-2 rounded">
+                                <pre class="mb-0" style="white-space: pre-wrap;">${event.notes}</pre>
+                            </div>
+                        </div>
+                        ` : ''}
+                        <div class="mt-3">
+                            <h6>Event ID:</h6>
+                            <div class="input-group">
+                                <input type="text" class="form-control" value="${event.id}" readonly>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        modalElement = document.getElementById('eventDetailsModal');
-    }
-    
-    // สร้างเนื้อหา modal
-    let modalContent = `
-        <div class="modal-header">
-            <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-            <h5>${event.title}</h5>
-            <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
-            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
-            <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
-            <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
-    `;
-    
-    // เพิ่มบันทึกเพิ่มเติมถ้ามี
-    if (event.notes) {
-        modalContent += `
-            <div class="mt-3">
-                <h6>บันทึกเพิ่มเติม:</h6>
-                <div class="border p-2 rounded">
-                    <pre class="mb-0">${event.notes}</pre>
-                </div>
-            </div>
-        `;
-    }
-    
-    // เพิ่ม Event ID
-    modalContent += `
-            <div class="mt-3">
-                <h6>Event ID:</h6>
-                <div class="input-group">
-                    <input type="text" class="form-control" value="${event.id}" readonly>
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <a href="/update_status?event_id=${event.id}" class="btn btn-primary">
-                <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
-            </a>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-        </div>
-    `;
-    
-    // กำหนดเนื้อหาให้กับ modal
-    modalElement.querySelector('.modal-content').innerHTML = modalContent;
-    
-    // แสดง modal
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
+                `,
+                width: '600px',
+                showCloseButton: true,
+                showCancelButton: true,
+                focusConfirm: false,
+                confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
+                cancelButtonText: 'ปิด'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // กดปุ่มอัปเดตสถานะ
+                    window.location.href = `/update_status?event_id=${event.id}`;
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching event details:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message
+            });
+        });
 }
 
 // โหลดรายการนัดหมาย (สำหรับหน้ารายการนัดหมาย)
@@ -223,9 +229,9 @@ function loadAppointments() {
     const container = document.getElementById('appointments-container');
     if (!container) return;
     
-    const subcalendarId = document.getElementById('subcalendar-filter').value;
-    const startDate = document.getElementById('date-from').value;
-    const endDate = document.getElementById('date-to').value;
+    const subcalendarId = document.getElementById('subcalendar-filter') ? document.getElementById('subcalendar-filter').value : '';
+    const startDate = document.getElementById('date-from') ? document.getElementById('date-from').value : '';
+    const endDate = document.getElementById('date-to') ? document.getElementById('date-to').value : '';
     
     container.innerHTML = `
         <div class="text-center p-5">
@@ -236,9 +242,26 @@ function loadAppointments() {
         </div>
     `;
     
+    // สร้าง URL พร้อมพารามิเตอร์
+    let url = '/get_events';
+    const params = new URLSearchParams();
+    
+    if (subcalendarId) params.append('subcalendar_id', subcalendarId);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+    
     // ใช้ Fetch API สำหรับการเรียกข้อมูล
-    fetch(`/get_events?subcalendar_id=${subcalendarId}&start_date=${startDate}&end_date=${endDate}`)
-        .then(response => response.json())
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             container.innerHTML = '';
             
@@ -253,6 +276,7 @@ function loadAppointments() {
             
             // กำหนดค่า eventsData สำหรับใช้ในฟังก์ชัน showEventDetails
             window.eventsData = data.events;
+            console.log("Loaded events data:", window.eventsData);
             
             // จัดกลุ่มตามวันที่
             const eventsByDate = {};
@@ -327,9 +351,10 @@ function loadAppointments() {
             setupEventHandlers();
         })
         .catch(error => {
+            console.error('Error loading appointments:', error);
             container.innerHTML = `
                 <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle me-2"></i>เกิดข้อผิดพลาดในการโหลดรายการนัดหมาย: ${error}
+                    <i class="fas fa-exclamation-circle me-2"></i>เกิดข้อผิดพลาดในการโหลดรายการนัดหมาย: ${error.message}
                 </div>
             `;
         });
@@ -344,16 +369,25 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // แปลง form data เป็น URL-encoded format
             const formData = new FormData(this);
-            const formParams = new URLSearchParams(formData);
+            const formParams = new URLSearchParams();
+            
+            for (const [key, value] of formData.entries()) {
+                formParams.append(key, value);
+            }
             
             fetch('/create_appointment', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: formParams
+                body: formParams.toString()
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     showAlert('สร้างนัดหมายสำเร็จ!', 'success');
@@ -369,26 +403,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         loadAppointments();
                     }
                 } else {
-                    showAlert('เกิดข้อผิดพลาด: ' + data.error, 'danger');
+                    showAlert('เกิดข้อผิดพลาด: ' + (data.error || 'ไม่ทราบสาเหตุ'), 'danger');
                 }
             })
             .catch(error => {
-                showAlert('เกิดข้อผิดพลาด: ' + error, 'danger');
+                console.error('Error creating appointment:', error);
+                showAlert('เกิดข้อผิดพลาด: ' + error.message, 'danger');
             });
-        });
-    }
-    
-    // จัดการปุ่มตัวอย่าง CSV
-    const showCsvExample = document.getElementById('show-csv-example');
-    const csvExample = document.getElementById('csv-example');
-    
-    if (showCsvExample && csvExample) {
-        showCsvExample.addEventListener('click', function(e) {
-            e.preventDefault();
-            csvExample.style.display = csvExample.style.display === 'none' ? 'block' : 'none';
-            this.innerHTML = csvExample.style.display === 'none' ? 
-                '<i class="fas fa-eye me-1"></i>แสดงตัวอย่าง CSV' : 
-                '<i class="fas fa-eye-slash me-1"></i>ซ่อนตัวอย่าง';
         });
     }
 });

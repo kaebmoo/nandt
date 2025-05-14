@@ -197,15 +197,32 @@ def appointments():
     
     # สร้างวันที่ปัจจุบันสำหรับค่าเริ่มต้น
     today = datetime.now().strftime('%Y-%m-%d')
+    next_month = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
     
     # รับพารามิเตอร์ subcalendar_id จาก URL (ถ้ามี)
     selected_subcalendar_id = request.args.get('subcalendar_id', '')
     
+    # โหลดข้อมูลนัดหมายล่วงหน้า
+    initial_events = {}
+    try:
+        initial_events = teamup_api.get_events(
+            start_date=datetime.strptime(today, '%Y-%m-%d'),
+            end_date=datetime.strptime(next_month, '%Y-%m-%d'),
+            subcalendar_id=selected_subcalendar_id if selected_subcalendar_id else None
+        )
+    except Exception as e:
+        flash(f'เกิดข้อผิดพลาดในการโหลดข้อมูลนัดหมาย: {e}', 'warning')
+    
     return render_template('appointments.html', 
                           subcalendars=subcals.get('subcalendars', []),
                           today=today,
-                          selected_subcalendar_id=selected_subcalendar_id)  # ส่งค่า subcalendar_id ไปยัง template
+                          end_date=next_month,
+                          selected_subcalendar_id=selected_subcalendar_id,
+                          initial_events=initial_events)  # ส่งข้อมูลนัดหมายเริ่มต้นไปด้วย
 
+# -----------------------------
+# PATCH ที่ 1 ใน /get_events()
+# -----------------------------
 @app.route('/get_events')
 def get_events():
     """API endpoint สำหรับดึงรายการกิจกรรม"""
@@ -213,25 +230,47 @@ def get_events():
         return jsonify({'error': 'ไม่ได้เชื่อมต่อ API'}), 401
     
     try:
+        # รับพารามิเตอร์จาก URL
         start_date = request.args.get('start_date', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
         end_date = request.args.get('end_date', (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
         subcalendar_id = request.args.get('subcalendar_id', '')
+        event_id = request.args.get('event_id', '') # เพิ่มพารามิเตอร์ event_id
         
-        # แปลงวันที่
+        # ถ้ามี event_id ให้ดึงรายละเอียดเฉพาะกิจกรรมนั้น
+        if event_id:
+            try:
+                response = requests.get(
+                    f"{teamup_api.base_url}/events/{event_id}",
+                    headers=teamup_api.headers
+                )
+                if response.status_code == 200:
+                    event_data = response.json()
+                    return jsonify({'events': [event_data['event']]})
+                else:
+                    return jsonify({'error': f'ไม่สามารถดึงข้อมูลนัดหมาย: {response.text}', 'events': []}), 404
+            except Exception as e:
+                return jsonify({'error': str(e), 'events': []}), 500
+        
+        # ถ้าไม่มี event_id ให้ดึงรายการกิจกรรมตามปกติ
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
         
-        # เรียก API และส่งพารามิเตอร์ subcalendar_id ถ้ามีค่า
         events = teamup_api.get_events(
             start_date=start_dt,
             end_date=end_dt,
             subcalendar_id=subcalendar_id if subcalendar_id else None
         )
         
+        # <<<< PATCH เพิ่มเติม >>>>
+        # เพิ่ม subcalendar_id ในทุก event เพื่อให้ frontend ใช้ได้
+        for event in events.get('events', []):
+            event['subcalendar_id'] = event.get('subcalendar_id', subcalendar_id)
+
         return jsonify(events)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'events': []}), 500
+
 
 @app.route('/create_appointment', methods=['POST'])
 def create_appointment():
@@ -291,6 +330,9 @@ def create_appointment():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# -----------------------------
+# PATCH ที่ 2 ใน /update_status()
+# -----------------------------
 @app.route('/update_status', methods=['GET', 'POST'])
 def update_status():
     """หน้าอัปเดตสถานะนัดหมาย"""
@@ -300,16 +342,15 @@ def update_status():
     
     event_data = None
     event_id = request.args.get('event_id', '')
+    calendar_id = request.args.get('calendar_id', '')    # <<<< PATCH เพิ่มเติม >>>>
     
     # ถ้ามี event_id ให้ดึงข้อมูลมาแสดง
     if event_id:
         try:
-            # ดึงข้อมูลกิจกรรม
             response = requests.get(
                 f"{teamup_api.base_url}/events/{event_id}",
                 headers=teamup_api.headers
             )
-            
             if response.status_code == 200:
                 event_data = response.json()['event']
             else:
@@ -321,6 +362,7 @@ def update_status():
         try:
             post_event_id = request.form.get('event_id')
             status = request.form.get('status')
+            post_calendar_id = request.form.get('calendar_id') or calendar_id   # <<<< PATCH เพิ่มเติม >>>>
             
             if not post_event_id or not status:
                 flash('กรุณากรอก Event ID และเลือกสถานะ', 'danger')
@@ -338,6 +380,7 @@ def update_status():
             flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
     
     return render_template('update_status.html', event_data=event_data, event_id=event_id)
+
 
 @app.route('/import', methods=['GET', 'POST'])
 def import_csv():
