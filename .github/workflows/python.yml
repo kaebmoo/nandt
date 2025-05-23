@@ -25,9 +25,9 @@ jobs:
   build-docs:
     runs-on: ubuntu-latest
     # ปรับเงื่อนไขให้รันทั้งเมื่อ push และเมื่อ release จาก production
+    # (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')) ||
     if: |
-      (github.event_name == 'release' && github.event.release.target_commitish == 'production')
-      #       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')) ||
+        (github.event_name == 'release' && github.event.release.target_commitish == 'production')
     
     steps:
       - name: Checkout
