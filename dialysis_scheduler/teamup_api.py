@@ -16,27 +16,27 @@ class TeamupAPI:
         self.api_key = api_key
         self.calendar_id = calendar_id
         self.base_url = f"https://api.teamup.com/{calendar_id}"
-        print(f"Base URL: {self.base_url}")  # เพิ่มการ print URL เพื่อตรวจสอบ
+        print(f"Base URL: {self.base_url}")
         
         self.headers = {
             'Accept': "application/json",
             'Content-Type': "application/json",
             'Teamup-Token': api_key
         }
-        print(f"Headers: {self.headers}")  # เพิ่มการ print headers เพื่อตรวจสอบ
+        print(f"Headers: {self.headers}")
         
         # แคชข้อมูลปฏิทินย่อย
         self.subcalendars = {}
     
     def check_access(self):
         """
-        ตรวจสอบการเข้าถึง API
+        ตรวจสอบการเข้าถึง API โดยการเรียก configuration
         
         returns: (boolean, str) - สถานะการเชื่อมต่อและข้อความ
         """
         try:
             response = requests.get(
-                "https://api.teamup.com/check-access",
+                f"{self.base_url}/configuration",  # เปลี่ยนจาก check-access
                 headers=self.headers
             )
             
@@ -59,9 +59,6 @@ class TeamupAPI:
                 f"{self.base_url}/subcalendars",
                 headers=self.headers
             )
-            
-            # print(f"API Response Status: {response.status_code}")
-            # print(f"API Response Content: {response.text}")
             
             if response.status_code == 200:
                 data = response.json()
@@ -88,7 +85,7 @@ class TeamupAPI:
         params:
             name: str - ชื่อปฏิทินย่อย
             
-        returns: str - ID ของปฏิทินย่อย
+        returns: int - ID ของปฏิทินย่อย
         """
         # ดึงข้อมูลปฏิทินย่อยก่อนหากยังไม่มีในแคช
         if not self.subcalendars:
@@ -101,7 +98,9 @@ class TeamupAPI:
         try:
             new_subcal = {
                 'name': name,
-                'color': '5', # สีเขียว (เปลี่ยนตามต้องการ)
+                'color': 5,  # เปลี่ยนจาก string เป็น integer
+                'active': True,
+                'overlap': True
             }
             
             response = requests.post(
@@ -132,7 +131,7 @@ class TeamupAPI:
         params:
             start_date: datetime - วันที่เริ่มต้น
             end_date: datetime - วันที่สิ้นสุด
-            subcalendar_id: str - ID ของปฏิทินย่อย (ถ้ามี)
+            subcalendar_id: int|list - ID ของปฏิทินย่อย (ถ้ามี)
             
         returns: dict - ข้อมูลกิจกรรม
         """
@@ -146,16 +145,18 @@ class TeamupAPI:
             'endDate': end_date.strftime('%Y-%m-%d')
         }
         
-        # ส่ง subcalendarId ในรูปแบบอาร์เรย์ตามที่ API ต้องการ
+        # แก้ไขการส่ง subcalendarId ให้เป็น array ตาม API requirement
         if subcalendar_id:
             print(f"กรองตาม subcalendar_id: {subcalendar_id}")
-            # กรณีเป็น list
             if isinstance(subcalendar_id, list):
-                for id in subcalendar_id:
-                    params.setdefault('subcalendarId[]', []).append(id)
-            # กรณีเป็นค่าเดียว
+                # ถ้าเป็น list อยู่แล้วให้ใช้เลย
+                for i, sid in enumerate(subcalendar_id):
+                    params[f'subcalendarId[{i}]'] = str(sid)
             else:
-                params['subcalendarId[]'] = subcalendar_id # ใช้ subcalendarId[] แทน subcalendarId
+                # ถ้าเป็นค่าเดียวให้แปลงเป็น array format
+                params['subcalendarId[0]'] = str(subcalendar_id)
+        
+        print(f"Parameters ที่จะส่งไป: {params}")  # Debug
         
         response = requests.get(
             f"{self.base_url}/events",
@@ -163,30 +164,145 @@ class TeamupAPI:
             params=params
         )
         
+        print(f"Response status: {response.status_code}")  # Debug
+        print(f"Response URL: {response.url}")  # Debug
+        
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            
+            # เพิ่มข้อมูลปฏิทินย่อยให้กับแต่ละ event
+            if 'events' in data:
+                for event in data['events']:
+                    # เพิ่มชื่อปฏิทินย่อยให้กับ event
+                    subcalendar_names = []
+                    if 'subcalendar_ids' in event and event['subcalendar_ids']:
+                        for sid in event['subcalendar_ids']:
+                            # หาชื่อปฏิทินย่อยจาก ID
+                            subcal_name = self.get_subcalendar_name_by_id(sid)
+                            if subcal_name:
+                                subcalendar_names.append(subcal_name)
+                    
+                    # เพิ่ม field ใหม่สำหรับแสดงชื่อปฏิทินย่อย
+                    event['subcalendar_names'] = subcalendar_names
+                    event['subcalendar_display'] = ', '.join(subcalendar_names) if subcalendar_names else 'ไม่ระบุ'
+            
+            return data
         else:
             error_msg = f"ไม่สามารถดึงรายการกิจกรรมได้: {response.text}"
             print(error_msg)
             return {"error": error_msg, "events": []}
+        
+    def get_subcalendar_name_by_id(self, subcalendar_id):
+        """
+        หาชื่อปฏิทินย่อยจาก ID
+        
+        params:
+            subcalendar_id: int - ID ของปฏิทินย่อย
+            
+        returns: str - ชื่อปฏิทินย่อย หรือ None ถ้าไม่พบ
+        """
+        # ถ้ายังไม่มีข้อมูลปฏิทินย่อยในแคช ให้ดึงมาก่อน
+        if not self.subcalendars:
+            self.get_subcalendars()
+        
+        # หาชื่อจาก ID (reverse lookup)
+        for name, sid in self.subcalendars.items():
+            if sid == subcalendar_id:
+                return name
+        
+        # ถ้าไม่พบในแคช ให้ลองดึงข้อมูลใหม่
+        try:
+            subcals_data = self.get_subcalendars()
+            if 'subcalendars' in subcals_data:
+                for subcal in subcals_data['subcalendars']:
+                    if subcal['id'] == subcalendar_id:
+                        return subcal['name']
+        except Exception as e:
+            print(f"Error getting subcalendar name: {e}")
+        
+        return None
     
     def create_appointment(self, patient_data):
+        """สร้างนัดหมายเดี่ยว"""
+        try:
+            # หาชื่อปฏิทินย่อยจากชื่อ
+            subcalendar_id = self.get_subcalendar_id_by_name(patient_data['calendar_name'])
+            if not subcalendar_id:
+                return False, f"ไม่พบปฏิทินย่อย: {patient_data['calendar_name']}"
+            
+            # แปลงวันที่และเวลาเป็น ISO string
+            start_date = patient_data['start_date']  # YYYY-MM-DD
+            start_time = patient_data['start_time']  # HH:MM
+            end_date = patient_data['end_date']     # YYYY-MM-DD  
+            end_time = patient_data['end_time']     # HH:MM
+            
+            # สร้าง datetime string ในรูปแบบ ISO
+            start_datetime_str = f"{start_date}T{start_time}:00"
+            end_datetime_str = f"{end_date}T{end_time}:00"
+            
+            # สร้างข้อมูลสำหรับส่งไป API
+            event_data = {
+                "title": patient_data['title'],
+                "start_dt": start_datetime_str,  # ใช้ ISO string
+                "end_dt": end_datetime_str,      # ใช้ ISO string
+                "all_day": False,
+                "subcalendar_ids": [subcalendar_id]
+            }
+            
+            # เพิ่มข้อมูลเสริม (ถ้ามี)
+            if patient_data.get('location'):
+                event_data['location'] = patient_data['location']
+            if patient_data.get('who'):
+                event_data['who'] = patient_data['who']
+            if patient_data.get('description'):
+                event_data['notes'] = patient_data['description']
+            
+            # เพิ่มการตั้งค่าเริ่มต้น
+            event_data.update({
+                'signup_enabled': False,
+                'comments_enabled': False,
+                'attachments': []
+            })
+            
+            print("ข้อมูลที่จะส่งไปยัง API:")
+            print(f"URL: {self.base_url}/events")
+            print(f"Headers: {self.headers}")
+            print(json.dumps(event_data, indent=2, ensure_ascii=False))
+            
+            # ส่งคำขอไป API
+            response = requests.post(
+                f"{self.base_url}/events",
+                headers=self.headers,
+                json=event_data
+            )
+            
+            print(f"สถานะการตอบกลับ: {response.status_code}")
+            print(f"เนื้อหาการตอบกลับ: {response.text}")
+            
+            if response.status_code == 201:
+                event_id = response.json().get('event', {}).get('id')
+                return True, event_id
+            else:
+                error_data = response.json() if response.text else {'error': 'Unknown error'}
+                if isinstance(error_data, dict) and 'error' in error_data:
+                    error_msg = error_data['error'].get('message', response.text)
+                else:
+                    error_msg = response.text
+                return False, f"การสร้างนัดหมายล้มเหลว: {error_msg}"
+                
+        except Exception as e:
+            print(f"Exception in create_appointment: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, str(e)
+    
+    def create_recurring_appointment(self, patient_data, rrule):
         """
-        สร้างนัดหมายฟอกไตใหม่
+        สร้างนัดหมายแบบ recurring ตาม RFC 5545
         
         params:
             patient_data: dict - ข้อมูลผู้ป่วย
-                {
-                    'title': str - ชื่อผู้ป่วย
-                    'start_date': str - วันที่เริ่มต้น (DD/MM/YYYY)
-                    'start_time': str - เวลาเริ่มต้น (HH:MM)
-                    'end_date': str - วันที่สิ้นสุด (DD/MM/YYYY)
-                    'end_time': str - เวลาสิ้นสุด (HH:MM)
-                    'location': str - ตำแหน่ง
-                    'who': str - ผู้ดูแล
-                    'description': str - รายละเอียด
-                    'calendar_name': str - ชื่อปฏิทินย่อย
-                }
+            rrule: str - RRULE string เช่น "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=12"
                 
         returns: (boolean, str) - สถานะการสร้างนัดหมายและข้อความหรือ ID
         """
@@ -197,24 +313,40 @@ class TeamupAPI:
             return False, "ไม่สามารถดึงหรือสร้างปฏิทินย่อยได้"
         
         # แปลงรูปแบบวันที่และเวลา
-        start_dt = self._format_datetime(patient_data['start_date'], patient_data['start_time'])
-        end_dt = self._format_datetime(patient_data['end_date'], patient_data['end_time'])
+        start_dt = self._format_datetime_to_timestamp(patient_data['start_date'], patient_data['start_time'])
         
-        # สร้างข้อมูลสำหรับการสร้างกิจกรรม
+        # คำนวณ end_dt สำหรับ recurring series
+        # สำหรับ recurring events ต้องใช้ end date ของ series ไม่ใช่ของ event เดียว
+        start_datetime = self._parse_datetime(patient_data['start_date'], patient_data['start_time'])
+        end_datetime = self._parse_datetime(patient_data['end_date'], patient_data['end_time'])
+        
+        # คำนวณระยะเวลาของแต่ละ event
+        duration_minutes = int((end_datetime - start_datetime).total_seconds() / 60)
+        
+        # สำหรับ recurring events ให้ end_dt เป็นวันสุดท้ายของ series
+        # ตัวอย่าง: ถ้า COUNT=12 และ FREQ=WEEKLY ก็คือ 12 สัปดาห์
+        series_end_date = start_datetime + timedelta(weeks=12)  # ปรับตามต้องการ
+        end_dt = int(series_end_date.timestamp())
+        
+        # สร้างข้อมูลสำหรับการสร้างกิจกรรม recurring
         event_data = {
             'title': patient_data['title'],
             'start_dt': start_dt,
             'end_dt': end_dt,
+            'all_day': False,
+            'rrule': rrule,  # เพิ่ม RRULE
             'location': patient_data.get('location', ''),
             'who': patient_data.get('who', ''),
             'notes': patient_data.get('description', ''),
-            'subcalendar_ids': [subcalendar_id]
+            'subcalendar_ids': [subcalendar_id],
+            'signup_enabled': False,
+            'comments_enabled': False,
+            'attachments': []
         }
         
-        # แสดงข้อมูลที่จะส่งไป (เพื่อการตรวจสอบ)
-        print("ข้อมูลที่จะส่งไปยัง API:")
-        print(f"URL: {self.base_url}/events")
-        print(f"Headers: {self.headers}")
+        print("ข้อมูลสำหรับ Recurring Event:")
+        print(f"RRULE: {rrule}")
+        print(f"Duration (minutes): {duration_minutes}")
         print(f"ข้อมูล: {json.dumps(event_data, indent=2, ensure_ascii=False)}")
         
         try:
@@ -224,7 +356,6 @@ class TeamupAPI:
                 data=json.dumps(event_data)
             )
             
-            # แสดงข้อมูลการตอบกลับ
             print(f"สถานะการตอบกลับ: {response.status_code}")
             print(f"เนื้อหาการตอบกลับ: {response.text}")
             
@@ -232,111 +363,134 @@ class TeamupAPI:
                 data = response.json()
                 return True, data['event']['id']
             else:
-                return False, f"การสร้างนัดหมายล้มเหลว: {response.text}"
+                return False, f"การสร้างนัดหมาย recurring ล้มเหลว: {response.text}"
                 
         except Exception as e:
             return False, f"เกิดข้อผิดพลาด: {e}"
     
-    def update_appointment_status(self, event_id, status, calendar_id=None):
+    def generate_rrule(self, frequency='WEEKLY', days=None, count=None, until=None):
         """
-        อัปเดตสถานะการนัดหมาย
+        สร้าง RRULE string สำหรับ recurring events
         
         params:
-            event_id: str - ID ของกิจกรรม
-            status: str - สถานะใหม่ ("มาตามนัด", "ยกเลิก", "ไม่มา")
-            calendar_id: str - ID ของปฏิทินย่อย (ถ้ามี)
+            frequency: str - DAILY, WEEKLY, MONTHLY, YEARLY
+            days: list - วันในสัปดาห์ ['MO', 'WE', 'FR'] สำหรับ WEEKLY
+            count: int - จำนวนครั้งที่ repeat
+            until: datetime - วันที่สิ้นสุด
             
-        returns: (boolean, str) - สถานะการอัปเดตและข้อความ
+        returns: str - RRULE string
         """
+        rrule_parts = [f"FREQ={frequency}"]
+        
+        if days and frequency == 'WEEKLY':
+            rrule_parts.append(f"BYDAY={','.join(days)}")
+        
+        if count:
+            rrule_parts.append(f"COUNT={count}")
+        elif until:
+            until_str = until.strftime('%Y%m%dT%H%M%SZ')
+            rrule_parts.append(f"UNTIL={until_str}")
+        
+        return ';'.join(rrule_parts)
+    
+    def create_recurring_appointments_simple(self, patient_data, selected_days, weeks):
+        """สร้างนัดหมายเกิดซ้ำแบบง่าย"""
         try:
-            # ดึงข้อมูลกิจกรรมปัจจุบัน
-            response = requests.get(
-                f"{self.base_url}/events/{event_id}",
-                headers=self.headers
-            )
+            # หาชื่อปฏิทินย่อยจากชื่อ
+            subcalendar_id = self.get_subcalendar_id_by_name(patient_data['calendar_name'])
+            if not subcalendar_id:
+                return False, f"ไม่พบปฏิทินย่อย: {patient_data['calendar_name']}"
             
-            if response.status_code != 200:
-                return False, f"ไม่สามารถดึงข้อมูลนัดหมายได้: {response.text}"
-                
-            current_event = response.json()['event']
+            # สร้าง RRULE
+            days_str = ','.join(selected_days)
+            rrule = f"FREQ=WEEKLY;BYDAY={days_str};COUNT={weeks}"
             
-            # สร้างชื่อใหม่ตามสถานะ
-            title = current_event['title']
+            print(f"ข้อมูลสำหรับ Recurring Event:")
+            print(f"RRULE: {rrule}")
             
-            # ลบสถานะเดิม (ถ้ามี)
-            for old_status in ["(มาตามนัด)", "(ยกเลิก)", "(ไม่มา)"]:
-                title = title.replace(old_status, "").strip()
+            # แปลงวันที่และเวลาเป็น ISO string
+            start_date = patient_data['start_date']  # YYYY-MM-DD
+            start_time = patient_data['start_time']  # HH:MM
+            end_date = patient_data['end_date']     # YYYY-MM-DD  
+            end_time = patient_data['end_time']     # HH:MM
             
-            # เพิ่มสถานะใหม่
-            new_title = f"{title} ({status})"
+            # สร้าง datetime string ในรูปแบบ ISO
+            start_datetime_str = f"{start_date}T{start_time}:00"
+            end_datetime_str = f"{end_date}T{end_time}:00"
             
-            # แน่ใจว่า subcalendar_ids เป็นอาร์เรย์
-            subcalendar_ids = []
+            print(f"Start datetime: {start_datetime_str}")
+            print(f"End datetime: {end_datetime_str}")
             
-            # ถ้า current_event มี subcalendar_ids และเป็นอาร์เรย์
-            if 'subcalendar_ids' in current_event and isinstance(current_event['subcalendar_ids'], list):
-                subcalendar_ids = current_event['subcalendar_ids']
-            # ถ้า current_event มี subcalendar_id (เลขตัวเดียว)
-            elif 'subcalendar_id' in current_event:
-                subcalendar_ids = [current_event['subcalendar_id']]
-            # ถ้ามีการส่ง calendar_id มา
-            elif calendar_id:
-                subcalendar_ids = [int(calendar_id)]
-            
-            # กำหนดข้อมูลที่จะอัปเดต
-            update_data = {
-                'id': event_id,  # เพิ่ม field id ให้ตรงตามที่ API ต้องการ
-                'title': new_title,
-                'start_dt': current_event['start_dt'],
-                'end_dt': current_event['end_dt'],
-                # กำหนด subcalendar_ids เป็นอาร์เรย์อย่างถูกต้อง
-                'subcalendar_ids': subcalendar_ids
+            # สร้างข้อมูลสำหรับส่งไป API
+            event_data = {
+                "title": patient_data['title'],
+                "start_dt": start_datetime_str,  # ใช้ ISO string
+                "end_dt": end_datetime_str,      # ใช้ ISO string
+                "all_day": False,
+                "rrule": rrule,
+                "subcalendar_ids": [subcalendar_id]
             }
             
-            # เพิ่มบันทึกเกี่ยวกับการเปลี่ยนสถานะ
-            update_data['notes'] = current_event.get('notes', '') + f"\n\nอัปเดตสถานะเป็น '{status}' เมื่อ {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            # เพิ่มข้อมูลเสริม (ถ้ามี)
+            if patient_data.get('location'):
+                event_data['location'] = patient_data['location']
+            if patient_data.get('who'):
+                event_data['who'] = patient_data['who']
+            if patient_data.get('description'):
+                event_data['notes'] = patient_data['description']
             
-            # กำหนดสีตามสถานะ
-            if status == "มาตามนัด":
-                update_data['color_id'] = "10"  # สีเขียว
-            elif status == "ยกเลิก":
-                update_data['color_id'] = "9"   # สีแดง
-            elif status == "ไม่มา":
-                update_data['color_id'] = "8"   # สีเทา
+            # เพิ่มการตั้งค่าเริ่มต้น
+            event_data.update({
+                'signup_enabled': False,
+                'comments_enabled': False,
+                'attachments': []
+            })
             
-            # แสดงข้อมูลที่จะส่งไป (เพื่อการตรวจสอบ)
-            print("ข้อมูลที่จะส่งไปยัง API (อัปเดตสถานะ):")
-            print(f"URL: {self.base_url}/events/{event_id}")
-            print(f"Headers: {self.headers}")
-            print(f"ข้อมูล: {json.dumps(update_data, indent=2, ensure_ascii=False)}")
+            print("ข้อมูลที่จะส่งไป API:")
+            print(json.dumps(event_data, indent=2, ensure_ascii=False))
             
-            # ส่งคำขออัปเดต
-            response = requests.put(
-                f"{self.base_url}/events/{event_id}",
+            # ส่งคำขอไป API
+            response = requests.post(
+                f"{self.base_url}/events",
                 headers=self.headers,
-                data=json.dumps(update_data)
+                json=event_data
             )
             
-            # แสดงข้อมูลการตอบกลับ
             print(f"สถานะการตอบกลับ: {response.status_code}")
             print(f"เนื้อหาการตอบกลับ: {response.text}")
             
-            if response.status_code == 200:
-                return True, "อัปเดตสถานะสำเร็จ"
+            if response.status_code == 201:
+                event_id = response.json().get('event', {}).get('id')
+                return True, event_id
             else:
-                return False, f"การอัปเดตสถานะล้มเหลว: {response.text}"
+                error_data = response.json() if response.text else {'error': 'Unknown error'}
+                if isinstance(error_data, dict) and 'error' in error_data:
+                    error_msg = error_data['error'].get('message', response.text)
+                else:
+                    error_msg = response.text
+                return False, f"การสร้างนัดหมายล้มเหลว: {error_msg}"
                 
         except Exception as e:
-            return False, f"เกิดข้อผิดพลาด: {e}"
+            print(f"Exception in create_recurring_appointments_simple: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, str(e)
+        
+    def get_subcalendar_id_by_name(self, calendar_name):
+        """หา subcalendar ID จากชื่อ"""
+        try:
+            subcals = self.get_subcalendars()
+            for subcal in subcals.get('subcalendars', []):
+                if subcal['name'] == calendar_name:
+                    return subcal['id']
+            return None
+        except Exception as e:
+            print(f"Error getting subcalendar ID: {e}")
+            return None
     
     def import_from_csv(self, file_path):
         """
         นำเข้าตารางนัดหมายฟอกไตจากไฟล์ CSV
-        
-        params:
-            file_path: str - พาธของไฟล์ CSV
-            
-        returns: dict - ผลลัพธ์การนำเข้า
         """
         results = {
             'success': 0,
@@ -397,119 +551,60 @@ class TeamupAPI:
             })
             return results
     
-    def create_recurring_appointments(self, patient_data, recurrence_pattern, weeks=4):
+    def _format_datetime_to_timestamp(self, date_str, time_str):
         """
-        สร้างนัดหมายที่เกิดซ้ำ
-        
-        params:
-            patient_data: dict - ข้อมูลผู้ป่วย
-            recurrence_pattern: list - รูปแบบการเกิดซ้ำ เช่น ['จันทร์', 'พุธ', 'ศุกร์']
-            weeks: int - จำนวนสัปดาห์ที่ต้องการสร้างนัดหมาย
-            
-        returns: dict - ผลลัพธ์การสร้างนัดหมาย
-        """
-        results = {
-            'success': 0,
-            'failed': 0,
-            'errors': [],
-            'event_ids': []
-        }
-        
-        # แปลงรูปแบบวันในสัปดาห์เป็นตัวเลข (0=จันทร์, 6=อาทิตย์)
-        day_mapping = {
-            'MON': 0, 'TUE': 1, 'WED': 2, 'THU': 3, 'FRI': 4, 'SAT': 5, 'SUN': 6,
-            'จันทร์': 0, 'อังคาร': 1, 'พุธ': 2, 'พฤหัส': 3, 'ศุกร์': 4, 'เสาร์': 5, 'อาทิตย์': 6
-        }
-        
-        try:
-            # แปลงรูปแบบวันที่และเวลาเริ่มต้น
-            start_date = datetime.strptime(patient_data['start_date'], '%d/%m/%Y')
-            start_time = patient_data['start_time']
-            
-            # คำนวณระยะเวลาของการนัดหมาย (ชั่วโมง)
-            start_dt = datetime.strptime(f"{patient_data['start_date']} {start_time}", '%d/%m/%Y %H:%M')
-            end_dt = datetime.strptime(f"{patient_data['end_date']} {patient_data['end_time']}", '%d/%m/%Y %H:%M')
-            duration = end_dt - start_dt
-            
-            # สร้างนัดหมายสำหรับทุกวันในรูปแบบการเกิดซ้ำ ตามจำนวนสัปดาห์ที่กำหนด
-            for week in range(weeks):
-                for day_name in recurrence_pattern:
-                    if day_name in day_mapping:
-                        # คำนวณวันที่ให้ตรงกับวันในสัปดาห์ที่ต้องการ
-                        target_weekday = day_mapping[day_name]
-                        current_weekday = start_date.weekday()
-                        days_to_add = (target_weekday - current_weekday) % 7
-                        
-                        appointment_date = start_date + timedelta(days=days_to_add + (week * 7))
-                        
-                        # สร้างข้อมูลสำหรับนัดหมายใหม่
-                        new_appointment = patient_data.copy()
-                        new_appointment['start_date'] = appointment_date.strftime('%d/%m/%Y')
-                        new_appointment['end_date'] = appointment_date.strftime('%d/%m/%Y')
-                        
-                        # เพิ่มข้อมูลเกี่ยวกับการเกิดซ้ำในคำอธิบาย
-                        recurrence_info = f"\nนัดหมายซ้ำ: สัปดาห์ที่ {week + 1} / {weeks}, วัน{day_name}"
-                        if 'description' in new_appointment:
-                            new_appointment['description'] += recurrence_info
-                        else:
-                            new_appointment['description'] = recurrence_info
-                        
-                        # สร้างนัดหมาย
-                        success, result = self.create_appointment(new_appointment)
-                        
-                        if success:
-                            results['success'] += 1
-                            results['event_ids'].append(result)
-                        else:
-                            results['failed'] += 1
-                            results['errors'].append({
-                                'date': new_appointment['start_date'],
-                                'error': result
-                            })
-                    else:
-                        results['errors'].append({
-                            'error': f"รูปแบบวันไม่ถูกต้อง: {day_name}"
-                        })
-            
-            return results
-                
-        except Exception as e:
-            results['errors'].append({
-                'error': f"เกิดข้อผิดพลาด: {e}"
-            })
-            return results
-    
-    def _format_datetime(self, date_str, time_str):
-        """
-        แปลงรูปแบบวันที่และเวลาให้ถูกต้องตาม API
-        เช่น "12/05/2025", "09:00" เป็น "2025-05-12T09:00:00+07:00"
+        แปลงรูปแบบวันที่และเวลาเป็น Unix timestamp
         
         params:
             date_str: str - วันที่ในรูปแบบ DD/MM/YYYY
             time_str: str - เวลาในรูปแบบ HH:MM
             
-        returns: str - วันที่และเวลาในรูปแบบ ISO
+        returns: int - Unix timestamp
         """
         try:
-            # แปลงรูปแบบวันที่ (DD/MM/YYYY)
+            dt = self._parse_datetime(date_str, time_str)
+            return int(dt.timestamp())
+            
+        except Exception as e:
+            print(f"เกิดข้อผิดพลาดในการแปลงรูปแบบวันที่และเวลา: {e}")
+            return None
+    
+    def _parse_datetime(self, date_str, time_str):
+        """
+        แปลงวันที่และเวลาเป็น datetime object
+        """
+        if '/' in date_str:
+            day, month, year = date_str.split('/')
+            date_formatted = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        else:
+            date_formatted = date_str
+        
+        time_parts = time_str.split(':')
+        hour = time_parts[0].zfill(2)
+        minute = time_parts[1].zfill(2) if len(time_parts) > 1 else "00"
+        
+        datetime_str = f"{date_formatted} {hour}:{minute}:00"
+        return datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
+    
+    def _format_datetime(self, date_str, time_str):
+        """
+        แปลงรูปแบบวันที่และเวลาให้ถูกต้องตาม API (deprecated - ใช้ timestamp แทน)
+        """
+        try:
             if '/' in date_str:
                 day, month, year = date_str.split('/')
                 date_formatted = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
             else:
-                # ถ้าไม่ได้อยู่ในรูปแบบ DD/MM/YYYY ให้ส่งคืนค่าเดิม
                 date_formatted = date_str
             
-            # แปลงรูปแบบเวลา (HH:MM)
             time_parts = time_str.split(':')
             hour = time_parts[0].zfill(2)
             minute = time_parts[1].zfill(2) if len(time_parts) > 1 else "00"
             
-            # รวมวันที่และเวลา พร้อม timezone (+07:00 สำหรับประเทศไทย)
             datetime_str = f"{date_formatted}T{hour}:{minute}:00+07:00"
             print(f"แปลงวันที่จาก {date_str} {time_str} เป็น {datetime_str}")
             return datetime_str
             
         except Exception as e:
             print(f"เกิดข้อผิดพลาดในการแปลงรูปแบบวันที่และเวลา: {e}")
-            # ส่งคืนค่าเดิมในกรณีที่มีข้อผิดพลาด
             return f"{date_str}T{time_str}:00+07:00"

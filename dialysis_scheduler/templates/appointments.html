@@ -104,57 +104,64 @@
                 </h5>
             </div>
             <div class="card-body">
-                <form id="new-appointment-form">
+                <form id="new-appointment-form" method="POST">
+                    {{ form.hidden_tag() }}
+                    {{ form.form_token() }}
+                    
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="title" class="form-label">ชื่อผู้ป่วย:</label>
-                            <input type="text" class="form-control" id="title" name="title" placeholder="เช่น นายสมชาย ใจดี - ฟอกไต" required>
+                            {{ form.title.label(class="form-label") }}
+                            {{ form.title(class="form-control", placeholder="เช่น นายสมชาย ใจดี - ฟอกไต") }}
+                            <div class="text-danger field-error" id="title-error"></div>
                         </div>
                         <div class="col-md-6">
-                            <label for="calendar_name" class="form-label">ปฏิทินย่อย:</label>
-                            <select class="form-select" id="calendar_name" name="calendar_name" required>
-                                <option value="">เลือกปฏิทินย่อย</option>
-                                {% for subcal in subcalendars %}
-                                <option value="{{ subcal.name }}">{{ subcal.name }}</option>
-                                {% endfor %}
-                            </select>
+                            {{ form.calendar_name.label(class="form-label") }}
+                            {{ form.calendar_name(class="form-select") }}
+                            <div class="text-danger field-error" id="calendar_name-error"></div>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-3">
-                            <label for="start_date" class="form-label">วันที่เริ่มต้น:</label>
-                            <input type="date" class="form-control" id="start_date" name="start_date" required value="{{ today }}">
+                            {{ form.start_date.label(class="form-label") }}
+                            {{ form.start_date(class="form-control", value=today) }}
+                            <div class="text-danger field-error" id="start_date-error"></div>
                         </div>
                         <div class="col-md-3">
-                            <label for="start_time" class="form-label">เวลาเริ่มต้น:</label>
-                            <input type="time" class="form-control" id="start_time" name="start_time" required value="09:00">
+                            {{ form.start_time.label(class="form-label") }}
+                            {{ form.start_time(class="form-control", value="09:00") }}
+                            <div class="text-danger field-error" id="start_time-error"></div>
                         </div>
                         <div class="col-md-3">
-                            <label for="end_date" class="form-label">วันที่สิ้นสุด:</label>
-                            <input type="date" class="form-control" id="end_date" name="end_date" required value="{{ today }}">
+                            {{ form.end_date.label(class="form-label") }}
+                            {{ form.end_date(class="form-control", value=today) }}
+                            <div class="text-danger field-error" id="end_date-error"></div>
                         </div>
                         <div class="col-md-3">
-                            <label for="end_time" class="form-label">เวลาสิ้นสุด:</label>
-                            <input type="time" class="form-control" id="end_time" name="end_time" required value="12:00">
+                            {{ form.end_time.label(class="form-label") }}
+                            {{ form.end_time(class="form-control", value="12:00") }}
+                            <div class="text-danger field-error" id="end_time-error"></div>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="location" class="form-label">สถานที่:</label>
-                            <input type="text" class="form-control" id="location" name="location" placeholder="เช่น ห้องฟอกไตเตียง 3">
+                            {{ form.location.label(class="form-label") }}
+                            {{ form.location(class="form-control", placeholder="เช่น ห้องฟอกไตเตียง 3") }}
+                            <div class="text-danger field-error" id="location-error"></div>
                         </div>
                         <div class="col-md-6">
-                            <label for="who" class="form-label">ผู้ดูแล:</label>
-                            <input type="text" class="form-control" id="who" name="who" placeholder="เช่น คุณหมอสมศักดิ์, คุณพยาบาลนงนุช">
+                            {{ form.who.label(class="form-label") }}
+                            {{ form.who(class="form-control", placeholder="เช่น คุณหมอสมศักดิ์, คุณพยาบาลนงนุช") }}
+                            <div class="text-danger field-error" id="who-error"></div>
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label">รายละเอียด:</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="เบอร์โทร: 091-234-5678&#10;ความดันโลหิต: ปกติ&#10;หมายเหตุ: มีโรคประจำตัวเรื่องภูมิแพ้ ระวังการแพ้ยา"></textarea>
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="3", placeholder="เบอร์โทร: 091-234-5678\nความดันโลหิต: ปกติ\nหมายเหตุ: มีโรคประจำตัวเรื่องภูมิแพ้ ระวังการแพ้ยา") }}
+                        <div class="text-danger field-error" id="description-error"></div>
                     </div>
                     <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring" value="true">
-                        <label class="form-check-label" for="is_recurring">นัดหมายที่เกิดซ้ำ</label>
+                        {{ form.is_recurring(class="form-check-input") }}
+                        {{ form.is_recurring.label(class="form-check-label") }}
                     </div>
                     <div id="recurring-options" style="display: none;">
                         <div class="card mb-3">
@@ -165,43 +172,45 @@
                                     <div class="row">
                                         <div class="col-md-4">
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="mon" name="mon" value="true">
-                                                <label class="form-check-label" for="mon">จันทร์</label>
+                                                {{ form.mon(class="form-check-input") }}
+                                                {{ form.mon.label(class="form-check-label") }}
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="tue" name="tue" value="true">
-                                                <label class="form-check-label" for="tue">อังคาร</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="wed" name="wed" value="true">
-                                                <label class="form-check-label" for="wed">พุธ</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="thu" name="thu" value="true">
-                                                <label class="form-check-label" for="thu">พฤหัสบดี</label>
+                                                {{ form.tue(class="form-check-input") }}
+                                                {{ form.tue.label(class="form-check-label") }}
                                             </div>
                                         </div>
                                         <div class="col-md-4">
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="fri" name="fri" value="true">
-                                                <label class="form-check-label" for="fri">ศุกร์</label>
+                                                {{ form.wed(class="form-check-input") }}
+                                                {{ form.wed.label(class="form-check-label") }}
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="sat" name="sat" value="true">
-                                                <label class="form-check-label" for="sat">เสาร์</label>
+                                                {{ form.thu(class="form-check-input") }}
+                                                {{ form.thu.label(class="form-check-label") }}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                {{ form.fri(class="form-check-input") }}
+                                                {{ form.fri.label(class="form-check-label") }}
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="sun" name="sun" value="true">
-                                                <label class="form-check-label" for="sun">อาทิตย์</label>
+                                                {{ form.sat(class="form-check-input") }}
+                                                {{ form.sat.label(class="form-check-label") }}
+                                            </div>
+                                            <div class="form-check">
+                                                {{ form.sun(class="form-check-input") }}
+                                                {{ form.sun.label(class="form-check-label") }}
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="text-danger field-error" id="days-error"></div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="weeks" class="form-label">จำนวนสัปดาห์:</label>
-                                    <input type="number" class="form-control" id="weeks" name="weeks" min="1" max="52" value="4">
+                                    {{ form.weeks.label(class="form-label") }}
+                                    {{ form.weeks(class="form-control", min="1", max="52") }}
+                                    <div class="text-danger field-error" id="weeks-error"></div>
                                 </div>
                             </div>
                         </div>
@@ -265,7 +274,7 @@
         
         // แสดง/ซ่อนตัวเลือกการนัดหมายเกิดซ้ำ
         $('#is_recurring').change(function() {
-            if ($(this).is(':checked')) {
+            if ($(this).is(':checked') {
                 $('#recurring-options').slideDown();
             } else {
                 $('#recurring-options').slideUp();
@@ -336,7 +345,6 @@
                             </h4>
                         `);
                         
-                        // คำนวณจำนวนกิจกรรมในวันนี้
                         const dayEvents = eventsByDate[date];
                         container.append(`
                             <div class="mb-2">
@@ -357,20 +365,40 @@
                             const startTime = event.start_dt.split('T')[1].substring(0, 5);
                             const endTime = event.end_dt.split('T')[1].substring(0, 5);
                             
+                            // เพิ่มการแสดงชื่อปฏิทินย่อย
+                            const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
+                            
                             container.append(`
                                 <div class="card appointment-card ${statusClass}" data-event-id="${event.id}">
                                     <div class="card-body">
-                                        <div class="d-flex justify-content-between">
-                                            <h5 class="card-title">${event.title}</h5>
-                                            <span class="badge bg-primary">${startTime} - ${endTime}</span>
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <h5 class="card-title mb-1">${event.title}</h5>
+                                                <div class="mb-2">
+                                                    <span class="badge bg-secondary me-2">
+                                                        <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
+                                                    </span>
+                                                    <span class="badge bg-primary">
+                                                        <i class="fas fa-clock me-1"></i>${startTime} - ${endTime}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <p class="card-text mb-1">
-                                            <i class="fas fa-map-marker-alt me-2"></i>${event.location || 'ไม่ระบุตำแหน่ง'}
-                                        </p>
-                                        <p class="card-text">
-                                            <i class="fas fa-user-md me-2"></i>${event.who || 'ไม่ระบุผู้ดูแล'}
-                                        </p>
-                                        <div class="text-end">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p class="card-text mb-1">
+                                                    <i class="fas fa-map-marker-alt me-2 text-muted"></i>
+                                                    <small>${event.location || 'ไม่ระบุตำแหน่ง'}</small>
+                                                </p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p class="card-text mb-1">
+                                                    <i class="fas fa-user-md me-2 text-muted"></i>
+                                                    <small>${event.who || 'ไม่ระบุผู้ดูแล'}</small>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="text-end mt-2">
                                             <a href="{{ url_for('update_status') }}?event_id=${event.id}" class="btn btn-sm btn-primary">
                                                 <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
                                             </a>
@@ -384,11 +412,13 @@
                         });
                     });
                     
-                    // จัดการการคลิกที่ปุ่มดูรายละเอียด
+                    // จัดการการคลิกที่ปุ่มดูรายละเอียด - ใช้ฟังก์ชันจาก script.js
                     $('.view-details').click(function(e) {
                         e.preventDefault();
                         const eventId = $(this).data('event-id');
-                        showEventDetails(eventId);
+                        if (typeof showEventDetails === 'function') {
+                            showEventDetails(eventId);
+                        }
                     });
                 },
                 error: function(xhr, status, error) {
@@ -401,81 +431,6 @@
             });
         }
         
-        // แสดงรายละเอียดนัดหมายใน modal
-        function showEventDetails(eventId) {
-            // เรียกข้อมูล event แบบสดจาก backend
-            $.ajax({
-                url: '/get_events', // แก้ไขจาก '/get_event' เป็น '/get_events'
-                data: { event_id: eventId },
-                success: function(response) {
-                    // ตรวจสอบว่ามีข้อมูล events และมีอย่างน้อย 1 รายการ
-                    if (!response.events || response.events.length === 0) {
-                        alert('ไม่พบข้อมูลนัดหมาย');
-                        return;
-                    }
-                    
-                    const event = response.events[0]; // ใช้รายการแรกจาก events array
-
-                    function formatDate(dateString) {
-                        const date = new Date(dateString);
-                        return date.toLocaleDateString('th-TH', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            weekday: 'long'
-                        });
-                    }
-
-                    let modalContent = `
-                        <div class="modal-header">
-                            <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <h5>${event.title}</h5>
-                            <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
-                            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
-                            <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
-                            <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
-                    `;
-
-                    if (event.notes) {
-                        modalContent += `
-                            <div class="mt-3">
-                                <h6>บันทึกเพิ่มเติม:</h6>
-                                <div class="border p-2 rounded">
-                                    <pre class="mb-0">${event.notes}</pre>
-                                </div>
-                            </div>
-                        `;
-                    }
-
-                    modalContent += `
-                            <div class="mt-3">
-                                <h6>Event ID:</h6>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" value="${event.id}" readonly>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <a href="/update_status?event_id=${event.id}" class="btn btn-primary">
-                                <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
-                            </a>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                        </div>
-                    `;
-
-                    $('#eventDetailsModal .modal-content').html(modalContent);
-                    const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
-                    modal.show();
-                },
-                error: function(xhr, status, error) {
-                    alert('ไม่สามารถโหลดข้อมูลนัดหมาย: ' + (xhr.responseJSON?.error || error));
-                }
-            });
-        }
-
         // โหลดรายการนัดหมายเมื่อโหลดหน้า
         loadAppointments();
         
@@ -484,57 +439,14 @@
             loadAppointments();
         });
         
-        // จัดการการส่งฟอร์มสร้างนัดหมายใหม่
-        $('#new-appointment-form').submit(function(e) {
-            e.preventDefault();
-            
-            const formData = $(this).serialize();
-            
-            $.ajax({
-                url: '/create_appointment',
-                method: 'POST',
-                data: formData,
-                success: function(data) {
-                    if (data.success) {
-                        alert('สร้างนัดหมายสำเร็จ!');
-                        $('#new-appointment-form')[0].reset();
-                        $('#list-tab').tab('show');
-                        loadAppointments();
-                    } else {
-                        alert('เกิดข้อผิดพลาด: ' + data.error);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    alert('เกิดข้อผิดพลาด: ' + (xhr.responseJSON?.error || error));
-                }
-            });
-        });
+        // **ลบส่วนนี้ออก - ให้ script.js จัดการแทน**
+        // $('#new-appointment-form').submit(...) <-- ลบทั้งหมด
         
-        // จัดการการส่งฟอร์มอัปเดตสถานะ
-        $('#update-status-form').submit(function(e) {
-            e.preventDefault();
-            
-            const formData = $(this).serialize();
-            
-            $.ajax({
-                url: '/update_status',
-                method: 'POST',
-                data: formData,
-                success: function(data) {
-                    if (data.success) {
-                        alert('อัปเดตสถานะสำเร็จ!');
-                        $('#update-status-form')[0].reset();
-                        $('#list-tab').tab('show');
-                        loadAppointments();
-                    } else {
-                        alert('เกิดข้อผิดพลาด: ' + data.error);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    alert('เกิดข้อผิดพลาด: ' + (xhr.responseJSON?.error || error));
-                }
-            });
-        });
+        // **ลบส่วนนี้ออก - ให้ script.js จัดการแทน**  
+        // $('#update-status-form').submit(...) <-- ลบทั้งหมด
+        
+        // เพิ่มฟังก์ชันสำหรับให้ script.js เรียกใช้
+        window.loadAppointments = loadAppointments;
     });
 </script>
 {% endblock %}

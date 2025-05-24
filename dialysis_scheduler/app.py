@@ -6,27 +6,17 @@ import csv
 import io
 from datetime import datetime, timedelta
 import json
-import requests  # เพิ่มบรรทัดนี้
+import requests
 from dotenv import load_dotenv, set_key
 
 from teamup_api import TeamupAPI
 from config import Config, TEAMUP_API_KEY, CALENDAR_ID
+from forms import AppointmentForm
+import uuid
 
 app = Flask(__name__)
 app.config.from_object(Config)
-Config.init_app()  # สร้างโฟลเดอร์ uploads ถ้ายังไม่มี
-# app.secret_key = 'dialysis_scheduler_secret_key'  # สำหรับการใช้งาน flash และ session
-
-# ตั้งค่า upload folder สำหรับไฟล์ CSV
-# ลบส่วนนี้เนื่องจากซ้ำซ้อนกับ Config
-# app.secret_key = 'dialysis_scheduler_secret_key'  # สำหรับการใช้งาน flash และ session
-# 
-# # ตั้งค่า upload folder สำหรับไฟล์ CSV
-# UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-# if not os.path.exists(UPLOAD_FOLDER):
-#     os.makedirs(UPLOAD_FOLDER)
-# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-# app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # จำกัดขนาดไฟล์ 16 MB
+Config.init_app()
 
 # สร้าง TeamupAPI instance (จะถูกกำหนดค่าเมื่อผู้ใช้ login)
 teamup_api = None
@@ -71,14 +61,13 @@ def index():
             summary_data = {
                 'subcalendar_count': subcalendar_count,
                 'today_appointments': today_appointments,
-                'subcalendars': subcals.get('subcalendars', [])[:5]  # แสดง 5 ปฏิทินย่อยล่าสุด
+                'subcalendars': subcals.get('subcalendars', [])[:5]
             }
         except Exception as e:
             print(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุป: {e}")
     
     return render_template('index.html', api_connected=api_connected, summary_data=summary_data)
 
-# ใน app.py, ฟังก์ชัน setup
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     """หน้าตั้งค่าการเชื่อมต่อ API"""
@@ -157,28 +146,18 @@ def subcalendars():
     """หน้าแสดงรายการปฏิทินย่อย"""
     global teamup_api
     
-    print("Checking API connection in subcalendars route...")
-    print(f"teamup_api exists: {teamup_api is not None}")
-    print(f"session contains api_key: {'api_key' in session}")
-    print(f"session contains calendar_id: {'calendar_id' in session}")
-    
     # สร้าง instance ใหม่ถ้ายังไม่มี
     if teamup_api is None and 'api_key' in session and 'calendar_id' in session:
-        print("Creating new TeamupAPI instance from session data...")
         teamup_api = TeamupAPI(session['api_key'], session['calendar_id'])
     
     # ถ้ายังไม่มี teamup_api ให้แสดงข้อความเตือน
     if teamup_api is None:
-        flash('กรุณาเชื่อมต่อ API ก่อนเข้าถึงปฏิทินย่อย - API ไม่ได้เชื่อมต่อ', 'warning')
+        flash('กรุณาเชื่อมต่อ API ก่อนเข้าถึงปฏิทินย่อย', 'warning')
         return redirect(url_for('setup'))
     
     try:
         # ดึงข้อมูลปฏิทินย่อย
         subcals = teamup_api.get_subcalendars()
-        
-        # print("โครงสร้างข้อมูล subcalendars:", subcals)
-        # print("จำนวน subcalendars:", len(subcals.get('subcalendars', [])))
-        
         return render_template('subcalendars.html', subcalendars=subcals.get('subcalendars', []))
         
     except Exception as e:
@@ -192,37 +171,33 @@ def appointments():
         flash('กรุณาเชื่อมต่อ API ก่อน', 'warning')
         return redirect(url_for('setup'))
     
+    # สร้าง form
+    form = AppointmentForm()
+    
     # ดึงรายการปฏิทินย่อยสำหรับ dropdown
     subcals = teamup_api.get_subcalendars()
+    form.calendar_name.choices = [('', 'เลือกปฏิทินย่อย')] + [
+        (subcal['name'], subcal['name']) for subcal in subcals.get('subcalendars', [])
+    ]
     
-    # สร้างวันที่ปัจจุบันสำหรับค่าเริ่มต้น
+    # สร้าง unique form token
+    form.form_token.data = str(uuid.uuid4())
+    
+    # สร้างวันที่สำหรับค่าเริ่มต้น
+    from datetime import datetime, timedelta
     today = datetime.now().strftime('%Y-%m-%d')
     next_month = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
     
-    # รับพารามิเตอร์ subcalendar_id จาก URL (ถ้ามี)
+    # รับพารามิเตอร์ subcalendar_id จาก URL
     selected_subcalendar_id = request.args.get('subcalendar_id', '')
     
-    # โหลดข้อมูลนัดหมายล่วงหน้า
-    initial_events = {}
-    try:
-        initial_events = teamup_api.get_events(
-            start_date=datetime.strptime(today, '%Y-%m-%d'),
-            end_date=datetime.strptime(next_month, '%Y-%m-%d'),
-            subcalendar_id=selected_subcalendar_id if selected_subcalendar_id else None
-        )
-    except Exception as e:
-        flash(f'เกิดข้อผิดพลาดในการโหลดข้อมูลนัดหมาย: {e}', 'warning')
-    
     return render_template('appointments.html', 
+                          form=form,
                           subcalendars=subcals.get('subcalendars', []),
                           today=today,
                           end_date=next_month,
-                          selected_subcalendar_id=selected_subcalendar_id,
-                          initial_events=initial_events)  # ส่งข้อมูลนัดหมายเริ่มต้นไปด้วย
+                          selected_subcalendar_id=selected_subcalendar_id)
 
-# -----------------------------
-# PATCH ที่ 1 ใน /get_events()
-# -----------------------------
 @app.route('/get_events')
 def get_events():
     """API endpoint สำหรับดึงรายการกิจกรรม"""
@@ -234,7 +209,7 @@ def get_events():
         start_date = request.args.get('start_date', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
         end_date = request.args.get('end_date', (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
         subcalendar_id = request.args.get('subcalendar_id', '')
-        event_id = request.args.get('event_id', '') # เพิ่มพารามิเตอร์ event_id
+        event_id = request.args.get('event_id', '')
         
         # ถ้ามี event_id ให้ดึงรายละเอียดเฉพาะกิจกรรมนั้น
         if event_id:
@@ -245,7 +220,27 @@ def get_events():
                 )
                 if response.status_code == 200:
                     event_data = response.json()
-                    return jsonify({'events': [event_data['event']]})
+                    event = event_data['event']
+                    
+                    # เพิ่มข้อมูลชื่อปฏิทินย่อย
+                    if 'subcalendar_id' in event:
+                        try:
+                            # ดึงข้อมูลปฏิทินย่อย
+                            subcals = teamup_api.get_subcalendars()
+                            for subcal in subcals.get('subcalendars', []):
+                                if subcal['id'] == event['subcalendar_id']:
+                                    event['subcalendar_display'] = subcal['name']
+                                    break
+                            else:
+                                # ถ้าไม่เจอชื่อปฏิทินย่อย
+                                event['subcalendar_display'] = f'ปฏิทิน #{event["subcalendar_id"]}'
+                        except Exception as e:
+                            print(f"Error getting subcalendar name: {e}")
+                            event['subcalendar_display'] = f'ปฏิทิน #{event.get("subcalendar_id", "")}'
+                    else:
+                        event['subcalendar_display'] = 'ไม่ระบุปฏิทิน'
+                    
+                    return jsonify({'events': [event]})
                 else:
                     return jsonify({'error': f'ไม่สามารถดึงข้อมูลนัดหมาย: {response.text}', 'events': []}), 404
             except Exception as e:
@@ -255,84 +250,139 @@ def get_events():
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
         
+        # แปลง subcalendar_id เป็น integer ถ้ามีค่า
+        subcalendar_filter = None
+        if subcalendar_id:
+            try:
+                subcalendar_filter = int(subcalendar_id)
+            except ValueError:
+                pass
+        
         events = teamup_api.get_events(
             start_date=start_dt,
             end_date=end_dt,
-            subcalendar_id=subcalendar_id if subcalendar_id else None
+            subcalendar_id=subcalendar_filter
         )
         
-        # <<<< PATCH เพิ่มเติม >>>>
-        # เพิ่ม subcalendar_id ในทุก event เพื่อให้ frontend ใช้ได้
-        for event in events.get('events', []):
-            event['subcalendar_id'] = event.get('subcalendar_id', subcalendar_id)
-
         return jsonify(events)
         
     except Exception as e:
         return jsonify({'error': str(e), 'events': []}), 500
 
-
+# แก้ไข route /create_appointment ใน app.py
 @app.route('/create_appointment', methods=['POST'])
 def create_appointment():
-    """API endpoint สำหรับสร้างนัดหมายใหม่"""
+    """API endpoint สำหรับสร้างนัดหมายใหม่ - Hybrid Approach"""
     if not is_api_connected():
         return jsonify({'error': 'ไม่ได้เชื่อมต่อ API'}), 401
     
-    try:
-        # ดึงข้อมูลจากฟอร์ม
-        patient_data = {
-            'title': request.form.get('title'),
-            'start_date': request.form.get('start_date'),
-            'start_time': request.form.get('start_time'),
-            'end_date': request.form.get('end_date'),
-            'end_time': request.form.get('end_time'),
-            'location': request.form.get('location'),
-            'who': request.form.get('who'),
-            'description': request.form.get('description'),
-            'calendar_name': request.form.get('calendar_name')
-        }
+    form = AppointmentForm()
+    
+    # ดึงรายการปฏิทินย่อยสำหรับ validation
+    subcals = teamup_api.get_subcalendars()
+    form.calendar_name.choices = [
+        (subcal['name'], subcal['name']) for subcal in subcals.get('subcalendars', [])
+    ]
+    
+    if form.validate_on_submit():
+        # ป้องกันการส่งซ้ำด้วย session
+        form_token = form.form_token.data
+        if form_token and form_token in session.get('processed_forms', []):
+            # สร้าง form token ใหม่แล้วส่งกลับ
+            new_token = str(uuid.uuid4())
+            return jsonify({
+                'error': 'คำขอนี้ถูกประมวลผลแล้ว กรุณาลองอีกครั้ง',
+                'new_form_token': new_token
+            }), 400
         
-        # ตรวจสอบข้อมูลที่จำเป็น
-        if not patient_data['title'] or not patient_data['start_date'] or not patient_data['calendar_name']:
-            return jsonify({'error': 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน'}), 400
-        
-        # ตรวจสอบการนัดหมายเกิดซ้ำ
-        is_recurring = request.form.get('is_recurring') == 'true'
-        
-        if is_recurring:
-            # รูปแบบการเกิดซ้ำ
-            recurrence_pattern = []
-            days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-            day_names = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+        try:
+            # ตรวจสอบ recurring validation
+            if form.is_recurring.data:
+                is_valid, error_msg = form.validate_recurring_days()
+                if not is_valid:
+                    # สร้าง form token ใหม่เมื่อ validation ล้มเหลว
+                    new_token = str(uuid.uuid4())
+                    return jsonify({
+                        'error': error_msg,
+                        'new_form_token': new_token
+                    }), 400
             
-            for i, day in enumerate(days):
-                if request.form.get(day) == 'true':
-                    recurrence_pattern.append(day_names[i])
+            # บันทึก token เพื่อป้องกันการส่งซ้ำ (เฉพาะเมื่อผ่าน validation แล้ว)
+            if 'processed_forms' not in session:
+                session['processed_forms'] = []
+            session['processed_forms'].append(form_token)
             
-            weeks = int(request.form.get('weeks', 4))
+            # จำกัดจำนวน token ที่เก็บ
+            if len(session['processed_forms']) > 20:
+                session['processed_forms'] = session['processed_forms'][-20:]
             
-            if not recurrence_pattern:
-                return jsonify({'error': 'กรุณาเลือกวันที่ต้องการให้เกิดซ้ำ'}), 400
+            # สร้างข้อมูลผู้ป่วย
+            patient_data = {
+                'title': form.title.data,
+                'calendar_name': form.calendar_name.data,
+                'start_date': form.start_date.data.strftime('%Y-%m-%d'),
+                'start_time': form.start_time.data.strftime('%H:%M'),
+                'end_date': form.end_date.data.strftime('%Y-%m-%d'),
+                'end_time': form.end_time.data.strftime('%H:%M'),
+                'location': form.location.data or '',
+                'who': form.who.data or '',
+                'description': form.description.data or ''
+            }
             
-            # สร้างนัดหมายเกิดซ้ำ
-            results = teamup_api.create_recurring_appointments(patient_data, recurrence_pattern, weeks)
-            
-            return jsonify(results)
-        else:
-            # สร้างนัดหมายเดี่ยว
-            success, result = teamup_api.create_appointment(patient_data)
+            if form.is_recurring.data:
+                # สร้างนัดหมายเกิดซ้ำ
+                day_mapping = {
+                    'mon': 'MO', 'tue': 'TU', 'wed': 'WE', 'thu': 'TH',
+                    'fri': 'FR', 'sat': 'SA', 'sun': 'SU'
+                }
+                
+                selected_days = []
+                for day_key, day_abbr in day_mapping.items():
+                    if getattr(form, day_key).data:
+                        selected_days.append(day_abbr)
+                
+                weeks = form.weeks.data or 4
+                
+                success, result = teamup_api.create_recurring_appointments_simple(
+                    patient_data, selected_days, weeks
+                )
+            else:
+                # สร้างนัดหมายเดี่ยว
+                success, result = teamup_api.create_appointment(patient_data)
             
             if success:
                 return jsonify({'success': True, 'event_id': result})
             else:
-                return jsonify({'error': result}), 400
+                # สร้าง form token ใหม่เมื่อเกิดข้อผิดพลาดจาก API
+                new_token = str(uuid.uuid4())
+                return jsonify({
+                    'error': result,
+                    'new_form_token': new_token
+                }), 400
                 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            print(f"Exception in create_appointment: {e}")
+            # สร้าง form token ใหม่เมื่อเกิด Exception
+            new_token = str(uuid.uuid4())
+            return jsonify({
+                'error': str(e),
+                'new_form_token': new_token
+            }), 500
+    else:
+        # ส่ง validation errors กลับพร้อม form token ใหม่
+        errors = {}
+        for field, error_list in form.errors.items():
+            errors[field] = error_list[0] if error_list else 'ข้อมูลไม่ถูกต้อง'
+        
+        # สร้าง form token ใหม่
+        new_token = str(uuid.uuid4())
+        
+        return jsonify({
+            'error': 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง',
+            'field_errors': errors,
+            'new_form_token': new_token
+        }), 400
 
-# -----------------------------
-# PATCH ที่ 2 ใน /update_status()
-# -----------------------------
 @app.route('/update_status', methods=['GET', 'POST'])
 def update_status():
     """หน้าอัปเดตสถานะนัดหมาย"""
@@ -342,7 +392,7 @@ def update_status():
     
     event_data = None
     event_id = request.args.get('event_id', '')
-    calendar_id = request.args.get('calendar_id', '')    # <<<< PATCH เพิ่มเติม >>>>
+    calendar_id = request.args.get('calendar_id', '')
     
     # ถ้ามี event_id ให้ดึงข้อมูลมาแสดง
     if event_id:
@@ -362,13 +412,13 @@ def update_status():
         try:
             post_event_id = request.form.get('event_id')
             status = request.form.get('status')
-            post_calendar_id = request.form.get('calendar_id') or calendar_id   # <<<< PATCH เพิ่มเติม >>>>
+            post_calendar_id = request.form.get('calendar_id') or calendar_id
             
             if not post_event_id or not status:
                 flash('กรุณากรอก Event ID และเลือกสถานะ', 'danger')
                 return render_template('update_status.html', event_data=event_data, event_id=event_id)
             
-            success, result = teamup_api.update_appointment_status(post_event_id, status)
+            success, result = teamup_api.update_appointment_status(post_event_id, status, post_calendar_id)
             
             if success:
                 flash('อัปเดตสถานะสำเร็จ', 'success')
@@ -380,7 +430,6 @@ def update_status():
             flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
     
     return render_template('update_status.html', event_data=event_data, event_id=event_id)
-
 
 @app.route('/import', methods=['GET', 'POST'])
 def import_csv():
@@ -430,6 +479,83 @@ def import_csv():
     
     return render_template('import.html')
 
+# เพิ่ม route สำหรับ recurring appointments
+@app.route('/recurring_appointments', methods=['GET', 'POST'])
+def recurring_appointments():
+    """หน้าสร้างนัดหมายเกิดซ้ำ"""
+    if not is_api_connected():
+        flash('กรุณาเชื่อมต่อ API ก่อน', 'warning')
+        return redirect(url_for('setup'))
+    
+    # ดึงรายการปฏิทินย่อยสำหรับ dropdown
+    subcals = teamup_api.get_subcalendars()
+    
+    if request.method == 'POST':
+        try:
+            # ดึงข้อมูลจากฟอร์ม
+            patient_data = {
+                'title': request.form.get('title'),
+                'start_date': request.form.get('start_date'),
+                'start_time': request.form.get('start_time'),
+                'end_date': request.form.get('end_date'),
+                'end_time': request.form.get('end_time'),
+                'location': request.form.get('location'),
+                'who': request.form.get('who'),
+                'description': request.form.get('description'),
+                'calendar_name': request.form.get('calendar_name')
+            }
+            
+            # ตรวจสอบข้อมูลที่จำเป็น
+            if not patient_data['title'] or not patient_data['start_date'] or not patient_data['calendar_name']:
+                flash('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', 'danger')
+                return render_template('recurring_appointments.html', subcalendars=subcals.get('subcalendars', []))
+            
+            # รับค่าประเภทการเกิดซ้ำ
+            recurrence_type = request.form.get('recurrence_type', 'weekly')
+            
+            if recurrence_type == 'weekly':
+                # แมปวันในสัปดาห์
+                day_mapping = {
+                    'mon': 'MO', 'tue': 'TU', 'wed': 'WE', 'thu': 'TH',
+                    'fri': 'FR', 'sat': 'SA', 'sun': 'SU'
+                }
+                
+                selected_days = []
+                for day_key, day_abbr in day_mapping.items():
+                    if request.form.get(day_key) == 'on':
+                        selected_days.append(day_abbr)
+                
+                weeks = int(request.form.get('weeks', 4))
+                
+                if not selected_days:
+                    flash('กรุณาเลือกวันที่ต้องการให้เกิดซ้ำ', 'danger')
+                    return render_template('recurring_appointments.html', subcalendars=subcals.get('subcalendars', []))
+                
+                # สร้างนัดหมายเกิดซ้ำ
+                success, result = teamup_api.create_recurring_appointments_simple(
+                    patient_data, selected_days, weeks
+                )
+                
+            elif recurrence_type == 'custom':
+                # รับ RRULE โดยตรง
+                custom_rrule = request.form.get('custom_rrule', '')
+                if not custom_rrule:
+                    flash('กรุณากรอก RRULE สำหรับการเกิดซ้ำแบบกำหนดเอง', 'danger')
+                    return render_template('recurring_appointments.html', subcalendars=subcals.get('subcalendars', []))
+                
+                success, result = teamup_api.create_recurring_appointment(patient_data, custom_rrule)
+            
+            if success:
+                flash('สร้างนัดหมายเกิดซ้ำสำเร็จ!', 'success')
+                return redirect(url_for('appointments'))
+            else:
+                flash(f'การสร้างนัดหมายล้มเหลว: {result}', 'danger')
+                
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+    
+    return render_template('recurring_appointments.html', subcalendars=subcals.get('subcalendars', []))
+
 @app.route('/logout')
 def logout():
     """ออกจากระบบและล้างการเชื่อมต่อ API"""
@@ -447,12 +573,9 @@ def is_api_connected():
     """ตรวจสอบว่าเชื่อมต่อ API แล้วหรือไม่"""
     global teamup_api
     
-    print(f"DEBUG is_api_connected: teamup_api = {teamup_api is not None}")
-    
     if teamup_api is None:
         # ถ้ายังไม่มี instance แต่มีข้อมูลใน session
         if 'api_key' in session and 'calendar_id' in session:
-            print(f"DEBUG is_api_connected: trying to connect with session data")
             # ลองเชื่อมต่ออีกครั้งจาก session
             try:
                 teamup_api = TeamupAPI(session['api_key'], session['calendar_id'])
@@ -460,12 +583,10 @@ def is_api_connected():
                 if not success:
                     teamup_api = None
             except Exception as e:
-                print(f"DEBUG is_api_connected error: {e}")
+                print(f"Error reconnecting API: {e}")
                 teamup_api = None
     
-    connected = teamup_api is not None
-    print(f"DEBUG is_api_connected result: {connected}")
-    return connected
+    return teamup_api is not None
 
 @app.before_request
 def check_api_connection():
@@ -480,12 +601,7 @@ def check_api_connection():
     # สร้าง TeamupAPI instance ถ้ายังไม่มี
     if teamup_api is None and 'api_key' in session and 'calendar_id' in session:
         teamup_api = TeamupAPI(session['api_key'], session['calendar_id'])
-    
-    # ถ้ายังไม่มี teamup_api ให้ redirect ไปที่ setup
-    if teamup_api is None:
-        flash('กรุณาเชื่อมต่อ API ก่อน', 'warning')
-        return redirect(url_for('setup'))
-    
+
 @app.context_processor
 def inject_api_status():
     """เพิ่มตัวแปรสถานะการเชื่อมต่อ API ในทุกเทมเพลต"""
