@@ -31,7 +31,6 @@ function showAlert(message, type = 'success') {
     if (container) {
         container.insertBefore(alertDiv, container.firstChild);
     }
-    // ไม่ต้องซ่อนอัตโนมัติเพื่อให้ผู้ใช้อ่านได้ตลอด
 }
 
 // เมื่อโหลดหน้าเสร็จ
@@ -44,8 +43,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // อย่าซ่อนการแจ้งเตือนอัตโนมัติ ให้ผู้ใช้กดปิดเอง
-
     // จัดการเหตุการณ์ของการเลือกวันเริ่มต้น - อัปเดตวันสิ้นสุดให้เป็นวันเดียวกันโดยอัตโนมัติ
     const startDateInput = document.getElementById('start_date');
     const endDateInput = document.getElementById('end_date');
@@ -112,10 +109,119 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // ใช้ HTML form ที่อยู่ในหน้าเว็บโดยตรง แทนการใช้ AJAX
-            // เพื่อให้แน่ใจว่าการจัดการข้อมูลทำโดย backend ซึ่งมีการตั้งค่าที่ถูกต้อง
             this.submit();
         });
     }
+
+
+    // จัดการฟอร์มสร้างนัดหมายใหม่ (สำหรับทั้ง single และ recurring)
+    const newAppointmentForm = document.getElementById('new-appointment-form');
+    if (newAppointmentForm) {
+        // ตัวแปรเพื่อป้องกันการส่งซ้ำ
+        let isSubmitting = false;
+        
+        newAppointmentForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // ป้องกันการส่งซ้ำ
+            if (isSubmitting) {
+                console.log('Form is already being submitted, ignoring...');
+                return;
+            }
+            
+            isSubmitting = true;
+            
+            // ปิดการใช้งานปุ่มส่ง
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังบันทึก...';
+            
+            // ตรวจสอบว่าเป็น recurring appointment หรือไม่
+            const isRecurring = document.getElementById('is_recurring').checked;
+            
+            if (isRecurring) {
+                // ตรวจสอบว่าเลือกวันในสัปดาห์หรือไม่
+                const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+                const selectedDays = days.filter(day => 
+                    document.getElementById(day) && document.getElementById(day).checked
+                );
+                
+                if (selectedDays.length === 0) {
+                    showAlert('กรุณาเลือกวันที่ต้องการให้เกิดซ้ำ', 'warning');
+                    // รีเซ็ตสถานะ
+                    isSubmitting = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    return;
+                }
+            }
+            
+            // แปลง form data เป็น URL-encoded format
+            const formData = new FormData(this);
+            const formParams = new URLSearchParams();
+            
+            for (const [key, value] of formData.entries()) {
+                formParams.append(key, value);
+            }
+            
+            console.log('Sending form data once:', formParams.toString());
+            
+            fetch('/create_appointment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formParams.toString()
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (isRecurring) {
+                        showAlert('สร้างนัดหมายเกิดซ้ำสำเร็จ!', 'success');
+                    } else {
+                        showAlert('สร้างนัดหมายสำเร็จ!', 'success');
+                    }
+                    newAppointmentForm.reset();
+                    
+                    // ซ่อน recurring options
+                    const recurringOptions = document.getElementById('recurring-options');
+                    if (recurringOptions) {
+                        recurringOptions.style.display = 'none';
+                    }
+                    
+                    // เปลี่ยนไปยังแท็บรายการนัดหมาย
+                    const listTab = document.getElementById('list-tab');
+                    if (listTab) {
+                        const bsListTab = new bootstrap.Tab(listTab);
+                        bsListTab.show();
+                        
+                        // โหลดรายการนัดหมายใหม่
+                        setTimeout(loadAppointments, 1000);
+                    }
+                } else {
+                    showAlert('เกิดข้อผิดพลาด: ' + (data.error || 'ไม่ทราบสาเหตุ'), 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error creating appointment:', error);
+                showAlert('เกิดข้อผิดพลาด: ' + error.message, 'danger');
+            })
+            .finally(() => {
+                // รีเซ็ตสถานะ
+                isSubmitting = false;
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            });
+        });
+    }
+
+    
 });
 
 // ตั้งค่า event handlers สำหรับปุ่มต่างๆ ในหน้ารายการนัดหมาย
@@ -139,18 +245,21 @@ function setupEventHandlers() {
 }
 
 // แสดงรายละเอียดนัดหมายใน modal
+// แสดงรายละเอียดนัดหมายใน modal
 function showEventDetails(eventId) {
     console.log("กำลังแสดงรายละเอียดสำหรับ event_id:", eventId);
     
     // แสดง loading spinner
-    Swal.fire({
-        title: 'กำลังโหลด...',
-        text: 'กำลังโหลดข้อมูลนัดหมาย',
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'กำลังโหลด...',
+            text: 'กำลังโหลดข้อมูลนัดหมาย',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+    }
     
     // ดึงข้อมูลโดยตรงจาก API สำหรับกิจกรรมนี้เท่านั้น
     fetch(`/get_events?event_id=${eventId}`)
@@ -161,66 +270,100 @@ function showEventDetails(eventId) {
             return response.json();
         })
         .then(data => {
-            Swal.close(); // ปิด loading spinner
+            if (typeof Swal !== 'undefined') {
+                Swal.close(); // ปิด loading spinner
+            }
             
             if (!data.events || data.events.length === 0) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'ไม่พบข้อมูล',
-                    text: 'ไม่พบข้อมูลนัดหมายสำหรับ ID นี้'
-                });
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'ไม่พบข้อมูล',
+                        text: 'ไม่พบข้อมูลนัดหมายสำหรับ ID นี้'
+                    });
+                } else {
+                    alert('ไม่พบข้อมูลนัดหมายสำหรับ ID นี้');
+                }
                 return;
             }
             
             // ดึงข้อมูลนัดหมายจาก API response
             const event = data.events[0]; // ควรมีเพียงกิจกรรมเดียว
+            const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
             
             // สร้าง modal แสดงรายละเอียด
-            Swal.fire({
-                title: 'รายละเอียดนัดหมาย',
-                html: `
-                    <div class="text-start">
-                        <h5>${event.title}</h5>
-                        <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
-                        <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
-                        <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
-                        <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
-                        ${event.notes ? `
-                        <div class="mt-3">
-                            <h6>บันทึกเพิ่มเติม:</h6>
-                            <div class="border p-2 rounded">
-                                <pre class="mb-0" style="white-space: pre-wrap;">${event.notes}</pre>
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'รายละเอียดนัดหมาย',
+                    html: `
+                        <div class="text-start">
+                            <h5>${event.title}</h5>
+                            <div class="mb-3">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
+                                </span>
+                            </div>
+                            <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
+                            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                            <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
+                            <p><strong>ผู้ดูแล:</strong> ${event.who || 'ไม่ระบุ'}</p>
+                            ${event.notes ? `
+                            <div class="mt-3">
+                                <h6>บันทึกเพิ่มเติม:</h6>
+                                <div class="border p-2 rounded">
+                                    <pre class="mb-0" style="white-space: pre-wrap;">${event.notes}</pre>
+                                </div>
+                            </div>
+                            ` : ''}
+                            <div class="mt-3">
+                                <h6>Event ID:</h6>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" value="${event.id}" readonly>
+                                </div>
                             </div>
                         </div>
-                        ` : ''}
-                        <div class="mt-3">
-                            <h6>Event ID:</h6>
-                            <div class="input-group">
-                                <input type="text" class="form-control" value="${event.id}" readonly>
-                            </div>
-                        </div>
-                    </div>
-                `,
-                width: '600px',
-                showCloseButton: true,
-                showCancelButton: true,
-                focusConfirm: false,
-                confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
-                cancelButtonText: 'ปิด'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // กดปุ่มอัปเดตสถานะ
+                    `,
+                    width: '600px',
+                    showCloseButton: true,
+                    showCancelButton: true,
+                    focusConfirm: false,
+                    confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
+                    cancelButtonText: 'ปิด'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // กดปุ่มอัปเดตสถานะ
+                        window.location.href = `/update_status?event_id=${event.id}`;
+                    }
+                });
+            } else {
+                // Fallback สำหรับกรณีที่ไม่มี SweetAlert2
+                const details = `
+                    ${event.title}
+                    ปฏิทิน: ${subcalendarDisplay}
+                    วันที่: ${formatDate(event.start_dt.split('T')[0])}
+                    เวลา: ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}
+                    สถานที่: ${event.location || 'ไม่ระบุ'}
+                    ผู้ดูแล: ${event.who || 'ไม่ระบุ'}
+                    Event ID: ${event.id}
+                    ${event.notes ? `\nบันทึก: ${event.notes}` : ''}
+                `;
+                
+                if (confirm(details + '\n\nต้องการอัปเดตสถานะหรือไม่?')) {
                     window.location.href = `/update_status?event_id=${event.id}`;
                 }
-            });
+            }
         })
         .catch(error => {
             console.error('Error fetching event details:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'เกิดข้อผิดพลาด',
-                text: 'ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message
-            });
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message
+                });
+            } else {
+                alert('ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message);
+            }
         });
 }
 
@@ -254,6 +397,8 @@ function loadAppointments() {
         url += '?' + params.toString();
     }
     
+    console.log('Loading appointments from:', url); // Debug
+    
     // ใช้ Fetch API สำหรับการเรียกข้อมูล
     fetch(url)
         .then(response => {
@@ -263,6 +408,7 @@ function loadAppointments() {
             return response.json();
         })
         .then(data => {
+            console.log('Received data:', data); // Debug
             container.innerHTML = '';
             
             if (!data.events || data.events.length === 0) {
@@ -320,20 +466,40 @@ function loadAppointments() {
                     const startTime = event.start_dt.split('T')[1].substring(0, 5);
                     const endTime = event.end_dt.split('T')[1].substring(0, 5);
                     
+                    // เพิ่มการแสดงชื่อปฏิทินย่อย
+                    const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
+                    
                     container.innerHTML += `
                         <div class="card appointment-card ${statusClass}" data-event-id="${event.id}">
                             <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <h5 class="card-title">${event.title}</h5>
-                                    <span class="badge bg-primary">${startTime} - ${endTime}</span>
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h5 class="card-title mb-1">${event.title}</h5>
+                                        <div class="mb-2">
+                                            <span class="badge bg-secondary me-2">
+                                                <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
+                                            </span>
+                                            <span class="badge bg-primary">
+                                                <i class="fas fa-clock me-1"></i>${startTime} - ${endTime}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <p class="card-text mb-1">
-                                    <i class="fas fa-map-marker-alt me-2"></i>${event.location || 'ไม่ระบุตำแหน่ง'}
-                                </p>
-                                <p class="card-text">
-                                    <i class="fas fa-user-md me-2"></i>${event.who || 'ไม่ระบุผู้ดูแล'}
-                                </p>
-                                <div class="text-end">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p class="card-text mb-1">
+                                            <i class="fas fa-map-marker-alt me-2 text-muted"></i>
+                                            <small>${event.location || 'ไม่ระบุตำแหน่ง'}</small>
+                                        </p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p class="card-text mb-1">
+                                            <i class="fas fa-user-md me-2 text-muted"></i>
+                                            <small>${event.who || 'ไม่ระบุผู้ดูแล'}</small>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="text-end mt-2">
                                     <a href="/update_status?event_id=${event.id}" class="btn btn-sm btn-primary">
                                         <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
                                     </a>
@@ -359,57 +525,3 @@ function loadAppointments() {
             `;
         });
 }
-
-// สำหรับหน้าสร้างนัดหมายใหม่
-document.addEventListener('DOMContentLoaded', function() {
-    const newAppointmentForm = document.getElementById('new-appointment-form');
-    if (newAppointmentForm) {
-        newAppointmentForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // แปลง form data เป็น URL-encoded format
-            const formData = new FormData(this);
-            const formParams = new URLSearchParams();
-            
-            for (const [key, value] of formData.entries()) {
-                formParams.append(key, value);
-            }
-            
-            fetch('/create_appointment', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: formParams.toString()
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    showAlert('สร้างนัดหมายสำเร็จ!', 'success');
-                    newAppointmentForm.reset();
-                    
-                    // เปลี่ยนไปยังแท็บรายการนัดหมาย
-                    const listTab = document.getElementById('list-tab');
-                    if (listTab) {
-                        const bsListTab = new bootstrap.Tab(listTab);
-                        bsListTab.show();
-                        
-                        // โหลดรายการนัดหมายใหม่
-                        loadAppointments();
-                    }
-                } else {
-                    showAlert('เกิดข้อผิดพลาด: ' + (data.error || 'ไม่ทราบสาเหตุ'), 'danger');
-                }
-            })
-            .catch(error => {
-                console.error('Error creating appointment:', error);
-                showAlert('เกิดข้อผิดพลาด: ' + error.message, 'danger');
-            });
-        });
-    }
-});

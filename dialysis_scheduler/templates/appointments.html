@@ -203,6 +203,13 @@
                                     <label for="weeks" class="form-label">จำนวนสัปดาห์:</label>
                                     <input type="number" class="form-control" id="weeks" name="weeks" min="1" max="52" value="4">
                                 </div>
+                                <div class="alert alert-info">
+                                    <small>
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        สำหรับการตั้งค่าที่ซับซ้อน โปรดใช้หน้า 
+                                        <a href="{{ url_for('recurring_appointments') }}" class="alert-link">นัดหมายเกิดซ้ำ</a>
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -336,7 +343,6 @@
                             </h4>
                         `);
                         
-                        // คำนวณจำนวนกิจกรรมในวันนี้
                         const dayEvents = eventsByDate[date];
                         container.append(`
                             <div class="mb-2">
@@ -357,20 +363,40 @@
                             const startTime = event.start_dt.split('T')[1].substring(0, 5);
                             const endTime = event.end_dt.split('T')[1].substring(0, 5);
                             
+                            // เพิ่มการแสดงชื่อปฏิทินย่อย
+                            const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
+                            
                             container.append(`
                                 <div class="card appointment-card ${statusClass}" data-event-id="${event.id}">
                                     <div class="card-body">
-                                        <div class="d-flex justify-content-between">
-                                            <h5 class="card-title">${event.title}</h5>
-                                            <span class="badge bg-primary">${startTime} - ${endTime}</span>
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <h5 class="card-title mb-1">${event.title}</h5>
+                                                <div class="mb-2">
+                                                    <span class="badge bg-secondary me-2">
+                                                        <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
+                                                    </span>
+                                                    <span class="badge bg-primary">
+                                                        <i class="fas fa-clock me-1"></i>${startTime} - ${endTime}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <p class="card-text mb-1">
-                                            <i class="fas fa-map-marker-alt me-2"></i>${event.location || 'ไม่ระบุตำแหน่ง'}
-                                        </p>
-                                        <p class="card-text">
-                                            <i class="fas fa-user-md me-2"></i>${event.who || 'ไม่ระบุผู้ดูแล'}
-                                        </p>
-                                        <div class="text-end">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p class="card-text mb-1">
+                                                    <i class="fas fa-map-marker-alt me-2 text-muted"></i>
+                                                    <small>${event.location || 'ไม่ระบุตำแหน่ง'}</small>
+                                                </p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p class="card-text mb-1">
+                                                    <i class="fas fa-user-md me-2 text-muted"></i>
+                                                    <small>${event.who || 'ไม่ระบุผู้ดูแล'}</small>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="text-end mt-2">
                                             <a href="{{ url_for('update_status') }}?event_id=${event.id}" class="btn btn-sm btn-primary">
                                                 <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
                                             </a>
@@ -403,18 +429,17 @@
         
         // แสดงรายละเอียดนัดหมายใน modal
         function showEventDetails(eventId) {
-            // เรียกข้อมูล event แบบสดจาก backend
             $.ajax({
-                url: '/get_events', // แก้ไขจาก '/get_event' เป็น '/get_events'
+                url: '/get_events',
                 data: { event_id: eventId },
                 success: function(response) {
-                    // ตรวจสอบว่ามีข้อมูล events และมีอย่างน้อย 1 รายการ
                     if (!response.events || response.events.length === 0) {
                         alert('ไม่พบข้อมูลนัดหมาย');
                         return;
                     }
                     
-                    const event = response.events[0]; // ใช้รายการแรกจาก events array
+                    const event = response.events[0];
+                    const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
 
                     function formatDate(dateString) {
                         const date = new Date(dateString);
@@ -433,6 +458,11 @@
                         </div>
                         <div class="modal-body">
                             <h5>${event.title}</h5>
+                            <div class="mb-3">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
+                                </span>
+                            </div>
                             <p><strong>วันที่:</strong> ${formatDate(event.start_dt.split('T')[0])}</p>
                             <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
                             <p><strong>สถานที่:</strong> ${event.location || 'ไม่ระบุ'}</p>
@@ -498,6 +528,7 @@
                     if (data.success) {
                         alert('สร้างนัดหมายสำเร็จ!');
                         $('#new-appointment-form')[0].reset();
+                        $('#recurring-options').hide(); // ซ่อน recurring options
                         $('#list-tab').tab('show');
                         loadAppointments();
                     } else {
