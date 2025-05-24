@@ -115,19 +115,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     // จัดการฟอร์มสร้างนัดหมายใหม่ (สำหรับทั้ง single และ recurring)
+    // จัดการฟอร์มสร้างนัดหมายใหม่ (Hybrid Approach - แก้ไข form token)
     const newAppointmentForm = document.getElementById('new-appointment-form');
     if (newAppointmentForm) {
-        // ตัวแปรเพื่อป้องกันการส่งซ้ำ
         let isSubmitting = false;
         
+        // ลบ event listener เก่าทั้งหมด
+        newAppointmentForm.onsubmit = null;
+        
         newAppointmentForm.addEventListener('submit', function(e) {
+            // ป้องกันการ submit แบب browser default
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            console.log('Form submitted via JavaScript - preventing default');
             
             // ป้องกันการส่งซ้ำ
             if (isSubmitting) {
-                console.log('Form is already being submitted, ignoring...');
-                return;
+                console.log('Form is already being submitted');
+                return false;
             }
+            
+            // ล้าง error messages เก่า
+            document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+            document.querySelectorAll('.form-control, .form-select').forEach(el => {
+                el.classList.remove('is-invalid', 'is-valid');
+            });
             
             isSubmitting = true;
             
@@ -137,63 +151,35 @@ document.addEventListener('DOMContentLoaded', function() {
             submitButton.disabled = true;
             submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังบันทึก...';
             
-            // ตรวจสอบว่าเป็น recurring appointment หรือไม่
-            const isRecurring = document.getElementById('is_recurring').checked;
-            
-            if (isRecurring) {
-                // ตรวจสอบว่าเลือกวันในสัปดาห์หรือไม่
-                const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-                const selectedDays = days.filter(day => 
-                    document.getElementById(day) && document.getElementById(day).checked
-                );
-                
-                if (selectedDays.length === 0) {
-                    showAlert('กรุณาเลือกวันที่ต้องการให้เกิดซ้ำ', 'warning');
-                    // รีเซ็ตสถานะ
-                    isSubmitting = false;
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalButtonText;
-                    return;
-                }
-            }
-            
-            // แปลง form data เป็น URL-encoded format
+            // ส่งข้อมูลด้วย FormData
             const formData = new FormData(this);
-            const formParams = new URLSearchParams();
             
-            for (const [key, value] of formData.entries()) {
-                formParams.append(key, value);
-            }
-            
-            console.log('Sending form data once:', formParams.toString());
-            
-            fetch('/create_appointment', {
+            fetch('/create_appointment', {  // ใช้ URL โดยตรง
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: formParams.toString()
+                body: formData
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    // แสดงข้อความสำเร็จ
+                    const isRecurring = document.getElementById('is_recurring').checked;
                     if (isRecurring) {
                         showAlert('สร้างนัดหมายเกิดซ้ำสำเร็จ!', 'success');
                     } else {
                         showAlert('สร้างนัดหมายสำเร็จ!', 'success');
                     }
-                    newAppointmentForm.reset();
+                    
+                    // รีเซ็ตฟอร์ม
+                    this.reset();
                     
                     // ซ่อน recurring options
                     const recurringOptions = document.getElementById('recurring-options');
                     if (recurringOptions) {
                         recurringOptions.style.display = 'none';
                     }
+                    
+                    // สร้าง form token ใหม่
+                    updateFormToken();
                     
                     // เปลี่ยนไปยังแท็บรายการนัดหมาย
                     const listTab = document.getElementById('list-tab');
@@ -202,15 +188,46 @@ document.addEventListener('DOMContentLoaded', function() {
                         bsListTab.show();
                         
                         // โหลดรายการนัดหมายใหม่
-                        setTimeout(loadAppointments, 1000);
+                        setTimeout(() => {
+                            if (typeof loadAppointments === 'function') {
+                                loadAppointments();
+                            } else if (typeof window.loadAppointments === 'function') {
+                                window.loadAppointments();
+                            }
+                        }, 1000);
                     }
                 } else {
-                    showAlert('เกิดข้อผิดพลาด: ' + (data.error || 'ไม่ทราบสาเหตุ'), 'danger');
+                    // แสดง error messages
+                    showAlert(data.error || 'เกิดข้อผิดพลาดในการบันทึก', 'danger');
+                    
+                    // อัปเดต form token ใหม่
+                    if (data.new_form_token) {
+                        updateFormToken(data.new_form_token);
+                    }
+                    
+                    // แสดง field errors
+                    if (data.field_errors) {
+                        for (const [field, error] of Object.entries(data.field_errors)) {
+                            const errorElement = document.getElementById(`${field}-error`);
+                            if (errorElement) {
+                                errorElement.textContent = error;
+                            }
+                            
+                            // เพิ่มคลาส is-invalid
+                            const inputElement = document.querySelector(`[name="${field}"]`);
+                            if (inputElement) {
+                                inputElement.classList.add('is-invalid');
+                            }
+                        }
+                    }
                 }
             })
             .catch(error => {
-                console.error('Error creating appointment:', error);
-                showAlert('เกิดข้อผิดพลาด: ' + error.message, 'danger');
+                console.error('Error:', error);
+                showAlert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error.message, 'danger');
+                
+                // สร้าง form token ใหม่เมื่อเกิด error
+                updateFormToken();
             })
             .finally(() => {
                 // รีเซ็ตสถานะ
@@ -218,10 +235,64 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.disabled = false;
                 submitButton.innerHTML = originalButtonText;
             });
+            
+            return false; // ป้องกันการ submit เพิ่มเติม
+        }, true); // ใช้ capture phase
+    }
+
+    // ฟังก์ชันอัปเดต form token
+    function updateFormToken(newToken = null) {
+        const formTokenField = document.querySelector('input[name="form_token"]');
+        if (formTokenField) {
+            if (newToken) {
+                formTokenField.value = newToken;
+                console.log('Form token updated:', newToken);
+            } else {
+                formTokenField.value = generateUUID();
+                console.log('New form token generated:', formTokenField.value);
+            }
+        }
+    }
+
+    // ฟังก์ชันสร้าง UUID สำหรับ form token
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
         });
     }
 
-    
+    // ฟังก์ชันล้าง validation errors เมื่อผู้ใช้เริ่มแก้ไข
+    document.addEventListener('DOMContentLoaded', function() {
+        const formFields = document.querySelectorAll('#new-appointment-form input, #new-appointment-form select, #new-appointment-form textarea');
+        
+        formFields.forEach(field => {
+            field.addEventListener('input', function() {
+                // ล้าง error message
+                const errorElement = document.getElementById(`${this.name}-error`);
+                if (errorElement) {
+                    errorElement.textContent = '';
+                }
+                
+                // ลบคลาส is-invalid
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            });
+            
+            field.addEventListener('change', function() {
+                // ล้าง error message
+                const errorElement = document.getElementById(`${this.name}-error`);
+                if (errorElement) {
+                    errorElement.textContent = '';
+                }
+                
+                // ลบคลาส is-invalid
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            });
+        });
+    });
 });
 
 // ตั้งค่า event handlers สำหรับปุ่มต่างๆ ในหน้ารายการนัดหมาย
