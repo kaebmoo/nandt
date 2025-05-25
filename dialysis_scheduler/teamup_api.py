@@ -487,6 +487,89 @@ class TeamupAPI:
         except Exception as e:
             print(f"Error getting subcalendar ID: {e}")
             return None
+    def update_appointment_status(self, event_id, status, calendar_id=None):
+        """
+        อัปเดตสถานะของนัดหมายโดยการแก้ไขชื่อเรื่อง
+        
+        params:
+            event_id: str - ID ของนัดหมาย
+            status: str - สถานะใหม่ (มาตามนัด, ยกเลิก, ไม่มา)
+            calendar_id: str - ID ของปฏิทิน (ไม่จำเป็น)
+            
+        returns: (boolean, str) - สถานะการอัปเดตและข้อความ
+        """
+        try:
+            # ดึงข้อมูลนัดหมายปัจจุบันก่อน
+            response = requests.get(
+                f"{self.base_url}/events/{event_id}",
+                headers=self.headers
+            )
+            
+            if response.status_code != 200:
+                return False, f"ไม่สามารถดึงข้อมูลนัดหมายได้: {response.text}"
+            
+            event_data = response.json()['event']
+            current_title = event_data['title']
+            
+            # ล้างสถานะเก่าออกจากชื่อเรื่อง
+            clean_title = current_title
+            status_markers = ['(มาตามนัด)', '(ยกเลิก)', '(ไม่มา)']
+            for marker in status_markers:
+                clean_title = clean_title.replace(marker, '').strip()
+            
+            # เพิ่มสถานะใหม่
+            new_title = f"{clean_title} ({status})"
+            
+            # สร้างข้อมูลสำหรับการอัปเดต - ต้องใส่ id แม้ว่า API doc จะบอกว่า readOnly
+            update_data = {
+                'id': event_data['id'],  # API ยังต้องการ id อยู่
+                'title': new_title,
+                'start_dt': event_data['start_dt'],
+                'end_dt': event_data['end_dt'],
+                'all_day': event_data.get('all_day', False),
+                'signup_enabled': event_data.get('signup_enabled', False),
+                'comments_enabled': event_data.get('comments_enabled', False),
+                'attachments': event_data.get('attachments', [])
+            }
+            
+            # เพิ่มข้อมูลอื่นๆ ที่อาจจำเป็น
+            if 'subcalendar_ids' in event_data:
+                update_data['subcalendar_ids'] = event_data['subcalendar_ids']
+            if 'location' in event_data:
+                update_data['location'] = event_data['location']
+            if 'who' in event_data:
+                update_data['who'] = event_data['who']
+            if 'notes' in event_data:
+                update_data['notes'] = event_data['notes']
+            
+            # ส่งคำขออัปเดต
+            update_response = requests.put(
+                f"{self.base_url}/events/{event_id}",
+                headers=self.headers,
+                json=update_data
+            )
+            
+            print(f"อัปเดตสถานะ: {update_response.status_code}")
+            print(f"ข้อมูลที่ส่ง: {update_data}")
+            print(f"ผลลัพธ์: {update_response.text}")
+            
+            if update_response.status_code == 200:
+                return True, f"อัปเดตสถานะเป็น '{status}' สำเร็จ"
+            else:
+                error_msg = update_response.text
+                try:
+                    error_data = update_response.json()
+                    if 'error' in error_data:
+                        error_msg = error_data['error'].get('message', error_msg)
+                except:
+                    pass
+                return False, f"การอัปเดตสถานะล้มเหลว: {error_msg}"
+                
+        except Exception as e:
+            print(f"Exception in update_appointment_status: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, str(e)
     
     def import_from_csv(self, file_path):
         """

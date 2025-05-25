@@ -403,6 +403,25 @@ def update_status():
             )
             if response.status_code == 200:
                 event_data = response.json()['event']
+                
+                # เพิ่มชื่อปฏิทินย่อย
+                if 'subcalendar_id' in event_data:
+                    try:
+                        # ดึงข้อมูลปฏิทินย่อย
+                        subcals = teamup_api.get_subcalendars()
+                        for subcal in subcals.get('subcalendars', []):
+                            if subcal['id'] == event_data['subcalendar_id']:
+                                event_data['subcalendar_display'] = subcal['name']
+                                break
+                        else:
+                            # ถ้าไม่เจอชื่อปฏิทินย่อย
+                            event_data['subcalendar_display'] = f'ปฏิทิน #{event_data["subcalendar_id"]}'
+                    except Exception as e:
+                        print(f"Error getting subcalendar name: {e}")
+                        event_data['subcalendar_display'] = f'ปฏิทิน #{event_data.get("subcalendar_id", "")}'
+                else:
+                    event_data['subcalendar_display'] = 'ไม่ระบุปฏิทิน'
+                    
             else:
                 flash(f'ไม่สามารถดึงข้อมูลนัดหมาย: {response.text}', 'danger')
         except Exception as e:
