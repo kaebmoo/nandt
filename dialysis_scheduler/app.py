@@ -61,7 +61,7 @@ def index():
             summary_data = {
                 'subcalendar_count': subcalendar_count,
                 'today_appointments': today_appointments,
-                'subcalendars': subcals.get('subcalendars', [])[:5]
+                'subcalendars': subcals.get('subcalendars', []) # [:5]
             }
         except Exception as e:
             print(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุป: {e}")
