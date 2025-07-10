@@ -17,7 +17,7 @@ import uuid
 
 @click.group()
 def cli():
-    """NandT SaaS Management Commands"""
+    """NudDee SaaS Management Commands"""
     pass
 
 # Database Commands
@@ -358,7 +358,7 @@ def dev():
 @click.option('--debug', is_flag=True, help='Enable debug mode')
 def run_dev(host, port, debug):
     """Run development server"""
-    click.echo(f"🚀 Starting NandT SaaS development server...")
+    click.echo(f"🚀 Starting NudDee SaaS development server...")
     click.echo(f"   URL: http://{host}:{port}")
     click.echo(f"   Debug: {debug}")
     

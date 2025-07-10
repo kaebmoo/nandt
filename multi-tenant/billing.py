@@ -71,7 +71,7 @@ def create_checkout_session():
                     'currency': 'thb',
                     'unit_amount': amount * 100,  # Stripe ใช้ satang
                     'product_data': {
-                        'name': f'NandT {PRICING_PLANS[plan_enum]["name"]} - {billing_cycle_to_thai(billing_cycle)}',
+                        'name': f'NudDee {PRICING_PLANS[plan_enum]["name"]} - {billing_cycle_to_thai(billing_cycle)}',
                         'description': f'แพ็คเกจ {PRICING_PLANS[plan_enum]["name"]} สำหรับ {organization.name}'
                     },
                     'recurring': {

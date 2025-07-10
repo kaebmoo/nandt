@@ -96,6 +96,10 @@ class Config:
     TEMPLATE_CALENDAR_KEY = os.getenv('TEMPLATE_CALENDAR_KEY')
     TEAMUP_PLAN = os.getenv('TEAMUP_PLAN', 'free')
     TEAMUP_RATE_LIMIT = 100
+    TEAMUP_ADMIN_EMAIL = os.getenv('TEAMUP_ADMIN_EMAIL') # NEW
+    TEAMUP_ADMIN_PASSWORD = os.getenv('TEAMUP_ADMIN_PASSWORD') # NEW
+    TEAMUP_APP_NAME = os.getenv('TEAMUP_APP_NAME', 'NudDeeSaaS') # NEW
+    TEAMUP_DEVICE_ID = os.getenv('TEAMUP_DEVICE_ID', 'NudDeeServer') # NEW
     
     # Stripe Configuration
     STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
@@ -193,6 +197,11 @@ class Config:
         # เพิ่มการตรวจสอบ TEMPLATE_CALENDAR_KEY
         if not Config.TEMPLATE_CALENDAR_KEY:
             required_vars.append('TEMPLATE_CALENDAR_KEY')
+        
+        if not Config.TEAMUP_ADMIN_EMAIL: # NEW
+            required_vars.append('TEAMUP_ADMIN_EMAIL')
+        if not Config.TEAMUP_ADMIN_PASSWORD: # NEW
+            required_vars.append('TEAMUP_ADMIN_PASSWORD')
         
         if not Config.SECRET_KEY or Config.SECRET_KEY == 'your-super-secret-key-change-this-in-production':
             required_vars.append('SECRET_KEY')

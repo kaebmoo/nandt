@@ -12,8 +12,9 @@ from datetime import datetime, timedelta
 import os
 import uuid
 import re
+import time # For token caching
 
-# Import Config to get TEMPLATE_CALENDAR_KEY
+# Import Config
 from config import Config
 
 class HybridTeamUpManager:
@@ -23,20 +24,27 @@ class HybridTeamUpManager:
         self.master_api_key = Config.MASTER_TEAMUP_API
         self.template_calendar_key = Config.TEMPLATE_CALENDAR_KEY
         self.base_url = "https://api.teamup.com"
-        self.headers = {
+        
+        # TeamUp Admin Credentials for Bearer Token
+        self.admin_email = Config.TEAMUP_ADMIN_EMAIL
+        self.admin_password = Config.TEAMUP_ADMIN_PASSWORD
+        self.app_name = Config.TEAMUP_APP_NAME
+        self.device_id = Config.TEAMUP_DEVICE_ID
+
+        # Cache for bearer token
+        self._bearer_token = None
+        self._token_expiry = 0 # Unix timestamp (seconds since epoch)
+
+        # Initial headers with Teamup-Token (used for obtaining Bearer token)
+        self._base_headers = {
             'Accept': "application/json",
             'Content-Type': "application/json",
             'Teamup-Token': self.master_api_key
         }
         
-        # ขีดจำกัด subcalendars ตาม TeamUp plan
         self.subcalendar_limits = {
-            'free': 8,
-            'plus': 48,
-            'pro': 48,
-            'business': 96
+            'free': 8, 'plus': 48, 'pro': 48, 'business': 96
         }
-        
         self.teamup_plan = Config.TEAMUP_PLAN
         self.max_subcalendars = self.subcalendar_limits[self.teamup_plan]
         
@@ -44,6 +52,64 @@ class HybridTeamUpManager:
         print(f"  - Master API Key: {'***' if self.master_api_key else 'None'}")
         print(f"  - Template Calendar: {self.template_calendar_key}")
         print(f"  - Plan: {self.teamup_plan} (max {self.max_subcalendars} subcalendars)")
+        print(f"  - Admin Email: {self.admin_email}") # Debugging
+    
+    def _get_bearer_token(self):
+        """
+        Obtains or refreshes a bearer token from TeamUp API.
+        Caches the token to avoid re-authenticating on every call.
+        """
+        now = time.time()
+        # Refresh token if expired or not yet obtained (refresh 60 seconds before actual expiry for buffer)
+        if self._bearer_token is None or self._token_expiry < now + 60:
+            print("Obtaining new Bearer token from TeamUp API...")
+            try:
+                auth_data = {
+                    "app_name": self.app_name,
+                    "device_id": self.device_id,
+                    "email": self.admin_email,
+                    "password": self.admin_password
+                }
+                
+                # Use _base_headers which contains only Teamup-Token initially
+                response = requests.post(
+                    f"{self.base_url}/auth/tokens",
+                    headers=self._base_headers, # Use base headers for auth token request
+                    json=auth_data,
+                    timeout=15
+                )
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    self._bearer_token = response_data['auth_token']
+                    # TeamUp tokens typically last 1 hour (3600 seconds), set expiry slightly less for buffer
+                    self._token_expiry = now + 3500 
+                    print("✅ Bearer token obtained.")
+                    return self._bearer_token
+                else:
+                    error_msg = response.text
+                    try:
+                        error_json = response.json()
+                        if 'error' in error_json and 'message' in error_json['error']:
+                            error_msg = error_json['error']['message']
+                    except json.JSONDecodeError:
+                        pass
+                    print(f"❌ Failed to obtain Bearer token: Status {response.status_code}, Error: {error_msg}")
+                    raise Exception(f"Failed to obtain TeamUp Bearer token: {error_msg}")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                raise Exception(f"Exception during Bearer token acquisition: {str(e)}")
+        
+        return self._bearer_token
+
+    def _get_headers_with_auth(self):
+        """Returns headers including the Teamup-Token and the Bearer token."""
+        bearer_token = self._get_bearer_token()
+        headers = self._base_headers.copy() # Start with _base_headers (Teamup-Token)
+        if bearer_token:
+            headers['Authorization'] = f'Bearer {bearer_token}'
+        return headers
     
     def create_organization_setup(self, organization):
         """สร้าง TeamUp setup สำหรับ organization ใหม่"""
@@ -52,14 +118,18 @@ class HybridTeamUpManager:
             
             print(f"Creating TeamUp setup for organization: {organization.name}")
             
-            # ตรวจสอบว่า template calendar key ถูกต้องหรือไม่
             if not self.template_calendar_key:
                 return {
                     'success': False, 
                     'error': 'TEMPLATE_CALENDAR_KEY is not configured. Please set it in .env file.'
                 }
+            if not self.admin_email or not self.admin_password:
+                return {
+                    'success': False,
+                    'error': 'TeamUp admin credentials (TEAMUP_ADMIN_EMAIL, TEAMUP_ADMIN_PASSWORD) are required in .env for Master Calendar creation.'
+                }
             
-            # ทดสอบการเข้าถึง template calendar ก่อน
+            # ทดสอบการเข้าถึง template calendar ก่อน (จะใช้ Bearer Token แล้ว)
             test_result = self._test_template_access()
             if not test_result['success']:
                 return test_result
@@ -120,14 +190,15 @@ class HybridTeamUpManager:
             return {'success': False, 'error': f"Manager setup failed: {str(e)}"}
     
     def _test_template_access(self):
-        """ทดสอบการเข้าถึง template calendar"""
+        """ทดสอบการเข้าถึง template calendar โดยใช้ Bearer token."""
         try:
             print(f"Testing access to template calendar: {self.template_calendar_key}")
             
-            # ทดสอบด้วยการดึงข้อมูล configuration
+            headers_with_auth = self._get_headers_with_auth()
+
             response = requests.get(
                 f"{self.base_url}/{self.template_calendar_key}/configuration",
-                headers=self.headers,
+                headers=headers_with_auth, # Use headers with Authorization: Bearer
                 timeout=10
             )
             
@@ -137,15 +208,20 @@ class HybridTeamUpManager:
                 config_data = response.json()
                 print(f"✅ Template calendar accessible: {config_data.get('name', 'Unknown')}")
                 return {'success': True}
+            elif response.status_code == 401:
+                return {
+                    'success': False,
+                    'error': 'Bearer token issue (401). Please check TEAMUP_ADMIN_EMAIL/PASSWORD or MASTER_TEAMUP_API key.'
+                }
             elif response.status_code == 403:
                 return {
                     'success': False,
-                    'error': 'No permission to access template calendar. Please check MASTER_TEAMUP_API permissions.'
+                    'error': 'No permission to access template calendar. Ensure TeamUp admin account has access to the template.'
                 }
             elif response.status_code == 404:
                 return {
                     'success': False,
-                    'error': 'Template calendar not found. Please check TEMPLATE_CALENDAR_KEY.'
+                    'error': 'Template calendar not found. Please check TEMPLATE_CALENDAR_KEY in .env.'
                 }
             else:
                 return {
@@ -174,22 +250,22 @@ class HybridTeamUpManager:
         try:
             print(f"Creating master calendar for: {organization.name}")
             
-            # ชื่อปฏิทินใหม่
             calendar_name = f"{organization.name} - Main Calendar"
             
-            # เรียก API copy calendar
             copy_data = {
                 'title': calendar_name,
-                'copySubcalendars': True,  # คัดลอก subcalendars ด้วย
-                'copyEvents': False       # ไม่คัดลอก events
+                'copySubcalendars': True,
+                'copyEvents': False
             }
             
             print(f"Copying template calendar with data: {copy_data}")
             
+            headers_with_auth = self._get_headers_with_auth() # Get headers with Bearer token
+
             response = requests.post(
                 f"{self.base_url}/{self.template_calendar_key}/copy",
-                headers=self.headers,
-                json=copy_data,  # ใช้ json แทน params
+                headers=headers_with_auth, # Use headers with Authorization: Bearer
+                json=copy_data,
                 allow_redirects=False,
                 timeout=30
             )
@@ -199,16 +275,13 @@ class HybridTeamUpManager:
             print(f"Copy calendar response - Text: {response.text[:500]}")
             
             if response.status_code == 302:
-                # Success - ดึง calendar ID จาก Location header
                 redirect_url = response.headers.get('Location')
                 if redirect_url:
-                    # ดึง calendarKey จาก URL
                     match = re.search(r'https?://(?:www\.)?teamup\.com/(ks[a-zA-Z0-9]+)', redirect_url)
                     if match:
                         new_calendar_id = match.group(1)
                         print(f"✅ New calendar created: {new_calendar_id}")
                         
-                        # ตรวจสอบว่า calendar ถูกสร้างจริงหรือไม่
                         if self._verify_calendar_creation(new_calendar_id):
                             return {
                                 'success': True,
@@ -218,7 +291,7 @@ class HybridTeamUpManager:
                         else:
                             return {
                                 'success': False,
-                                'error': 'Calendar was created but cannot be accessed. Please check permissions.'
+                                'error': 'Calendar was created but cannot be accessed. Check API permissions or TeamUp status.'
                             }
                     else:
                         return {
@@ -230,27 +303,31 @@ class HybridTeamUpManager:
                         'success': False,
                         'error': "No Location header in redirect response"
                     }
-            elif response.status_code == 200:
-                # Alternative response format - check if calendar ID is in response body
+            elif response.status_code == 200: # Sometimes API might return 200 with JSON directly
                 try:
                     response_data = response.json()
                     if 'calendar' in response_data and 'id' in response_data['calendar']:
                         new_calendar_id = response_data['calendar']['id']
                         print(f"✅ New calendar created (from body): {new_calendar_id}")
-                        return {
-                            'success': True,
-                            'calendar_id': new_calendar_id,
-                            'calendar_name': calendar_name
-                        }
+                        if self._verify_calendar_creation(new_calendar_id):
+                            return {
+                                'success': True,
+                                'calendar_id': new_calendar_id,
+                                'calendar_name': calendar_name
+                            }
+                        else:
+                            return {
+                                'success': False,
+                                'error': 'Calendar was created (200) but cannot be accessed. Check API permissions or TeamUp status.'
+                            }
                 except json.JSONDecodeError:
-                    pass
+                    pass # Not a JSON response
                 
-                return {
+                return { # Fallback for unexpected 200 responses
                     'success': False,
-                    'error': f"Unexpected success response format: {response.text}"
+                    'error': f"Unexpected success response format (Status 200): {response.text}"
                 }
             else:
-                # Error response
                 error_msg = response.text
                 try:
                     error_json = response.json()
@@ -262,13 +339,16 @@ class HybridTeamUpManager:
                 except json.JSONDecodeError:
                     pass
                 
-                # Provide specific error messages for common issues
-                if response.status_code == 403:
-                    error_msg = "No permission to copy calendar. Please ensure MASTER_TEAMUP_API has admin access to the template calendar."
+                if response.status_code == 401:
+                    error_msg = "Authentication failed (401). Bearer token expired or invalid. Check TEAMUP_ADMIN_EMAIL/PASSWORD."
+                elif response.status_code == 403:
+                    error_msg = "No permission to copy calendar. Ensure TeamUp admin account has 'administrator' access to the template calendar."
                 elif response.status_code == 404:
-                    error_msg = "Template calendar not found. Please check TEMPLATE_CALENDAR_KEY."
+                    error_msg = "Template calendar not found. Please check TEMPLATE_CALENDAR_KEY in .env."
+                elif response.status_code == 429: # Rate limit
+                    error_msg = "Too many requests to TeamUp API (429). Please wait and try again."
                 elif response.status_code == 400:
-                    error_msg = f"Invalid request: {error_msg}"
+                    error_msg = f"Bad request to TeamUp API: {error_msg}"
                 
                 return {
                     'success': False,
@@ -294,13 +374,15 @@ class HybridTeamUpManager:
             }
     
     def _verify_calendar_creation(self, calendar_id):
-        """ตรวจสอบว่า calendar ถูกสร้างและเข้าถึงได้จริง"""
+        """ตรวจสอบว่า calendar ถูกสร้างและเข้าถึงได้จริงโดยใช้ Bearer token."""
         try:
             print(f"Verifying calendar creation: {calendar_id}")
             
+            headers_with_auth = self._get_headers_with_auth()
+
             response = requests.get(
                 f"{self.base_url}/{calendar_id}/configuration",
-                headers=self.headers,
+                headers=headers_with_auth, # Use headers with Authorization: Bearer
                 timeout=10
             )
             
@@ -317,13 +399,15 @@ class HybridTeamUpManager:
             return False
 
     def _get_subcalendars_from_teamup(self, calendar_id):
-        """ดึงรายการ subcalendars จาก TeamUp API ของ calendar ที่ระบุ"""
+        """ดึงรายการ subcalendars จาก TeamUp API ของ calendar ที่ระบุโดยใช้ Bearer token."""
         try:
             print(f"Fetching subcalendars for calendar: {calendar_id}")
             
+            headers_with_auth = self._get_headers_with_auth()
+
             response = requests.get(
                 f"{self.base_url}/{calendar_id}/subcalendars",
-                headers=self.headers,
+                headers=headers_with_auth, # Use headers with Authorization: Bearer
                 timeout=10
             )
             
@@ -379,9 +463,10 @@ class HybridTeamUpManager:
             
             print(f"Creating subcalendar '{subcalendar_name}' in calendar {calendar_id}")
             
+            headers_with_auth = self._get_headers_with_auth() # Use headers with Bearer token
             response = requests.post(
                 f"{self.base_url}/{calendar_id}/subcalendars",
-                headers=self.headers,
+                headers=headers_with_auth, # Apply the headers with Bearer token
                 json=subcal_data,
                 timeout=15
             )
@@ -538,16 +623,20 @@ class TeamUpMonitor:
         for calendar in calendars:
             try:
                 # ตรวจสอบว่า calendar ยังมีอยู่ใน TeamUp หรือไม่
+                # ต้องใช้ headers ที่มี Bearer token
+                headers_with_auth = self.manager._get_headers_with_auth()
                 response = requests.get(
                     f"{self.manager.base_url}/{calendar.calendar_id}/configuration",
-                    headers=self.manager.headers
+                    headers=headers_with_auth, # Apply the headers with Bearer token
+                    timeout=10
                 )
                 
                 if response.status_code == 200:
                     # ตรวจสอบ subcalendars
                     subcal_response = requests.get(
                         f"{self.manager.base_url}/{calendar.calendar_id}/subcalendars",
-                        headers=self.manager.headers
+                        headers=headers_with_auth, # Apply the headers with Bearer token
+                        timeout=10
                     )
                     
                     if subcal_response.status_code == 200:
@@ -591,8 +680,8 @@ class TeamUpMonitor:
                         })
                 
                 else:
-                    # Calendar ไม่มีใน TeamUp แล้ว
-                    calendar.is_active = False
+                    # Calendar ไม่มีใน TeamUp แล้ว หรือ API Key ไม่มีสิทธิ์เข้าถึง calendar นั้น
+                    calendar.is_active = False # Deactivate in our DB
                     sync_results.append({
                         'calendar_id': calendar.calendar_id,
                         'organization': calendar.organization.name,
@@ -653,10 +742,12 @@ class TeamUpBackup:
             }
             backup_data['calendars'].append(cal_data)
 
-            # ดึง subcalendars จาก TeamUp API
+            # ดึง subcalendars จาก TeamUp API (ต้องใช้ headers ที่มี Bearer token)
+            headers_with_auth = self.manager._get_headers_with_auth()
             subcal_response = requests.get(
                 f"{self.manager.base_url}/{calendar.calendar_id}/subcalendars",
-                headers=self.manager.headers
+                headers=headers_with_auth, # Apply the headers with Bearer token
+                timeout=10
             )
             if subcal_response.status_code == 200:
                 subcals_on_teamup = subcal_response.json().get('subcalendars', [])
@@ -664,18 +755,19 @@ class TeamUpBackup:
             else:
                 print(f"Warning: Could not fetch subcalendars for backup of {calendar.calendar_id}: {subcal_response.text}")
             
-            # ดึง events ทั้งหมดในช่วง 1 ปีที่ผ่านมา
+            # ดึง events ทั้งหมดในช่วง 1 ปีที่ผ่านมา (ต้องใช้ headers ที่มี Bearer token)
             end_date = datetime.now() + timedelta(days=30)
             start_date = datetime.now() - timedelta(days=365)
             
             try:
                 events_response = requests.get(
                     f"{self.manager.base_url}/{calendar.calendar_id}/events",
-                    headers=self.manager.headers,
+                    headers=headers_with_auth, # Apply the headers with Bearer token
                     params={
                         'startDate': start_date.strftime('%Y-%m-%d'),
                         'endDate': end_date.strftime('%Y-%m-%d')
-                    }
+                    },
+                    timeout=15
                 )
                 if events_response.status_code == 200:
                     events_data = events_response.json().get('events', [])
@@ -748,12 +840,18 @@ class HybridTeamUpAPI:
         """ดึงรายการ subcalendars ทั้งหมดของ organization"""
         subcal_list = []
         
-        for subcal in self.subcalendars:
+        # ใช้ Bearer token ในการเรียก API
+        headers_with_auth = self.manager._get_headers_with_auth()
+        
+        for subcal_obj in self.subcalendars:
+            # ดึงข้อมูลจริงจาก TeamUp API เพื่อความสดใหม่ (ถ้าจำเป็น)
+            # หรือแค่ส่งข้อมูลจาก DB ที่เก็บไว้ก็ได้ ถ้า logic ไม่ได้ต้องการข้อมูล real-time
+            # ในกรณีนี้ ผมจะแค่ส่งข้อมูลจาก DB ของเรา เพื่อให้ get_subcalendars รวดเร็ว
             subcal_list.append({
-                'id': subcal.subcalendar_id,
-                'name': subcal.subcalendar_name,
-                'calendar_id': subcal.calendar_id,
-                'is_active': subcal.is_active
+                'id': subcal_obj.subcalendar_id,
+                'name': subcal_obj.subcalendar_name,
+                'calendar_id': subcal_obj.calendar_id,
+                'is_active': subcal_obj.is_active
             })
         
         return {'subcalendars': subcal_list}
@@ -763,7 +861,6 @@ class HybridTeamUpAPI:
         try:
             from models import OrganizationSubcalendar
             
-            # หา subcalendar จากชื่อ
             subcalendar_name = patient_data['calendar_name']
             subcal_mapping = OrganizationSubcalendar.query.filter_by(
                 organization_id=self.organization_id,
@@ -781,7 +878,6 @@ class HybridTeamUpAPI:
                     print(f"Failed to auto-create subcalendar: {create_result['error']}")
                     return False, create_result['error']
                 
-                # Refresh subcalendars property
                 self._subcalendars = None 
                 subcal_mapping = OrganizationSubcalendar.query.filter_by(
                     organization_id=self.organization_id,
@@ -791,7 +887,6 @@ class HybridTeamUpAPI:
                 if not subcal_mapping:
                     return False, f"Failed to retrieve newly created subcalendar mapping for {subcalendar_name}"
             
-            # สร้าง event ใน calendar ที่ถูกต้อง
             calendar_id = subcal_mapping.calendar_id
             subcalendar_id = subcal_mapping.subcalendar_id
             
@@ -803,17 +898,16 @@ class HybridTeamUpAPI:
                 "subcalendar_ids": [subcalendar_id]
             }
             
-            # เพิ่มข้อมูลเสริม
             for field in ['location', 'who', 'description']:
                 if patient_data.get(field):
                     event_data[field if field != 'description' else 'notes'] = patient_data[field]
             
             print(f"Creating event in calendar {calendar_id} with subcalendar {subcalendar_id}")
             
-            # ส่งไป TeamUp
+            headers_with_auth = self.manager._get_headers_with_auth() # Use headers with Bearer token
             response = requests.post(
                 f"{self.manager.base_url}/{calendar_id}/events",
-                headers=self.manager.headers,
+                headers=headers_with_auth, # Apply the headers with Bearer token
                 json=event_data,
                 timeout=15
             )
@@ -823,7 +917,6 @@ class HybridTeamUpAPI:
             if response.status_code == 201:
                 event_id = response.json().get('event', {}).get('id')
                 
-                # บันทึกการใช้งาน
                 self.log_usage('create', 'appointment', event_id, {
                     'title': patient_data['title'],
                     'subcalendar': subcalendar_name,
@@ -853,13 +946,16 @@ class HybridTeamUpAPI:
         try:
             from models import OrganizationSubcalendar
             
+            headers_with_auth = self.manager._get_headers_with_auth() # Use headers with Bearer token
+
             # Handle fetching a specific event by event_id
             if event_id:
                 for cal in self.calendars:
                     try:
                         single_event_response = requests.get(
                             f"{self.manager.base_url}/{cal.calendar_id}/events/{event_id}",
-                            headers=self.manager.headers
+                            headers=headers_with_auth, # Apply the headers with Bearer token
+                            timeout=15
                         )
                         if single_event_response.status_code == 200:
                             found_event = single_event_response.json().get('event')
@@ -890,13 +986,11 @@ class HybridTeamUpAPI:
                 calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
                 subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars]
             
-            # Ensure dates are valid
             if not isinstance(start_date, datetime):
                 start_date = datetime.strptime(start_date, '%Y-%m-%d') if isinstance(start_date, str) else datetime.now() - timedelta(days=7)
             if not isinstance(end_date, datetime):
                 end_date = datetime.strptime(end_date, '%Y-%m-%d') if isinstance(end_date, str) else datetime.now() + timedelta(days=30)
             
-            # Query each calendar
             for calendar_id_key in calendars_to_query_keys:
                 events = self.fetch_calendar_events(
                     calendar_id=calendar_id_key,
@@ -908,7 +1002,6 @@ class HybridTeamUpAPI:
                 if events.get('events'):
                     for event in events['events']:
                         event['source_calendar_id'] = calendar_id_key
-                        # เพิ่มชื่อ subcalendar
                         if 'subcalendar_ids' in event and event['subcalendar_ids']:
                             subcal_names = []
                             for sid in event['subcalendar_ids']:
@@ -943,9 +1036,10 @@ class HybridTeamUpAPI:
             if subcalendar_ids:
                 params['subcalendarId'] = [str(sid) for sid in subcalendar_ids]
             
+            headers_with_auth = self.manager._get_headers_with_auth() # Use headers with Bearer token
             response = requests.get(
                 f"{self.manager.base_url}/{calendar_id}/events",
-                headers=self.manager.headers,
+                headers=headers_with_auth, # Apply the headers with Bearer token
                 params=params,
                 timeout=15
             )
@@ -976,7 +1070,6 @@ class HybridTeamUpAPI:
             if calendar_id:
                 target_calendar_id = calendar_id
             else:
-                # หาจากทุก calendars
                 for cal in self.calendars:
                     events_response = self.fetch_calendar_events(
                         calendar_id=cal.calendar_id,
@@ -1001,10 +1094,13 @@ class HybridTeamUpAPI:
     def _update_event_in_calendar(self, calendar_id, event_id, status):
         """อัปเดต event ใน calendar ที่ระบุ"""
         try:
+            headers_with_auth = self.manager._get_headers_with_auth() # Use headers with Bearer token
+
             # ดึงข้อมูล event ปัจจุบัน
             response = requests.get(
                 f"{self.manager.base_url}/{calendar_id}/events/{event_id}",
-                headers=self.manager.headers
+                headers=headers_with_auth, # Apply the headers with Bearer token
+                timeout=15
             )
 
             if response.status_code != 200:
@@ -1022,7 +1118,6 @@ class HybridTeamUpAPI:
             current_notes = event_data.get('notes', '')
             current_version = event_data.get('version')
             
-            # อัปเดต notes ด้วยสถานะใหม่
             updated_notes = re.sub(r'\s*\[สถานะ:.*?\]\s*', '', current_notes)
             new_status_tag = f" [สถานะ: {status}]"
             
@@ -1034,7 +1129,6 @@ class HybridTeamUpAPI:
             else:
                 updated_notes = new_status_tag.strip()
             
-            # สร้างข้อมูลสำหรับการอัปเดต
             update_data = {
                 'title': current_title,
                 'notes': updated_notes,
@@ -1049,14 +1143,13 @@ class HybridTeamUpAPI:
             if current_version:
                 update_data['version'] = current_version
 
-            # เพิ่มฟิลด์ที่จำเป็นอื่นๆ
             for field in ['location', 'who', 'rrule', 'subcalendar_ids', 'subcalendar_remote_ids']:
                 if field in event_data:
                     update_data[field] = event_data[field]
             
             update_response = requests.put(
                 f"{self.manager.base_url}/{calendar_id}/events/{event_id}",
-                headers=self.manager.headers,
+                headers=headers_with_auth, # Apply the headers with Bearer token
                 json=update_data,
                 timeout=15
             )
@@ -1070,7 +1163,7 @@ class HybridTeamUpAPI:
             else:
                 error_msg = update_response.text
                 try:
-                    error_json = update_response.json()
+                    error_json = response.json()
                     if 'error' in error_json and 'message' in error_json['error']:
                         error_msg = error_json['error']['message']
                 except json.JSONDecodeError:
@@ -1114,7 +1207,6 @@ class HybridTeamUpAPI:
             calendar_id = subcal_mapping.calendar_id
             subcalendar_id = subcal_mapping.subcalendar_id
             
-            # สร้าง RRULE string
             if not selected_days:
                 return False, "กรุณาเลือกอย่างน้อยหนึ่งวันสำหรับนัดหมายที่เกิดซ้ำ"
 
@@ -1129,14 +1221,14 @@ class HybridTeamUpAPI:
                 "subcalendar_ids": [subcalendar_id]
             }
             
-            # เพิ่มข้อมูลเสริม
             for field in ['location', 'who', 'description']:
                 if patient_data.get(field):
                     event_data[field if field != 'description' else 'notes'] = patient_data[field]
 
+            headers_with_auth = self.manager._get_headers_with_auth() # Use headers with Bearer token
             response = requests.post(
                 f"{self.manager.base_url}/{calendar_id}/events",
-                headers=self.manager.headers,
+                headers=headers_with_auth, # Apply the headers with Bearer token
                 json=event_data,
                 timeout=15
             )
@@ -1170,7 +1262,6 @@ class HybridTeamUpAPI:
             from models import UsageStat, AuditLog
             from datetime import datetime, timedelta
             
-            # สถิติการใช้งานเดือนนี้
             current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             
             monthly_stats = UsageStat.query.filter(
@@ -1181,11 +1272,9 @@ class HybridTeamUpAPI:
             total_appointments = sum(stat.appointments_created for stat in monthly_stats)
             total_updates = sum(stat.appointments_updated for stat in monthly_stats)
             
-            # Active calendars และ subcalendars
             active_calendars = len(self.calendars)
             active_subcalendars = len(self.subcalendars)
             
-            # Recent activities
             recent_activities = AuditLog.query.filter_by(
                 organization_id=self.organization_id
             ).order_by(AuditLog.created_at.desc()).limit(10).all()
@@ -1223,7 +1312,6 @@ class HybridTeamUpAPI:
             from models import db, AuditLog, UsageStat
             from datetime import datetime
             
-            # บันทึก Audit Log
             audit_log = AuditLog(
                 organization_id=self.organization_id,
                 user_id=self.user_id,
@@ -1234,7 +1322,6 @@ class HybridTeamUpAPI:
             )
             db.session.add(audit_log)
             
-            # อัปเดต Usage Stats
             today = datetime.now().date()
             usage_stat = UsageStat.query.filter_by(
                 organization_id=self.organization_id,
