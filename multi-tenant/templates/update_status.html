@@ -1,0 +1,187 @@
+<!-- templates/update_status.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-check-circle me-2"></i>อัปเดตสถานะนัดหมาย
+                </h4>
+            </div>
+            <div class="card-body">
+                <!-- แสดงข้อมูลนัดหมายถ้ามี -->
+                {% if event_data %}
+                <div class="alert alert-info mb-4">
+                    <h5 class="mb-3">
+                        <i class="fas fa-user-injured me-2"></i>{{ event_data.title }}
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-2">
+                                <i class="fas fa-calendar-day me-2 text-primary"></i>
+                                <strong>วันที่:</strong> 
+                                {% set start_date = event_data.start_dt.split('T')[0] %}
+                                {% set date_parts = start_date.split('-') %}
+                                {{ date_parts[2] }}/{{ date_parts[1] }}/{{ date_parts[0] }}
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-clock me-2 text-primary"></i>
+                                <strong>เวลา:</strong> 
+                                {{ event_data.start_dt.split('T')[1][:5] }} - {{ event_data.end_dt.split('T')[1][:5] }}
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-map-marker-alt me-2 text-primary"></i>
+                                <strong>สถานที่:</strong> {{ event_data.location or 'ไม่ระบุ' }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-2">
+                                <i class="fas fa-user-md me-2 text-primary"></i>
+                                <strong>ผู้ดูแล:</strong> {{ event_data.who or 'ไม่ระบุ' }}
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-calendar me-2 text-primary"></i>
+                                <!-- <strong>ปฏิทินย่อย:</strong>  -->
+                                <span class="badge bg-secondary">{{ event_data.subcalendar_display or 'ไม่ระบุปฏิทิน' }}</span>
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-hashtag me-2 text-primary"></i>
+                                <strong>Event ID:</strong> 
+                                <code class="bg-light px-2 py-1 rounded">{{ event_data.id }}</code>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {% if event_data.notes %}
+                    <div class="mt-3 pt-3 border-top">
+                        <p class="mb-1">
+                            <i class="fas fa-sticky-note me-2 text-primary"></i>
+                            <strong>หมายเหตุ:</strong>
+                        </p>
+                        <div class="bg-light p-2 rounded">
+                            <small>{{ event_data.notes|safe }}</small>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="copy-event-id-btn">
+                            <i class="fas fa-copy me-1"></i>คัดลอก Event ID
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- ฟอร์มอัปเดตสถานะ -->
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="event_id_form" class="form-label">
+                            <i class="fas fa-hashtag me-2"></i>Event ID:
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="event_id_form" 
+                               name="event_id" 
+                               value="{{ event_id }}"
+                               placeholder="กรุณากรอก Event ID ของนัดหมายที่ต้องการอัปเดต"
+                               required>
+                        <div class="form-text">Event ID ที่ได้จากรายการนัดหมายหรือจาก TeamUp Calendar</div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="status" class="form-label">
+                            <i class="fas fa-tasks me-2"></i>สถานะ:
+                        </label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="">เลือกสถานะ</option>
+                            <option value="มาตามนัด">
+                                <i class="fas fa-check-circle"></i> มาตามนัด
+                            </option>
+                            <option value="ยกเลิก">
+                                <i class="fas fa-times-circle"></i> ยกเลิก
+                            </option>
+                            <option value="ไม่มา">
+                                <i class="fas fa-user-times"></i> ไม่มา
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('appointments') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-arrow-left me-1"></i>กลับไปรายการนัดหมาย
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>บันทึกสถานะ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const eventIdFromUrl = urlParams.get('event_id');
+    const eventIdInputForm = document.getElementById('event_id_form');
+
+    if (eventIdFromUrl && eventIdInputForm) {
+        eventIdInputForm.value = eventIdFromUrl;
+    }
+
+    // Function to copy Event ID
+    const copyEventIdBtn = document.getElementById('copy-event-id-btn');
+    if (copyEventIdBtn) {
+        copyEventIdBtn.addEventListener('click', function() {
+            const eventIdDisplay = document.querySelector('code.bg-light');
+            if (eventIdDisplay && eventIdDisplay.textContent) {
+                const eventId = eventIdDisplay.textContent;
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(eventId).then(() => {
+                        if (window.app && typeof window.app.showNotification === 'function') {
+                            window.app.showNotification('คัดลอก Event ID สำเร็จ!', 'success');
+                        } else {
+                            // Fallback if app.js not loaded
+                            Toast.fire({ icon: 'success', title: 'คัดลอก Event ID สำเร็จ!' });
+                        }
+                    }).catch(err => {
+                        console.error('Failed to copy text using clipboard API: ', err);
+                        fallbackCopy(eventIdInputForm); // Fallback to old method
+                    });
+                } else {
+                    fallbackCopy(eventIdInputForm); // Fallback to old method
+                }
+            }
+        });
+    }
+
+    // Fallback copy function (for older browsers or if clipboard API fails)
+    function fallbackCopy(element) {
+        element.select();
+        element.setSelectionRange(0, 99999); // For mobile devices
+        
+        try {
+            document.execCommand('copy');
+            if (window.app && typeof window.app.showNotification === 'function') {
+                window.app.showNotification('คัดลอก Event ID สำเร็จ! (วิธีเก่า)', 'success');
+            } else {
+                Toast.fire({ icon: 'success', title: 'คัดลอก Event ID สำเร็จ! (วิธีเก่า)' });
+            }
+        } catch (err) {
+            console.error('Failed to copy text using document.execCommand: ', err);
+            if (window.app && typeof window.app.showNotification === 'function') {
+                window.app.showNotification('ไม่สามารถคัดลอกได้ กรุณาคัดลอกด้วยตนเอง', 'warning');
+            } else {
+                Toast.fire({ icon: 'warning', title: 'ไม่สามารถคัดลอกได้ กรุณาคัดลอกด้วยตนเอง' });
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

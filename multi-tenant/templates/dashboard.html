@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ current_organization.name }}{% endblock %}
+
+{% block content %}
+<!-- Welcome Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h3 class="mb-1">สวัสดี, {{ current_user.user.get_full_name() }}!</h3>
+                        <p class="mb-0">ยินดีต้อนรับสู่ระบบจัดการนัดหมาย {{ current_organization.name }}</p>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <div class="h5 mb-0">{{ "วันนี้" if moment().format('YYYY-MM-DD') == moment().format('YYYY-MM-DD') else moment().format('DD/MM/YYYY') }}</div>
+                        <small>{{ moment().format('dddd') }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start border-primary border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="text-primary mb-1">
+                            {% if summary_data %}
+                                {{ summary_data.today_appointments }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </h4>
+                        <p class="mb-0">นัดหมายวันนี้</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-calendar-check text-primary" style="font-size: 2em;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start border-success border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="text-success mb-1">
+                            {% if summary_data %}
+                                {{ summary_data.subcalendar_count }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </h4>
+                        <p class="mb-0">ปฏิทินย่อย</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-calendar2-week text-success" style="font-size: 2em;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start border-info border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="text-info mb-1">
+                            {% if summary_data and summary_data.stats %}
+                                {{ summary_data.stats.monthly_appointments }}
+                            {% else %}
+                                {{ current_organization.get_current_month_usage() }}
+                            {% endif %}
+                        </h4>
+                        <p class="mb-0">นัดหมายเดือนนี้</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-graph-up text-info" style="font-size: 2em;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start border-warning border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="text-warning mb-1">{{ current_organization.users|length }}</h4>
+                        <p class="mb-0">ผู้ใช้งาน</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-people text-warning" style="font-size: 2em;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Quick Actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> การดำเนินการด่วน</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('appointments') }}" class="btn btn-primary btn-lg w-100">
+                            <i class="bi bi-calendar-plus"></i><br>
+                            <span>สร้างนัดหมายใหม่</span>
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('appointments') }}" class="btn btn-info btn-lg w-100">
+                            <i class="bi bi-search"></i><br>
+                            <span>ค้นหานัดหมาย</span>
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('import_csv') }}" class="btn btn-success btn-lg w-100">
+                            <i class="bi bi-upload"></i><br>
+                            <span>นำเข้าข้อมูล</span>
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('reports') }}" class="btn btn-secondary btn-lg w-100">
+                            <i class="bi bi-graph-up"></i><br>
+                            <span>ดูรายงาน</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activities -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> กิจกรรมล่าสุด</h5>
+                <a href="{{ url_for('reports') }}" class="btn btn-sm btn-outline-primary">ดูทั้งหมด</a>
+            </div>
+            <div class="card-body">
+                {% if summary_data and summary_data.stats and summary_data.stats.recent_activities %}
+                    <div class="list-group list-group-flush">
+                        {% for activity in summary_data.stats.recent_activities[:5] %}
+                        <div class="list-group-item border-0 px-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="d-flex align-items-center mb-1">
+                                        {% if activity.action == 'create' %}
+                                            <i class="bi bi-plus-circle text-success me-2"></i>
+                                        {% elif activity.action == 'update' %}
+                                            <i class="bi bi-pencil-square text-info me-2"></i>
+                                        {% elif activity.action == 'delete' %}
+                                            <i class="bi bi-trash text-danger me-2"></i>
+                                        {% else %}
+                                            <i class="bi bi-circle text-muted me-2"></i>
+                                        {% endif %}
+                                        <span class="fw-bold">
+                                            {% if activity.action == 'create' %}สร้าง{% elif activity.action == 'update' %}แก้ไข{% elif activity.action == 'delete' %}ลบ{% else %}{{ activity.action }}{% endif %}
+                                            {{ activity.resource_type }}
+                                        </span>
+                                    </div>
+                                    {% if activity.details and activity.details.title %}
+                                        <div class="text-muted small">{{ activity.details.title }}</div>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ moment(activity.created_at).fromNow() }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-clock-history" style="font-size: 3em; color: #ccc;"></i>
+                        <h6 class="text-muted mt-2">ยังไม่มีกิจกรรม</h6>
+                        <p class="text-muted small">กิจกรรมต่างๆ จะแสดงที่นี่</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- Subscription Status -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> สถานะการสมัครสมาชิก</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if current_organization.subscription_status.value == 'trial' %}
+                    {% if current_organization.is_trial_expired() %}
+                        <div class="text-danger mb-3">
+                            <i class="bi bi-exclamation-triangle" style="font-size: 3em;"></i>
+                            <h6 class="mt-2">การทดลองหมดอายุ</h6>
+                        </div>
+                        <p class="text-muted">กรุณาเลือกแพ็คเกจเพื่อใช้งานต่อ</p>
+                        <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-warning">เลือกแพ็คเกจ</a>
+                    {% else %}
+                        <div class="text-info mb-3">
+                            <i class="bi bi-clock" style="font-size: 3em;"></i>
+                            <h6 class="mt-2">ทดลองใช้งาน</h6>
+                        </div>
+                        <p class="text-muted">
+                            เหลือ {{ (current_organization.trial_ends_at - moment.utcnow()).days }} วัน
+                        </p>
+                        <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-primary">อัพเกรดเลย</a>
+                    {% endif %}
+                {% elif current_organization.subscription_status.value == 'active' %}
+                    <div class="text-success mb-3">
+                        <i class="bi bi-check-circle" style="font-size: 3em;"></i>
+                        <h6 class="mt-2">{{ current_organization.subscription_plan.value.title() }}</h6>
+                    </div>
+                    <p class="text-muted">
+                        หมดอายุ: {{ current_organization.subscription_expires_at.strftime('%d/%m/%Y') if current_organization.subscription_expires_at else 'ไม่ทราบ' }}
+                    </p>
+                    <a href="{{ url_for('billing.billing_history') }}" class="btn btn-outline-primary">จัดการ</a>
+                {% else %}
+                    <div class="text-warning mb-3">
+                        <i class="bi bi-pause-circle" style="font-size: 3em;"></i>
+                        <h6 class="mt-2">บัญชีระงับ</h6>
+                    </div>
+                    <p class="text-muted">กรุณาติดต่อผู้ดูแล</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Subcalendars -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-calendar2-week"></i> ปฏิทินย่อย</h5>
+                <a href="{{ url_for('subcalendars') }}" class="btn btn-sm btn-outline-primary">ดูทั้งหมด</a>
+            </div>
+            <div class="card-body">
+                {% if summary_data and summary_data.subcalendars %}
+                    <div class="list-group list-group-flush">
+                        {% for subcal in summary_data.subcalendars %}
+                        <div class="list-group-item border-0 px-0 py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>{{ subcal.name }}</span>
+                                <a href="{{ url_for('appointments', subcalendar_id=subcal.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-calendar-plus"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-calendar2-week" style="font-size: 2em; color: #ccc;"></i>
+                        <p class="text-muted small mt-2">ยังไม่มีปฏิทินย่อย</p>
+                        <a href="{{ url_for('appointments') }}" class="btn btn-sm btn-primary">สร้างใหม่</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Usage Progress -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-speedometer2"></i> การใช้งานเดือนนี้</h5>
+            </div>
+            <div class="card-body">
+                {% set current_usage = current_organization.get_current_month_usage() %}
+                {% set max_usage = current_organization.max_appointments_per_month %}
+                {% set usage_percent = (current_usage / max_usage * 100) if max_usage > 0 else 0 %}
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>นัดหมาย</span>
+                        <span>{{ current_usage }}/{% if max_usage == -1 %}∞{% else %}{{ max_usage }}{% endif %}</span>
+                    </div>
+                    {% if max_usage != -1 %}
+                    <div class="progress">
+                        <div class="progress-bar {% if usage_percent >= 80 %}bg-warning{% elif usage_percent >= 95 %}bg-danger{% else %}bg-success{% endif %}" 
+                             style="width: {{ usage_percent }}%"></div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% set current_staff = current_organization.users|selectattr('role.value', 'equalto', 'staff')|list|length %}
+                {% set max_staff = current_organization.max_staff_users %}
+                {% set staff_percent = (current_staff / max_staff * 100) if max_staff > 0 else 0 %}
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>เจ้าหน้าที่</span>
+                        <span>{{ current_staff }}/{% if max_staff == -1 %}∞{% else %}{{ max_staff }}{% endif %}</span>
+                    </div>
+                    {% if max_staff != -1 %}
+                    <div class="progress">
+                        <div class="progress-bar {% if staff_percent >= 80 %}bg-warning{% elif staff_percent >= 95 %}bg-danger{% else %}bg-info{% endif %}" 
+                             style="width: {{ staff_percent }}%"></div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if usage_percent >= 80 or staff_percent >= 80 %}
+                <div class="alert alert-warning alert-sm">
+                    <small>
+                        <i class="bi bi-exclamation-triangle"></i>
+                        การใช้งานใกล้เต็ม 
+                        <a href="{{ url_for('billing.choose_plan') }}" class="alert-link">อัพเกรด</a>
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/th.min.js"></script>
+<script>
+// Set moment locale to Thai
+moment.locale('th');
+
+// Auto-refresh every 5 minutes
+setInterval(function() {
+    location.reload();
+}, 300000);
+
+// Add some interactivity to cards
+document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('mouseenter', function() {
+        this.style.transition = 'transform 0.2s';
+        this.style.transform = 'translateY(-2px)';
+    });
+    
+    card.addEventListener('mouseleave', function() {
+        this.style.transform = 'translateY(0)';
+    });
+});
+</script>
+{% endblock %}

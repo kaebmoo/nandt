@@ -1,0 +1,50 @@
+<!-- templates/errors/500.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+        <div class="error-page">
+            <h1 class="display-1 text-danger">500</h1>
+            <h2 class="mb-3">เกิดข้อผิดพลาดภายในระบบ</h2>
+            <p class="lead">ขออภัย เกิดข้อผิดพลาดที่ไม่คาดคิดขึ้น ทีมงานได้รับการแจ้งเตือนแล้ว</p>
+            
+            {% if error_id %}
+            <div class="alert alert-info mt-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>รหัสข้อผิดพลาด:</strong> {{ error_id }}
+                <br><small>กรุณาแจ้งรหัสนี้หากต้องการติดต่อฝ่ายสนับสนุน</small>
+            </div>
+            {% endif %}
+            
+            <div class="mt-4">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="fas fa-home me-2"></i>กลับหน้าแรก
+                </a>
+                <button onclick="location.reload()" class="btn btn-outline-secondary">
+                    <i class="fas fa-redo me-2"></i>ลองใหม่
+                </button>
+            </div>
+            
+            <div class="mt-5">
+                <h5>สิ่งที่คุณสามารถทำได้:</h5>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check text-success me-2"></i>รอสักครู่แล้วลองใหม่</li>
+                    <li><i class="fas fa-check text-success me-2"></i>ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</li>
+                    <li><i class="fas fa-check text-success me-2"></i>ลองเข้าใช้งานในภายหลัง</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 60px 0;
+}
+.display-1 {
+    font-size: 8rem;
+    font-weight: 300;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <div class="error-page">
+            <h1 class="display-1 text-warning">403</h1>
+            <h2 class="mb-3">ไม่มีสิทธิ์เข้าถึง</h2>
+            <p class="lead">ขออภัย คุณไม่มีสิทธิ์ในการเข้าถึงหน้านี้</p>
+            <div class="mt-4">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="fas fa-home me-2"></i>กลับหน้าแรก
+                </a>
+                </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 60px 0;
+}
+.display-1 {
+    font-size: 8rem;
+    font-weight: 300;
+}
+</style>
+{% endblock %}

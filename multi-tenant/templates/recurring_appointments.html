@@ -1,0 +1,390 @@
+<!-- templates/recurring_appointments.html -->
+{% extends 'base.html' %}
+
+{% block head %}
+<style>
+    /* เพิ่มสไตล์เฉพาะสำหรับหน้านี้ */
+    #recurring-options {
+        animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            max-height: 0;
+        }
+        to {
+            opacity: 1;
+            max-height: 500px;
+        }
+    }
+
+    .rrule-examples {
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+
+    .btn-outline-secondary:hover {
+        color: #fff;
+        background-color: #6c757d;
+        border-color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-redo me-2"></i>สร้างนัดหมายเกิดซ้ำ
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="recurringForm">
+                    <!-- ข้อมูลพื้นฐาน -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="title" class="form-label">ชื่อผู้ป่วย/หัวข้อนัดหมาย <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="title" name="title" required 
+                                   placeholder="เช่น นายสมชาย ใจดี - ฟอกไต">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="calendar_name" class="form-label">ปฏิทินย่อย <span class="text-danger">*</span></label>
+                            <select class="form-select" id="calendar_name" name="calendar_name" required>
+                                <option value="">เลือกปฏิทินย่อย</option>
+                                {% for subcal in subcalendars %}
+                                    <option value="{{ subcal.name }}">{{ subcal.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- วันที่และเวลา -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="start_date" class="form-label">วันที่เริ่มต้น <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="start_time" class="form-label">เวลาเริ่มต้น <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="start_time" name="start_time" value="09:00" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="end_date" class="form-label">วันที่สิ้นสุด</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date">
+                            <div class="form-text">จะใช้วันเดียวกันหากไม่ระบุ</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="end_time" class="form-label">เวลาสิ้นสุด <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="end_time" name="end_time" value="12:00" required>
+                        </div>
+                    </div>
+
+                    <!-- ข้อมูลเพิ่มเติม -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="location" class="form-label">สถานที่</label>
+                            <input type="text" class="form-control" id="location" name="location" 
+                                   placeholder="เช่น ห้องฟอกไตเตียง A">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="who" class="form-label">ผู้ดูแล</label>
+                            <input type="text" class="form-control" id="who" name="who" 
+                                   placeholder="เช่น คุณหมอสมศักดิ์, พยาบาลนงนุช">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="description" class="form-label">รายละเอียด</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                  placeholder="เบอร์โทร: 091-234-5678&#10;ความดันโลหิต: ปกติ&#10;หมายเหตุ: ระวังการแพ้ยา"></textarea>
+                    </div>
+
+                    <!-- ประเภทการเกิดซ้ำ -->
+                    <div class="mb-4">
+                        <label class="form-label">ประเภทการเกิดซ้ำ</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recurrence_type" id="weekly" value="weekly" checked>
+                                    <label class="form-check-label" for="weekly">
+                                        <strong>รายสัปดาห์</strong>
+                                        <small class="text-muted d-block">เลือกวันในสัปดาห์และจำนวนสัปดาห์</small>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recurrence_type" id="custom" value="custom">
+                                    <label class="form-check-label" for="custom">
+                                        <strong>กำหนดเอง</strong>
+                                        <small class="text-muted d-block">ใช้ RRULE ตามมาตรฐาน RFC 5545</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- การตั้งค่ารายสัปดาห์ -->
+                    <div id="weeklyOptions" class="mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0 text-primary">
+                                    <i class="fas fa-calendar-week me-2"></i>เลือกวันในสัปดาห์
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="mon" name="mon">
+                                            <label class="form-check-label" for="mon">
+                                                <i class="fas fa-circle text-primary me-1"></i>จันทร์
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="tue" name="tue">
+                                            <label class="form-check-label" for="tue">
+                                                <i class="fas fa-circle text-primary me-1"></i>อังคาร
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="wed" name="wed">
+                                            <label class="form-check-label" for="wed">
+                                                <i class="fas fa-circle text-primary me-1"></i>พุธ
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="thu" name="thu">
+                                            <label class="form-check-label" for="thu">
+                                                <i class="fas fa-circle text-primary me-1"></i>พฤหัสบดี
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="fri" name="fri">
+                                            <label class="form-check-label" for="fri">
+                                                <i class="fas fa-circle text-primary me-1"></i>ศุกร์
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="sat" name="sat">
+                                            <label class="form-check-label" for="sat">
+                                                <i class="fas fa-circle text-warning me-1"></i>เสาร์
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="sun" name="sun">
+                                            <label class="form-check-label" for="sun">
+                                                <i class="fas fa-circle text-danger me-1"></i>อาทิตย์
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-4">
+                                        <label for="weeks" class="form-label">จำนวนสัปดาห์</label>
+                                        <input type="number" class="form-control" id="weeks" name="weeks" 
+                                               value="4" min="1" max="52">
+                                        <div class="form-text">1-52 สัปดาห์</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- การตั้งค่าแบบกำหนดเอง -->
+                    <div id="customOptions" class="mb-4" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0 text-primary">
+                                    <i class="fas fa-code me-2"></i>RRULE แบบกำหนดเอง
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="custom_rrule" class="form-label">RRULE</label>
+                                    <input type="text" class="form-control" id="custom_rrule" name="custom_rrule" 
+                                           placeholder="เช่น FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=12">
+                                </div>
+                                
+                                <!-- ปุ่มตัวอย่าง RRULE -->
+                                <div class="rrule-examples">
+                                    <div class="mb-2">
+                                        <small class="text-muted"><strong>ตัวอย่าง RRULE:</strong></small>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rrule-example" 
+                                                data-rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=12">
+                                            จ-พ-ศ 12 ครั้ง
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rrule-example" 
+                                                data-rrule="FREQ=DAILY;COUNT=30">
+                                            ทุกวัน 30 วัน
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rrule-example" 
+                                                data-rrule="FREQ=WEEKLY;INTERVAL=2;COUNT=10">
+                                            ทุก 2 สัปดาห์ 10 ครั้ง
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rrule-example" 
+                                                data-rrule="FREQ=MONTHLY;BYDAY=1MO;COUNT=12">
+                                            จันทร์แรกของเดือน 12 ครั้ง
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info mt-3">
+                                    <small>
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        <strong>คำแนะนำ RRULE:</strong><br>
+                                        • <code>FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=12</code> = จันทร์-พุธ-ศุกร์ รวม 12 ครั้ง<br>
+                                        • <code>FREQ=DAILY;COUNT=30</code> = ทุกวันเป็นเวลา 30 วัน<br>
+                                        • <code>FREQ=WEEKLY;INTERVAL=2;COUNT=10</code> = ทุก 2 สัปดาห์ รวม 10 ครั้ง<br>
+                                        • <code>FREQ=MONTHLY;BYDAY=1MO</code> = จันทร์แรกของทุกเดือน
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ปุ่มควบคุม -->
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('appointments') }}" class="btn btn-outline-secondary me-md-2">
+                            <i class="fas fa-arrow-left me-1"></i>กลับ
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save me-1"></i>สร้างนัดหมายเกิดซ้ำ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- คำแนะนำการใช้งาน -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>คำแนะนำการใช้งาน
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-primary">การใช้แบบรายสัปดาห์:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check-circle text-success me-2"></i>เหมาะสำหรับการฟอกไตประจำ</li>
+                            <li><i class="fas fa-check-circle text-success me-2"></i>เลือกวันที่ต้องการได้หลายวัน</li>
+                            <li><i class="fas fa-check-circle text-success me-2"></i>กำหนดจำนวนสัปดาห์ได้</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-primary">การใช้แบบกำหนดเอง:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-cog text-primary me-2"></i>รูปแบบที่ซับซ้อนมากขึ้น</li>
+                            <li><i class="fas fa-cog text-primary me-2"></i>ใช้มาตรฐาน RFC 5545</li>
+                            <li><i class="fas fa-cog text-primary me-2"></i>มีตัวอย่างให้เลือกใช้</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>หมายเหตุ:</strong> วันที่สิ้นสุดจะถูกคำนวณอัตโนมัติหากไม่ระบุ และระบบจะสร้างนัดหมายทั้งหมดในครั้งเดียวตามรูปแบบที่กำหนด
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const weeklyRadio = document.getElementById('weekly');
+    const customRadio = document.getElementById('custom');
+    const weeklyOptions = document.getElementById('weeklyOptions');
+    const customOptions = document.getElementById('customOptions');
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+
+    // จัดการการแสดง/ซ่อนตัวเลือก
+    function toggleOptions() {
+        if (weeklyRadio.checked) {
+            weeklyOptions.style.display = 'block';
+            customOptions.style.display = 'none';
+        } else if (customRadio.checked) {
+            weeklyOptions.style.display = 'none';
+            customOptions.style.display = 'block';
+        }
+    }
+
+    weeklyRadio.addEventListener('change', toggleOptions);
+    customRadio.addEventListener('change', toggleOptions);
+
+    // ตั้งค่าวันที่สิ้นสุดอัตโนมัติ
+    startDateInput.addEventListener('change', function() {
+        if (this.value && !endDateInput.value) {
+            endDateInput.value = this.value; // ใช้วันเดียวกัน
+        }
+    });
+
+    // จัดการปุ่มตัวอย่าง RRULE
+    document.querySelectorAll('.rrule-example').forEach(button => {
+        button.addEventListener('click', function() {
+            const rrule = this.getAttribute('data-rrule');
+            document.getElementById('custom_rrule').value = rrule;
+            
+            // เพิ่มเอฟเฟกต์ visual feedback
+            this.classList.add('btn-success');
+            this.classList.remove('btn-outline-secondary');
+            setTimeout(() => {
+                this.classList.remove('btn-success');
+                this.classList.add('btn-outline-secondary');
+            }, 1000);
+        });
+    });
+
+    // ตั้งค่าวันที่เริ่มต้นเป็นวันนี้
+    const today = new Date().toISOString().split('T')[0];
+    if (!startDateInput.value) {
+        startDateInput.value = today;
+    }
+
+    // การส่งฟอร์ม
+    document.getElementById('recurringForm').addEventListener('submit', function(e) {
+        const recurrenceType = document.querySelector('input[name="recurrence_type"]:checked').value;
+        
+        if (recurrenceType === 'weekly') {
+            // ตรวจสอบว่าเลือกวันในสัปดาห์หรือไม่
+            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+            const selectedDays = days.filter(day => 
+                document.getElementById(day) && document.getElementById(day).checked
+            );
+            
+            if (selectedDays.length === 0) {
+                e.preventDefault();
+                alert('กรุณาเลือกวันที่ต้องการให้เกิดซ้ำอย่างน้อย 1 วัน');
+                return;
+            }
+        } else if (recurrenceType === 'custom') {
+            // ตรวจสอบว่ากรอก RRULE หรือไม่
+            const rrule = document.getElementById('custom_rrule').value.trim();
+            if (!rrule) {
+                e.preventDefault();
+                alert('กรุณากรอก RRULE สำหรับการเกิดซ้ำแบบกำหนดเอง');
+                return;
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

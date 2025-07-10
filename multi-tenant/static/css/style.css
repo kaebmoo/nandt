@@ -1,0 +1,774 @@
+/* static/css/style.css - Merged and Optimized Version */
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+/* ปรับแต่งสไตล์ทั่วไป */
+body {
+    font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* ปรับแต่ง navbar */
+.navbar-brand {
+    font-weight: 700; /* รวม bold จากเดิม */
+}
+
+.nav-link.active {
+    font-weight: 600;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 0.375rem;
+}
+
+/* ปรับแต่งการ์ด - รวมจากเดิม */
+.card {
+    border: none;
+    border-radius: 0.5rem; /* ใช้ค่าเดิม */
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075), 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    border-radius: 0.5rem 0.5rem 0 0 !important; /* ใช้ค่าเดิม */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+/* ปรับแต่งการ์ดสำหรับนัดหมาย - รวมจากเดิม */
+.appointment-card {
+    transition: all 0.2s ease; /* ใช้ timing เดิม */
+    border-left-width: 4px !important;
+    margin-bottom: 10px;
+}
+
+.appointment-card:hover {
+    transform: translateY(-3px); /* ใช้ค่าเดิม */
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1); /* ใช้ค่าเดิม */
+}
+
+.appointment-card.status-completed {
+    border-left-color: #28a745 !important;
+    background-color: #f8fff9;
+}
+
+.appointment-card.status-cancelled {
+    border-left-color: #dc3545 !important;
+    background-color: #fff8f8;
+}
+
+.appointment-card.status-missed {
+    border-left-color: #6c757d !important;
+    background-color: #f8f9fa;
+}
+
+/* ปรับแต่ง container สำหรับรายการนัดหมาย */
+.calendar-container {
+    height: 600px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.calendar-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.calendar-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* ปรับแต่งฟอร์ม - รวมจากเดิม */
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff; /* ใช้ค่าเดิม */
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* ใช้ค่าเดิม */
+}
+
+/* ปรับแต่งปุ่ม - รวมจากเดิม */
+.btn {
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background-color: #007bff; /* ใช้ค่าเดิม */
+    border-color: #007bff; /* ใช้ค่าเดิม */
+}
+
+.btn-primary:hover {
+    background-color: #0069d9; /* ใช้ค่าเดิม */
+    border-color: #0062cc; /* ใช้ค่าเดิม */
+}
+
+/* ปรับแต่ง alert - รวมจากเดิม */
+.alert {
+    border: none;
+    border-radius: 0.5rem; /* ใช้ค่าเดิม */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ปรับแต่ง badge */
+.badge {
+    font-size: 0.8em;
+    padding: 0.5em 0.8em;
+}
+
+/* ปรับแต่ง modal */
+.modal-content {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 1rem 1rem 0 0;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 0 0 1rem 1rem;
+}
+
+/* ปรับแต่ง tab - รวมจากเดิม */
+.nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+    border: none; /* ใช้ค่าเดิม */
+    color: #495057; /* ใช้ค่าเดิม */
+    font-weight: 500;
+    padding: 1rem 1.5rem;
+    margin-bottom: -2px;
+    transition: all 0.3s ease;
+    border-bottom: 2px solid transparent; /* ใช้ค่าเดิม */
+}
+
+.nav-tabs .nav-link:hover {
+    border-color: transparent;
+    color: #0d6efd;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff; /* ใช้ค่าเดิม */
+    background-color: transparent; /* ใช้ค่าเดิม */
+    border-color: transparent transparent #007bff transparent; /* ใช้ค่าเดิม */
+    border-bottom: 2px solid #007bff; /* ใช้ค่าเดิม */
+    font-weight: 600;
+}
+
+/* ปรับแต่งสำหรับ recurring options */
+#recurring-options {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+/* ปรับแต่งสำหรับ subcalendar cards */
+.subcalendar-card {
+    transition: all 0.3s ease;
+}
+
+.subcalendar-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+/* ปรับแต่งสำหรับ loading spinner */
+.spinner-border {
+    animation: spinner-border 0.75s linear infinite;
+}
+
+/* ปรับแต่งสำหรับ footer */
+footer {
+    margin-top: auto;
+    background-color: #f8f9fa !important;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Container responsiveness - รวมจากเดิม */
+@media (min-width: 992px) {
+    .container {
+        max-width: 960px; /* ใช้ค่าเดิม */
+    }
+}
+
+@media (min-width: 1200px) {
+    .container {
+        max-width: 1140px; /* ใช้ค่าเดิม */
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .calendar-container {
+        height: 400px;
+    }
+    
+    .appointment-card .card-body {
+        padding: 1rem 0.75rem;
+    }
+    
+    .appointment-card .card-title {
+        font-size: 1rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .row > [class*="col-"] {
+        margin-bottom: 1rem;
+    }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #212529;
+        color: #fff;
+    }
+    
+    .card {
+        background-color: #343a40;
+        color: #fff;
+    }
+    
+    .modal-content {
+        background-color: #343a40;
+        color: #fff;
+    }
+    
+    .form-control, .form-select {
+        background-color: #495057;
+        border-color: #6c757d;
+        color: #fff;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        background-color: #495057;
+        border-color: #80bdff;
+        color: #fff;
+    }
+}
+
+/* เพิ่มในท้าย style.css - SaaS Features */
+
+/* ========================
+   SaaS Specific Styles
+   ======================== */
+
+/* Organization/Subscription Status */
+.subscription-warning {
+    border-left: 4px solid #ffc107 !important;
+    background-color: #fff9e6;
+}
+
+.subscription-danger {
+    border-left: 4px solid #dc3545 !important;
+    background-color: #ffe6e6;
+}
+
+.subscription-success {
+    border-left: 4px solid #28a745 !important;
+    background-color: #e8f5e9;
+}
+
+/* Navbar Enhancements */
+.navbar-brand small {
+    font-size: 0.7rem;
+    font-weight: 400;
+    display: block;
+    margin-top: -2px;
+}
+
+.dropdown-header {
+    color: #6c757d !important;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Badge Enhancements */
+.badge {
+    font-size: 0.75em;
+    font-weight: 500;
+}
+
+.badge.bg-warning {
+    color: #000 !important;
+}
+
+/* Usage Progress Indicators */
+.usage-indicator {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.usage-indicator .progress {
+    height: 6px;
+    border-radius: 3px;
+    background-color: #e9ecef;
+}
+
+.usage-indicator .progress-bar {
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+
+/* Plan Cards */
+.plan-card {
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.plan-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.plan-card.current-plan {
+    border-color: #28a745;
+    background: linear-gradient(135deg, #f8fff9 0%, #e8f5e9 100%);
+}
+
+.plan-card.recommended {
+    border-color: #007bff;
+    background: linear-gradient(135deg, #f8fcff 0%, #e3f2fd 100%);
+}
+
+.plan-card .card-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.plan-card.current-plan .card-header {
+    background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+.plan-card.recommended .card-header {
+    background: linear-gradient(135deg, #007bff, #6610f2);
+}
+
+/* Pricing Display */
+.price-display {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.price-currency {
+    font-size: 1.2rem;
+    vertical-align: top;
+    margin-right: 0.2rem;
+}
+
+.price-period {
+    font-size: 0.9rem;
+    color: #6c757d;
+    font-weight: 400;
+}
+
+/* Feature Lists */
+.feature-list {
+    list-style: none;
+    padding: 0;
+}
+
+.feature-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.feature-list li:last-child {
+    border-bottom: none;
+}
+
+.feature-list .fas {
+    color: #28a745;
+    margin-right: 0.75rem;
+    width: 16px;
+}
+
+/* Auth Forms */
+.auth-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.auth-card {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.auth-form .form-control {
+    border-radius: 0.5rem;
+    border: 1px solid #e1e5e9;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.auth-form .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+/* Dashboard Cards */
+.dashboard-card {
+    border: none;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    transition: all 0.3s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-stat {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.dashboard-stat h4 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-stat.primary {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+}
+
+.dashboard-stat.success {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    color: white;
+}
+
+.dashboard-stat.info {
+    background: linear-gradient(135deg, #17a2b8, #117a8b);
+    color: white;
+}
+
+.dashboard-stat.warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+    color: #212529;
+}
+
+/* Quick Actions */
+.quick-action {
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    min-height: 120px;
+    border-radius: 0.5rem;
+    border: 2px solid #e9ecef;
+}
+
+.quick-action:hover {
+    color: #007bff;
+    border-color: #007bff;
+    background-color: #f8fcff;
+    transform: translateY(-2px);
+}
+
+.quick-action i {
+    margin-bottom: 0.75rem;
+    transition: transform 0.3s ease;
+}
+
+.quick-action:hover i {
+    transform: scale(1.1);
+}
+
+/* Landing Page */
+.hero-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 5rem 0;
+}
+
+.feature-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    background: linear-gradient(135deg, #007bff, #6610f2);
+    color: white;
+    font-size: 2rem;
+}
+
+.testimonial-card {
+    border: none;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    padding: 2rem;
+    margin: 1rem 0;
+}
+
+/* Billing History */
+.billing-table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.billing-table td {
+    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Locked Features */
+.locked-feature {
+    position: relative;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.locked-feature::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 0.375rem;
+    z-index: 1;
+}
+
+.locked-feature .lock-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    color: #ffc107;
+    font-size: 2rem;
+}
+
+/* Reports */
+.report-card {
+    border: none;
+    border-radius: 0.75rem;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.report-stat {
+    padding: 1.5rem;
+    text-align: center;
+    border-radius: 0.75rem;
+    color: white;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.report-stat h4 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Responsive Improvements */
+@media (max-width: 768px) {
+    .dashboard-stat {
+        padding: 1.5rem 1rem;
+    }
+    
+    .dashboard-stat h4 {
+        font-size: 1.8rem;
+    }
+    
+    .quick-action {
+        min-height: 100px;
+        padding: 1.5rem 1rem;
+    }
+    
+    .plan-card {
+        margin-bottom: 2rem;
+    }
+    
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+    }
+    
+    .hero-section {
+        padding: 3rem 0;
+    }
+    
+    .price-display {
+        font-size: 2rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .navbar-brand small {
+        display: none;
+    }
+    
+    .dashboard-stat h4 {
+        font-size: 1.5rem;
+    }
+    
+    .quick-action {
+        min-height: 80px;
+        padding: 1rem;
+    }
+    
+    .auth-card {
+        margin: 1rem;
+        border-radius: 0.75rem;
+    }
+    
+    .billing-table {
+        font-size: 0.9rem;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .subscription-warning,
+    .subscription-danger,
+    .subscription-success {
+        border-left: 4px solid #000 !important;
+        background-color: #f8f9fa !important;
+    }
+    
+    .dashboard-stat {
+        color: #000 !important;
+        background: #f8f9fa !important;
+    }
+    
+    .badge {
+        color: #000 !important;
+        background-color: #f8f9fa !important;
+        border: 1px solid #000;
+    }
+}
+
+/* Dark Theme Support */
+@media (prefers-color-scheme: dark) {
+    .auth-card {
+        background: rgba(33, 37, 41, 0.95);
+        color: #fff;
+    }
+    
+    .dashboard-card {
+        background: linear-gradient(135deg, #343a40 0%, #495057 100%);
+        color: #fff;
+    }
+    
+    .plan-card {
+        background-color: #343a40;
+        color: #fff;
+    }
+    
+    .plan-card.current-plan {
+        background: linear-gradient(135deg, #1e3a28 0%, #2d5a3d 100%);
+    }
+    
+    .plan-card.recommended {
+        background: linear-gradient(135deg, #1e2a4a 0%, #2d4a6d 100%);
+    }
+    
+    .billing-table th {
+        background-color: #495057;
+        color: #fff;
+    }
+    
+    .billing-table td {
+        border-color: #495057;
+    }
+}

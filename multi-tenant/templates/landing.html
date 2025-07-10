@@ -1,0 +1,238 @@
+<!-- templates/landing.html -->
+{% extends 'base.html' %}
+
+{% block title %}NandT - ระบบจัดการนัดหมายสำหรับ รพ.สต.{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="row align-items-center min-vh-75 py-5">
+    <div class="col-lg-6">
+        <h1 class="display-4 fw-bold text-primary mb-4">
+            ระบบจัดการนัดหมาย<br>
+            <span class="text-secondary">สำหรับ รพ.สต.</span>
+        </h1>
+        <p class="lead mb-4">
+            เครื่องมือที่ช่วยให้โรงพยาบาลส่งเสริมสุขภาพตำบลจัดการตารางนัดหมายผู้ป่วยได้อย่างมีประสิทธิภาพ 
+            พร้อมระบบฟอกไตและการดูแลผู้ป่วยครบครัน
+        </p>
+        <div class="d-flex gap-3 mb-4">
+            <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg px-4">
+                <i class="fas fa-rocket me-2"></i>เริ่มใช้งานฟรี
+            </a>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary btn-lg px-4">
+                <i class="fas fa-sign-in-alt me-2"></i>เข้าสู่ระบบ
+            </a>
+        </div>
+        <div class="row text-center">
+            <div class="col-4">
+                <h4 class="text-primary fw-bold">14 วัน</h4>
+                <small class="text-muted">ทดลองใช้ฟรี</small>
+            </div>
+            <div class="col-4">
+                <h4 class="text-primary fw-bold">ไม่จำกัด</h4>
+                <small class="text-muted">ผู้ใช้งาน</small>
+            </div>
+            <div class="col-4">
+                <h4 class="text-primary fw-bold">24/7</h4>
+                <small class="text-muted">การสนับสนุน</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 text-center">
+        <div class="bg-light rounded-3 p-5">
+            <i class="fas fa-hospital fa-5x text-primary mb-4"></i>
+            <h3 class="text-secondary">รองรับ รพ.สต. ทั่วประเทศ</h3>
+            <p class="text-muted">ระบบที่ออกแบบมาเพื่อตอบสนองความต้องการของโรงพยาบาลส่งเสริมสุขภาพตำบล</p>
+        </div>
+    </div>
+</div>
+
+<!-- Features Section -->
+<div class="row py-5">
+    <div class="col-12 text-center mb-5">
+        <h2 class="display-5 fw-bold">ฟีเจอร์ที่ครบครัน</h2>
+        <p class="lead text-muted">ทุกสิ่งที่ รพ.สต. ต้องการในการจัดการนัดหมาย</p>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-calendar-alt fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">จัดการนัดหมาย</h5>
+                <p class="text-muted">สร้าง แก้ไข และติดตามนัดหมายผู้ป่วยได้อย่างง่ายดาย พร้อมระบบแจ้งเตือนอัตโนมัติ</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-user-nurse fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">ระบบฟอกไต</h5>
+                <p class="text-muted">จัดการตารางฟอกไตแบบเฉพาะทาง พร้อมการติดตามสถานะผู้ป่วยแบบเรียลไทม์</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-info rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-file-import fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">นำเข้าข้อมูล</h5>
+                <p class="text-muted">นำเข้าข้อมูลผู้ป่วยจากไฟล์ Excel หรือ CSV ได้อย่างรวดเร็ว ประหยัดเวลาในการทำงาน</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-chart-bar fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">รายงานและสถิติ</h5>
+                <p class="text-muted">สร้างรายงานการใช้งานและสถิติผู้ป่วยเพื่อการวางแผนและการตัดสินใจ</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-purple rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px; background-color: #6f42c1 !important;">
+                    <i class="fas fa-users fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">ระบบผู้ใช้หลายคน</h5>
+                <p class="text-muted">รองรับการใช้งานหลายคนพร้อมกัน แยกสิทธิ์การเข้าถึงตามบทบาทหน้าที่</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="bg-danger rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-shield-alt fa-2x text-white"></i>
+                </div>
+                <h5 class="fw-bold">ความปลอดภัย</h5>
+                <p class="text-muted">ระบบรักษาความปลอดภัยข้อมูลตามมาตรฐาน พร้อม 2FA และการสำรองข้อมูล</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pricing Section -->
+<div class="row py-5 bg-light rounded-3">
+    <div class="col-12 text-center mb-5">
+        <h2 class="display-5 fw-bold">แพ็คเกจและราคา</h2>
+        <p class="lead text-muted">เลือกแพ็คเกจที่เหมาะกับขนาดของ รพ.สต. ของคุณ</p>
+    </div>
+    
+    {% for plan_key, plan_data in pricing_plans.items() %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 {% if plan_key.value == 'basic' %}border-primary{% endif %} position-relative">
+            {% if plan_key.value == 'basic' %}
+            <div class="position-absolute top-0 start-50 translate-middle">
+                <span class="badge bg-primary px-3 py-2">แนะนำ</span>
+            </div>
+            {% endif %}
+            <div class="card-header text-center {% if plan_key.value == 'basic' %}bg-primary text-white{% else %}bg-light{% endif %}">
+                <h4 class="fw-bold">{{ plan_data.name }}</h4>
+                {% if plan_data.price_monthly == 0 %}
+                    <h2 class="display-4 fw-bold">ฟรี</h2>
+                {% else %}
+                    <h2 class="display-4 fw-bold">฿{{ "{:,}".format(plan_data.price_monthly) }}</h2>
+                    <p class="mb-0">ต่อเดือน</p>
+                    <small class="{% if plan_key.value == 'basic' %}text-white-50{% else %}text-muted{% endif %}">
+                        หรือ ฿{{ "{:,}".format(plan_data.price_yearly) }}/ปี (ประหยัด 2 เดือน)
+                    </small>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    {% if plan_data.appointments_per_month == -1 %}
+                        <h5><i class="fas fa-infinity text-success"></i> นัดหมายไม่จำกัด</h5>
+                    {% else %}
+                        <h5>{{ "{:,}".format(plan_data.appointments_per_month) }} นัดหมาย/เดือน</h5>
+                    {% endif %}
+                    
+                    {% if plan_data.max_staff == -1 %}
+                        <p class="text-muted">เจ้าหน้าที่ไม่จำกัด</p>
+                    {% else %}
+                        <p class="text-muted">เจ้าหน้าที่ {{ plan_data.max_staff }} คน</p>
+                    {% endif %}
+                </div>
+                
+                <ul class="list-unstyled">
+                    {% for feature in plan_data.features %}
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>{{ feature }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-footer">
+                <div class="d-grid">
+                    <a href="{{ url_for('auth.register') }}" 
+                       class="btn {% if plan_key.value == 'basic' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        {% if plan_data.price_monthly == 0 %}
+                            เริ่มใช้งานฟรี
+                        {% else %}
+                            ทดลองใช้ 14 วัน
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- CTA Section -->
+<div class="row py-5 text-center">
+    <div class="col-12">
+        <h2 class="display-5 fw-bold mb-4">พร้อมเริ่มต้นแล้วใช่ไหม?</h2>
+        <p class="lead text-muted mb-4">
+            เริ่มใช้งานฟรี 14 วัน ไม่ต้องใช้บัตรเครดิต<br>
+            ตั้งค่าเสร็จใน 5 นาที พร้อมใช้งานทันที
+        </p>
+        <div class="d-flex justify-content-center gap-3">
+            <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg px-5">
+                <i class="fas fa-rocket me-2"></i>เริ่มใช้งานเลย
+            </a>
+            <a href="#" class="btn btn-outline-secondary btn-lg px-4" data-bs-toggle="modal" data-bs-target="#demoModal">
+                <i class="fas fa-play me-2"></i>ดูตัวอย่าง
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Demo Modal -->
+<div class="modal fade" id="demoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ตัวอย่างการใช้งาน</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="ratio ratio-16x9">
+                    <div class="bg-light d-flex align-items-center justify-content-center">
+                        <div>
+                            <i class="fas fa-play-circle fa-5x text-primary mb-3"></i>
+                            <h4>วิดีโอแนะนำการใช้งาน</h4>
+                            <p class="text-muted">เร็วๆ นี้</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

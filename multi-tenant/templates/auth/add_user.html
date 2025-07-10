@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}เพิ่มผู้ใช้ใหม่ - NandT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-user-plus me-2"></i>เพิ่มผู้ใช้ใหม่</h2>
+    <a href="{{ url_for('auth.manage_users') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>กลับไปจัดการผู้ใช้
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h5 class="mb-0">ข้อมูลผู้ใช้</h5>
+    </div>
+    <div class="card-body">
+        <form id="addUserForm">
+            <div class="mb-3">
+                <label for="first_name" class="form-label">ชื่อ <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="first_name" name="first_name" required>
+            </div>
+            <div class="mb-3">
+                <label for="last_name" class="form-label">นามสกุล <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="last_name" name="last_name" required>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">อีเมล <span class="text-danger">*</span></label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">รหัสผ่าน <span class="text-danger">*</span></label>
+                <input type="password" class="form-control" id="password" name="password" required minlength="8">
+                <div class="form-text">รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร</div>
+            </div>
+            <div class="mb-3">
+                <label for="role" class="form-label">บทบาท</label>
+                <select class="form-select" id="role" name="role">
+                    <option value="staff">เจ้าหน้าที่</option>
+                    <option value="admin">ผู้ดูแล</option>
+                </select>
+            </div>
+            
+            <div class="d-grid mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-2"></i>เพิ่มผู้ใช้
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to show notification (fallback if app.js not fully loaded)
+    function showLocalNotification(message, type) {
+        if (window.app && typeof window.app.showNotification === 'function') {
+            window.app.showNotification(message, type);
+        } else {
+            // Fallback to SweetAlert2 toast if app.js is not initialized
+            if (typeof Toast !== 'undefined') {
+                Toast.fire({
+                    icon: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+                    title: message
+                });
+            } else {
+                alert(message); // Last resort
+            }
+        }
+    }
+
+    document.getElementById('addUserForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        const submitBtn = this.querySelector('button[type="submit"]');
+        
+        // Disable button and show loading
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังเพิ่ม...';
+        
+        try {
+            const response = await fetch('{{ url_for("auth.add_user") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showLocalNotification(result.message, 'success');
+                this.reset(); // Clear form
+                // Optionally redirect or refresh user list
+                setTimeout(() => {
+                    window.location.href = '{{ url_for("auth.manage_users") }}';
+                }, 1500);
+            } else {
+                showLocalNotification(result.error, 'error');
+            }
+        } catch (error) {
+            console.error('Error adding user:', error);
+            showLocalNotification('เกิดข้อผิดพลาดในการเพิ่มผู้ใช้', 'error');
+        } finally {
+            // Re-enable button
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-plus-circle me-2"></i>เพิ่มผู้ใช้';
+        }
+    });
+});
+</script>
+{% endblock %}

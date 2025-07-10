@@ -1,0 +1,109 @@
+<!-- templates/auth/login.html -->
+{% extends 'base.html' %}
+
+{% block title %}เข้าสู่ระบบ - NandT{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <i class="fas fa-hospital fa-3x text-primary mb-3"></i>
+                    <h3 class="fw-bold">เข้าสู่ระบบ</h3>
+                    <p class="text-muted">ระบบจัดการนัดหมาย รพ.สต.</p>
+                </div>
+
+                <form id="loginForm" method="POST">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">อีเมล</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">รหัสผ่าน</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    
+                    <div id="otpSection" class="mb-3" style="display: none;">
+                        <label for="otp_code" class="form-label">รหัส OTP (2FA)</label>
+                        <input type="text" class="form-control" id="otp_code" name="otp_code" maxlength="6" placeholder="123456">
+                        <div class="form-text">กรุณากรอกรหัส 6 หลักจากแอป Authenticator</div>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="remember">
+                        <label class="form-check-label" for="remember">จดจำการเข้าสู่ระบบ</label>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-sign-in-alt me-2"></i>เข้าสู่ระบบ
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="mb-2">
+                        <a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none">
+                            ลืมรหัสผ่าน?
+                        </a>
+                    </p>
+                    <p class="text-muted">
+                        ยังไม่มีบัญชี? 
+                        <a href="{{ url_for('auth.register') }}" class="text-decoration-none">
+                            สมัครสมาชิก
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        const response = await fetch('{{ url_for("auth.login") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.require_2fa) {
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('otp_code').focus();
+            Toast.fire({
+                icon: 'info',
+                title: 'กรุณากรอกรหัส OTP'
+            });
+        } else if (result.success) {
+            Toast.fire({
+                icon: 'success',
+                title: 'เข้าสู่ระบบสำเร็จ'
+            });
+            window.location.href = result.redirect_url;
+        } else {
+            Toast.fire({
+                icon: 'error',
+                title: result.error
+            });
+        }
+    } catch (error) {
+        Toast.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด'
+        });
+    }
+});
+</script>
+{% endblock %}

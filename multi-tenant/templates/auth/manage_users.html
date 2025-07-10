@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+
+{% block title %}จัดการผู้ใช้ - NandT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-users-cog me-2"></i>จัดการผู้ใช้</h2>
+    <a href="{{ url_for('auth.add_user') }}" class="btn btn-primary">
+        <i class="fas fa-user-plus me-2"></i>เพิ่มผู้ใช้ใหม่
+    </a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">รายการผู้ใช้ในองค์กร</h5>
+    </div>
+    <div class="card-body">
+        {% if users %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ชื่อ-นามสกุล</th>
+                        <th>อีเมล</th>
+                        <th>บทบาท</th>
+                        <th>สถานะ</th>
+                        <th>เข้าสู่ระบบล่าสุด</th>
+                        <th>การดำเนินการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.get_full_name() }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>
+                            {% if user.role == 'admin' %}
+                                <span class="badge bg-primary">ผู้ดูแล</span>
+                            {% else %}
+                                <span class="badge bg-secondary">เจ้าหน้าที่</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.is_active %}
+                                <span class="badge bg-success">ใช้งานอยู่</span>
+                            {% else %}
+                                <span class="badge bg-danger">ถูกระงับ</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'ไม่เคย' }}</td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm {% if user.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %} toggle-user-status-btn"
+                                        data-user-id="{{ user.id }}"
+                                        data-current-status="{{ user.is_active }}">
+                                    {% if user.is_active %}
+                                        <i class="fas fa-user-slash me-1"></i>ระงับ
+                                    {% else %}
+                                        <i class="fas fa-user-check me-1"></i>เปิดใช้งาน
+                                    {% endif %}
+                                </button>
+                                <button class="btn btn-sm btn-outline-info reset-password-btn"
+                                        data-user-id="{{ user.id }}">
+                                    <i class="fas fa-key me-1"></i>รีเซ็ตรหัสผ่าน
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-user-btn"
+                                        data-user-id="{{ user.id }}"
+                                        data-user-name="{{ user.get_full_name() }}">
+                                    <i class="fas fa-trash-alt me-1"></i>ลบ
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center" role="alert">
+            <i class="fas fa-info-circle me-2"></i>ยังไม่มีผู้ใช้ในองค์กรของคุณ
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to show notification (fallback if app.js not fully loaded)
+    function showLocalNotification(message, type) {
+        if (window.app && typeof window.app.showNotification === 'function') {
+            window.app.showNotification(message, type);
+        } else {
+            // Fallback to SweetAlert2 toast if app.js is not initialized
+            if (typeof Toast !== 'undefined') {
+                Toast.fire({
+                    icon: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+                    title: message
+                });
+            } else {
+                alert(message); // Last resort
+            }
+        }
+    }
+
+    // Toggle User Status
+    document.querySelectorAll('.toggle-user-status-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            const userId = this.dataset.userId;
+            const currentStatus = this.dataset.currentStatus === 'True'; // Convert string to boolean
+            const actionText = currentStatus ? 'ระงับ' : 'เปิดใช้งาน';
+            
+            const result = await Swal.fire({
+                title: `${actionText}ผู้ใช้นี้?`,
+                text: `คุณแน่ใจหรือไม่ที่จะ${actionText}ผู้ใช้รายนี้?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: `ยืนยัน${actionText}`,
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: currentStatus ? '#dc3545' : '#28a745'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(`/auth/toggle-user-status/${userId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showLocalNotification(data.message, 'success');
+                        window.location.reload(); // Refresh the page to show updated status
+                    } else {
+                        showLocalNotification(data.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error toggling user status:', error);
+                    showLocalNotification('เกิดข้อผิดพลาดในการเปลี่ยนสถานะผู้ใช้', 'error');
+                }
+            }
+        });
+    });
+
+    // Reset User Password
+    document.querySelectorAll('.reset-password-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            const userId = this.dataset.userId;
+            
+            const result = await Swal.fire({
+                title: 'รีเซ็ตรหัสผ่านผู้ใช้นี้?',
+                text: 'ระบบจะสร้างรหัสผ่านใหม่และส่งไปยังอีเมลของผู้ใช้',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'ยืนยันรีเซ็ต',
+                cancelButtonText: 'ยกเลิก'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(`/auth/reset-user-password/${userId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showLocalNotification(data.message, 'success');
+                    } else {
+                        showLocalNotification(data.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error resetting user password:', error);
+                    showLocalNotification('เกิดข้อผิดพลาดในการรีเซ็ตรหัสผ่าน', 'error');
+                }
+            }
+        });
+    });
+
+    // Delete User
+    document.querySelectorAll('.delete-user-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            const userId = this.dataset.userId;
+            const userName = this.dataset.userName;
+
+            const result = await Swal.fire({
+                title: `ลบผู้ใช้ ${userName}?`,
+                text: 'การดำเนินการนี้ไม่สามารถย้อนกลับได้ ผู้ใช้จะถูกลบออกจากระบบ',
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonText: 'ยืนยันลบ',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#dc3545'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(`/auth/delete-user/${userId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showLocalNotification(data.message, 'success');
+                        window.location.reload(); // Refresh the page after deletion
+                    } else {
+                        showLocalNotification(data.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showLocalNotification('เกิดข้อผิดพลาดในการลบผู้ใช้', 'error');
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

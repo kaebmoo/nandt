@@ -1,0 +1,32 @@
+<!-- templates/errors/404.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <div class="error-page">
+            <h1 class="display-1 text-muted">404</h1>
+            <h2 class="mb-3">ไม่พบหน้าที่ต้องการ</h2>
+            <p class="lead">ขออภัย หน้าที่คุณค้นหาไม่พบในระบบ</p>
+            <div class="mt-4">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="fas fa-home me-2"></i>กลับหน้าแรก
+                </a>
+                <a href="javascript:history.back()" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>ย้อนกลับ
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 60px 0;
+}
+.display-1 {
+    font-size: 8rem;
+    font-weight: 300;
+}
+</style>
+{% endblock %}

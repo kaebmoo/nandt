@@ -1,0 +1,461 @@
+<!-- templates/billing/choose_plan.html -->
+{% extends 'base.html' %}
+
+{% block title %}เลือกแพ็คเกจ - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 text-center mb-5">
+        <h2 class="display-5 fw-bold">เลือกแพ็คเกจที่เหมาะสม</h2>
+        <p class="lead text-muted">สำหรับ {{ organization.name }}</p>
+        {% if current_plan %}
+        <p class="text-info">
+            <i class="fas fa-info-circle me-1"></i>
+            แพ็คเกจปัจจุบัน: <strong>{{ pricing_plans[current_plan].name }}</strong>
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    {% for plan_key, plan_data in pricing_plans.items() %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 {% if plan_key == current_plan %}border-success{% elif plan_key.value == 'basic' %}border-primary{% endif %} position-relative">
+            {% if plan_key == current_plan %}
+            <div class="position-absolute top-0 start-50 translate-middle">
+                <span class="badge bg-success px-3 py-2">แพ็คเกจปัจจุบัน</span>
+            </div>
+            {% elif plan_key.value == 'basic' %}
+            <div class="position-absolute top-0 start-50 translate-middle">
+                <span class="badge bg-primary px-3 py-2">แนะนำ</span>
+            </div>
+            {% endif %}
+            
+            <div class="card-header text-center {% if plan_key == current_plan %}bg-success text-white{% elif plan_key.value == 'basic' %}bg-primary text-white{% else %}bg-light{% endif %}">
+                <h4 class="fw-bold">{{ plan_data.name }}</h4>
+                {% if plan_data.price_monthly == 0 %}
+                    <h2 class="display-4 fw-bold">ฟรี</h2>
+                {% else %}
+                    <h2 class="display-4 fw-bold">฿{{ "{:,}".format(plan_data.price_monthly) }}</h2>
+                    <p class="mb-0">ต่อเดือน</p>
+                    <small class="{% if plan_key == current_plan or plan_key.value == 'basic' %}text-white-50{% else %}text-muted{% endif %}">
+                        หรือ ฿{{ "{:,}".format(plan_data.price_yearly) }}/ปี (ประหยัด 2 เดือน)
+                    </small>
+                {% endif %}
+            </div>
+            
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    {% if plan_data.appointments_per_month == -1 %}
+                        <h5><i class="fas fa-infinity text-success"></i> นัดหมายไม่จำกัด</h5>
+                    {% else %}
+                        <h5>{{ "{:,}".format(plan_data.appointments_per_month) }} นัดหมาย/เดือน</h5>
+                    {% endif %}
+                    
+                    {% if plan_data.max_staff == -1 %}
+                        <p class="text-muted">เจ้าหน้าที่ไม่จำกัด</p>
+                    {% else %}
+                        <p class="text-muted">เจ้าหน้าที่ {{ plan_data.max_staff }} คน</p>
+                    {% endif %}
+                </div>
+                
+                <ul class="list-unstyled">
+                    {% for feature in plan_data.features %}
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>{{ feature }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            <div class="card-footer">
+                {% if plan_key == current_plan %}
+                    <div class="d-grid">
+                        <button class="btn btn-success" disabled>
+                            <i class="fas fa-check me-2"></i>แพ็คเกจปัจจุบัน
+                        </button>
+                    </div>
+                {% else %}
+                    <div class="row g-2">
+                        {% if plan_data.price_monthly > 0 %}
+                        <div class="col-6">
+                            <button class="btn btn-outline-primary btn-sm w-100 select-plan" 
+                                    data-plan="{{ plan_key.value }}" 
+                                    data-cycle="monthly">
+                                รายเดือน
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-primary btn-sm w-100 select-plan" 
+                                    data-plan="{{ plan_key.value }}" 
+                                    data-cycle="yearly">
+                                รายปี (ประหยัด)
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="col-12">
+                            <button class="btn btn-outline-primary w-100 select-plan" 
+                                    data-plan="{{ plan_key.value }}" 
+                                    data-cycle="yearly">
+                                เลือกแพ็คเกจนี้
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row mt-4">
+    <div class="col-12 text-center">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>กลับสู่แดชบอร์ด
+        </a>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.select-plan').forEach(button => {
+    button.addEventListener('click', async function() {
+        const plan = this.dataset.plan;
+        const cycle = this.dataset.cycle;
+        
+        if (plan === 'free') {
+            // Handle free plan
+            const result = await Swal.fire({
+                title: 'เปลี่ยนเป็นแพ็คเกจฟรี?',
+                text: 'คุณจะสามารถใช้งานคุณสมบัติพื้นฐานได้',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ยกเลิก'
+            });
+            
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch('{{ url_for("billing.create_checkout_session") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            plan_type: plan,
+                            billing_cycle: cycle
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        window.location.href = data.redirect_url;
+                    } else {
+                        Toast.fire({
+                            icon: 'error',
+                            title: data.error
+                        });
+                    }
+                } catch (error) {
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด'
+                    });
+                }
+            }
+        } else {
+            // Handle paid plans
+            try {
+                const response = await fetch('{{ url_for("billing.create_checkout_session") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        plan_type: plan,
+                        billing_cycle: cycle
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.checkout_url) {
+                    window.location.href = data.checkout_url;
+                } else {
+                    Toast.fire({
+                        icon: 'error',
+                        title: data.error
+                    });
+                }
+            } catch (error) {
+                Toast.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด'
+                });
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
+
+---
+
+<!-- templates/billing/payment_success.html -->
+{% extends 'base.html' %}
+
+{% block title %}ชำระเงินสำเร็จ - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white text-center">
+                <i class="fas fa-check-circle fa-3x mb-3"></i>
+                <h3 class="mb-0">ชำระเงินสำเร็จ!</h3>
+            </div>
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <p class="lead">ขอบคุณสำหรับการสมัครสมาชิก</p>
+                    <p class="text-muted">แพ็คเกจของคุณจะเริ่มใช้งานภายในไม่กี่นาที</p>
+                </div>
+                
+                {% if session %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">รายละเอียดการชำระเงิน</h6>
+                        <p><strong>จำนวนเงิน:</strong> ฿{{ "{:,}".format((session.amount_total / 100)|int) }}</p>
+                        <p><strong>สถานะ:</strong> 
+                            {% if session.payment_status == 'paid' %}
+                                <span class="badge bg-success">ชำระเงินแล้ว</span>
+                            {% else %}
+                                <span class="badge bg-warning">{{ session.payment_status }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">ข้อมูลองค์กร</h6>
+                        <p><strong>องค์กร:</strong> {{ organization.name }}</p>
+                        <p><strong>อีเมล:</strong> {{ organization.contact_email }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>ขั้นตอนถัดไป:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>ตรวจสอบอีเมลยืนยันที่เราส่งให้</li>
+                        <li>เริ่มใช้งานคุณสมบัติใหม่ของแพ็คเกจ</li>
+                        <li>เพิ่มเจ้าหน้าที่เข้าระบบ (ถ้าต้องการ)</li>
+                    </ul>
+                </div>
+                
+                <div class="text-center">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg me-3">
+                        <i class="fas fa-home me-2"></i>ไปยังแดชบอร์ด
+                    </a>
+                    <a href="{{ url_for('billing.billing_history') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-receipt me-2"></i>ดูประวัติการเรียกเก็บเงิน
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+---
+
+<!-- templates/billing/billing_history.html -->
+{% extends 'base.html' %}
+
+{% block title %}ประวัติการเรียกเก็บเงิน - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-receipt me-2"></i>ประวัติการเรียกเก็บเงิน
+    </h2>
+    <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-outline-primary">
+        <i class="fas fa-credit-card me-2"></i>จัดการแพ็คเกจ
+    </a>
+</div>
+
+<!-- Current Subscription Info -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">ข้อมูลการสมัครสมาชิกปัจจุบัน</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>แพ็คเกจ:</strong> {{ organization.subscription_plan.value|title }}</p>
+                <p><strong>สถานะ:</strong> 
+                    {% if organization.subscription_status.value == 'active' %}
+                        <span class="badge bg-success">ใช้งานได้</span>
+                    {% elif organization.subscription_status.value == 'trial' %}
+                        <span class="badge bg-warning text-dark">ทดลองใช้</span>
+                    {% else %}
+                        <span class="badge bg-danger">{{ organization.subscription_status.value }}</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="col-md-6">
+                {% if organization.subscription_expires_at %}
+                <p><strong>หมดอายุ:</strong> {{ organization.subscription_expires_at.strftime('%d/%m/%Y') }}</p>
+                {% endif %}
+                {% if organization.subscription_status.value == 'active' %}
+                <button class="btn btn-sm btn-outline-danger cancel-subscription">
+                    <i class="fas fa-times me-1"></i>ยกเลิกการสมัครสมาชิก
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Subscription History -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">ประวัติการสมัครสมาชิก</h5>
+    </div>
+    <div class="card-body">
+        {% if subscriptions %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>แพ็คเกจ</th>
+                        <th>รอบการเรียกเก็บ</th>
+                        <th>จำนวนเงิน</th>
+                        <th>สถานะ</th>
+                        <th>วันที่สร้าง</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sub in subscriptions %}
+                    <tr>
+                        <td>{{ sub.plan_type.value|title }}</td>
+                        <td>{{ 'รายเดือน' if sub.billing_cycle == 'monthly' else 'รายปี' }}</td>
+                        <td>฿{{ "{:,}".format(sub.amount) }}</td>
+                        <td>
+                            {% if sub.status.value == 'active' %}
+                                <span class="badge bg-success">ใช้งานได้</span>
+                            {% elif sub.status.value == 'cancelled' %}
+                                <span class="badge bg-danger">ยกเลิกแล้ว</span>
+                            {% else %}
+                                <span class="badge bg-warning">{{ sub.status.value }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ sub.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted">
+            <p>ไม่มีประวัติการสมัครสมาชิก</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stripe Invoices -->
+{% if stripe_invoices %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">ใบแจ้งหนี้</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>เลขที่ใบแจ้งหนี้</th>
+                        <th>จำนวนเงิน</th>
+                        <th>สถานะ</th>
+                        <th>วันที่</th>
+                        <th>ดาวน์โหลด</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invoice in stripe_invoices %}
+                    <tr>
+                        <td>{{ invoice.number }}</td>
+                        <td>฿{{ "{:,}".format((invoice.amount_paid / 100)|int) }}</td>
+                        <td>
+                            {% if invoice.status == 'paid' %}
+                                <span class="badge bg-success">ชำระแล้ว</span>
+                            {% elif invoice.status == 'open' %}
+                                <span class="badge bg-warning">รอชำระ</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ invoice.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ invoice.created|timestamp_to_date }}</td>
+                        <td>
+                            {% if invoice.invoice_pdf %}
+                            <a href="{{ invoice.invoice_pdf }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-download me-1"></i>PDF
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.querySelector('.cancel-subscription')?.addEventListener('click', async function() {
+    const result = await Swal.fire({
+        title: 'ยกเลิกการสมัครสมาชิก?',
+        text: 'คุณจะสามารถใช้งานได้จนถึงวันหมดอายุ หลังจากนั้นจะกลับเป็นแพ็คเกจฟรี',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยันยกเลิก',
+        cancelButtonText: 'ไม่ยกเลิก',
+        confirmButtonColor: '#dc3545'
+    });
+    
+    if (result.isConfirmed) {
+        try {
+            const response = await fetch('{{ url_for("billing.cancel_subscription") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'ยกเลิกสำเร็จ',
+                    text: data.message
+                }).then(() => {
+                    window.location.reload();
+                });
+            } else {
+                Toast.fire({
+                    icon: 'error',
+                    title: data.error
+                });
+            }
+        } catch (error) {
+            Toast.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด'
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

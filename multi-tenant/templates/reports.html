@@ -1,0 +1,311 @@
+<!-- templates/reports.html -->
+{% extends 'base.html' %}
+
+{% block title %}รายงาน - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-chart-bar me-2"></i>รายงานการใช้งาน
+    </h2>
+    <div>
+        <button class="btn btn-outline-primary" onclick="window.print()">
+            <i class="fas fa-print me-2"></i>พิมพ์รายงาน
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+{% if stats %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.current_month_appointments }}</h4>
+                        <p class="mb-0">นัดหมายเดือนนี้</p>
+                        {% if stats.limit_appointments > 0 %}
+                        <small class="opacity-75">
+                            {{ stats.remaining_appointments }} เหลือ
+                        </small>
+                        {% endif %}
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-calendar-check fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.total_appointments_30days }}</h4>
+                        <p class="mb-0">30 วันที่ผ่านมา</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.total_updates_30days }}</h4>
+                        <p class="mb-0">การอัปเดต</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-edit fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.active_days_30days }}</h4>
+                        <p class="mb-0">วันที่ใช้งาน</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-calendar-day fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Usage Chart (Placeholder) -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-area me-2"></i>การใช้งานรายวัน (30 วันที่ผ่านมา)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center py-5">
+                    <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">กราฟแสดงการใช้งานรายวัน (จะพัฒนาในเวอร์ชันถัดไป)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Organization Info -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-building me-2"></i>ข้อมูลองค์กร
+                </h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless table-sm">
+                    <tr>
+                        <td><strong>ชื่อองค์กร:</strong></td>
+                        <td>{{ organization.name }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>อีเมลติดต่อ:</strong></td>
+                        <td>{{ organization.contact_email }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>โทรศัพท์:</strong></td>
+                        <td>{{ organization.phone or 'ไม่ระบุ' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ที่อยู่:</strong></td>
+                        <td>{{ organization.address or 'ไม่ระบุ' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>วันที่สร้าง:</strong></td>
+                        <td>{{ organization.created_at.strftime('%d/%m/%Y') }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-crown me-2"></i>ข้อมูลการสมัครสมาชิก
+                </h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless table-sm">
+                    <tr>
+                        <td><strong>แพ็คเกจ:</strong></td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if organization.subscription_plan.value != 'free' else 'secondary' }}">
+                                {{ organization.subscription_plan.value|title }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>สถานะ:</strong></td>
+                        <td>
+                            {% if organization.subscription_status.value == 'active' %}
+                                <span class="badge bg-success">ใช้งานได้</span>
+                            {% elif organization.subscription_status.value == 'trial' %}
+                                <span class="badge bg-warning text-dark">ทดลองใช้</span>
+                            {% else %}
+                                <span class="badge bg-danger">{{ organization.subscription_status.value }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if organization.subscription_expires_at %}
+                    <tr>
+                        <td><strong>หมดอายุ:</strong></td>
+                        <td>{{ organization.subscription_expires_at.strftime('%d/%m/%Y') }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td><strong>ขีดจำกัดนัดหมาย:</strong></td>
+                        <td>
+                            {% if organization.max_appointments_per_month == -1 %}
+                                <i class="fas fa-infinity text-success"></i> ไม่จำกัด
+                            {% else %}
+                                {{ "{:,}".format(organization.max_appointments_per_month) }} ต่อเดือน
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>ขีดจำกัดเจ้าหน้าที่:</strong></td>
+                        <td>
+                            {% if organization.max_staff_users == -1 %}
+                                <i class="fas fa-infinity text-success"></i> ไม่จำกัด
+                            {% else %}
+                                {{ organization.max_staff_users }} คน
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activities -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>กิจกรรมล่าสุด (50 รายการ)
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_activities %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>วันที่</th>
+                                <th>การดำเนินการ</th>
+                                <th>ประเภท</th>
+                                <th>รายละเอียด</th>
+                                <th>ผู้ใช้</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for activity in recent_activities %}
+                            <tr>
+                                <td>{{ activity.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    {% if activity.action == 'create' %}
+                                        <span class="badge bg-success">สร้าง</span>
+                                    {% elif activity.action == 'update' %}
+                                        <span class="badge bg-warning text-dark">อัปเดต</span>
+                                    {% elif activity.action == 'delete' %}
+                                        <span class="badge bg-danger">ลบ</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ activity.action }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ activity.resource_type }}</td>
+                                <td>
+                                    {% if activity.details %}
+                                        {% if activity.details.title %}
+                                            {{ activity.details.title }}
+                                        {% elif activity.details.subcalendar %}
+                                            {{ activity.details.subcalendar }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if activity.user_id %}
+                                        {% for user in organization.users %}
+                                            {% if user.id == activity.user_id %}
+                                                {{ user.get_full_name() }}
+                                                {% break %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        ระบบ
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-history fa-3x mb-3"></i>
+                    <p>ยังไม่มีกิจกรรมที่บันทึกไว้</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Styles -->
+<style>
+@media print {
+    .btn, .navbar, footer {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+    }
+    
+    .card-header {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+    }
+    
+    .text-white {
+        color: #000 !important;
+    }
+    
+    .bg-primary, .bg-success, .bg-info, .bg-warning {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+    }
+}
+</style>
+{% endblock %}

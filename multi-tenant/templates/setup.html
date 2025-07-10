@@ -1,0 +1,77 @@
+<!-- templates/setup.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h4 mb-0"><i class="fas fa-cog me-2"></i>ตั้งค่าการเชื่อมต่อกับ TeamUp API</h2>
+            </div>
+            <div class="card-body">
+                {% if current.is_connected %}
+                <div class="alert alert-success mb-4">
+                    <i class="fas fa-check-circle me-2"></i>สถานะปัจจุบัน: เชื่อมต่อ API สำเร็จ
+                </div>
+                {% elif current.api_key and current.calendar_id %}
+                <div class="alert alert-warning mb-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>มีการตั้งค่า API แล้ว แต่ยังไม่ได้เชื่อมต่อหรือเชื่อมต่อไม่สำเร็จ
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-4">
+                    <i class="fas fa-info-circle me-2"></i>กรุณาตั้งค่าการเชื่อมต่อ API
+                </div>
+                {% endif %}
+                
+                <form method="POST" action="{{ url_for('setup') }}">
+                    <div class="mb-3">
+                        <label for="api_key" class="form-label">API Key:</label>
+                        <input type="password" class="form-control" id="api_key" name="api_key" value="{{ current.api_key }}" required>
+                        <div class="form-text">
+                            <a href="https://teamup.com/api-keys/request" target="_blank">
+                                <i class="fas fa-external-link-alt me-1"></i>คลิกที่นี่เพื่อขอ API Key
+                            </a>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="calendar_id" class="form-label">Calendar ID:</label>
+                        <input type="text" class="form-control" id="calendar_id" name="calendar_id" value="{{ current.calendar_id }}" required>
+                        <div class="form-text">
+                            ตัวอย่าง: ks73ad7816e7a61b3a (ส่วนที่อยู่หลัง https://teamup.com/ ในลิงก์ปฏิทินของคุณ)
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="save_to_env" name="save_to_env" value="true" checked>
+                        <label class="form-check-label" for="save_to_env">บันทึกการตั้งค่าลงในไฟล์ .env (แนะนำให้เลือก)</label>
+                        <div class="form-text">
+                            การบันทึกลงในไฟล์ .env จะทำให้ระบบจดจำการตั้งค่านี้แม้หลังจากรีสตาร์ทเซิร์ฟเวอร์
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>บันทึกและทดสอบการเชื่อมต่อ
+                        </button>
+                        {% if current.is_connected %}
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary ms-2">
+                            <i class="fas fa-arrow-left me-2"></i>กลับสู่หน้าหลัก
+                        </a>
+                        {% endif %}
+                    </div>
+                </form>
+                
+                <div class="mt-4">
+                    <h5>วิธีการหา Calendar ID:</h5>
+                    <ol>
+                        <li>ล็อกอินเข้าสู่ <a href="https://teamup.com" target="_blank">TeamUp Calendar</a></li>
+                        <li>เปิดปฏิทินที่ต้องการเชื่อมต่อ</li>
+                        <li>ดูที่ URL ในเบราว์เซอร์ เช่น <code>https://teamup.com/ks73ad7816e7a61b3a</code></li>
+                        <li>Calendar ID คือส่วนที่อยู่หลัง <code>https://teamup.com/</code> ในตัวอย่างนี้คือ <code>ks73ad7816e7a61b3a</code></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

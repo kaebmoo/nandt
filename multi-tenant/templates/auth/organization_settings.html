@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}ตั้งค่าองค์กร - NandT{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="bi bi-building"></i> ตั้งค่าองค์กร</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">หน้าหลัก</a></li>
+                    <li class="breadcrumb-item active">ตั้งค่าองค์กร</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Organization Info -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> ข้อมูลองค์กร</h5>
+            </div>
+            <div class="card-body">
+                <form id="organizationForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">ชื่อองค์กร</label>
+                                <input type="text" class="form-control" id="name" name="name" 
+                                       value="{{ organization.name }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="contact_email" class="form-label">อีเมลติดต่อ</label>
+                                <input type="email" class="form-control" id="contact_email" name="contact_email" 
+                                       value="{{ organization.contact_email }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">เบอร์โทร</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" 
+                                       value="{{ organization.phone or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="teamup_calendar_id" class="form-label">TeamUp Calendar ID</label>
+                                <input type="text" class="form-control" id="teamup_calendar_id" 
+                                       value="{{ organization.teamup_calendar_id or 'ไม่ได้ตั้งค่า' }}" readonly>
+                                <div class="form-text">ID ของปฏิทินหลักใน TeamUp</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">ที่อยู่</label>
+                        <textarea class="form-control" id="address" name="address" rows="3">{{ organization.address or '' }}</textarea>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> บันทึกการเปลี่ยนแปลง
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Usage Limits -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-speedometer2"></i> ขีดจำกัดการใช้งาน</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">นัดหมายต่อเดือน</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" 
+                                       value="{{ organization.max_appointments_per_month }}" readonly>
+                                <span class="input-group-text">รายการ</span>
+                            </div>
+                            <div class="form-text">การใช้งานเดือนนี้: {{ organization.get_current_month_usage() }} รายการ</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">จำนวนเจ้าหน้าที่สูงสุด</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" 
+                                       value="{{ organization.max_staff_users }}" readonly>
+                                <span class="input-group-text">คน</span>
+                            </div>
+                            {% set current_staff = organization.users|selectattr('role.value', 'equalto', 'staff')|list|length %}
+                            <div class="form-text">เจ้าหน้าที่ปัจจุบัน: {{ current_staff }} คน</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>ต้องการเพิ่มขีดจำกัด?</strong> 
+                    <a href="{{ url_for('billing.choose_plan') }}" class="alert-link">อัพเกรดแพ็คเกจ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Subscription Status -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-credit-card"></i> สถานะการสมัครสมาชิก</h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    {% if organization.subscription_status.value == 'trial' %}
+                        <span class="badge bg-info fs-6">ทดลองใช้</span>
+                    {% elif organization.subscription_status.value == 'active' %}
+                        <span class="badge bg-success fs-6">ใช้งานอยู่</span>
+                    {% elif organization.subscription_status.value == 'suspended' %}
+                        <span class="badge bg-warning fs-6">ระงับ</span>
+                    {% elif organization.subscription_status.value == 'cancelled' %}
+                        <span class="badge bg-danger fs-6">ยกเลิก</span>
+                    {% endif %}
+                </div>
+                
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>แพ็คเกจ:</strong></td>
+                        <td>{{ organization.subscription_plan.value.title() }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>หมดอายุ:</strong></td>
+                        <td>
+                            {% if organization.subscription_expires_at %}
+                                {{ organization.subscription_expires_at.strftime('%d/%m/%Y') }}
+                            {% else %}
+                                ไม่ทราบ
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if organization.trial_ends_at %}
+                    <tr>
+                        <td><strong>ทดลองถึง:</strong></td>
+                        <td>{{ organization.trial_ends_at.strftime('%d/%m/%Y') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-up-circle"></i> จัดการแพ็คเกจ
+                    </a>
+                    <a href="{{ url_for('billing.billing_history') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-receipt"></i> ประวัติการเรียกเก็บ
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Organization Stats -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> สถิติการใช้งาน</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="border rounded p-2 mb-2">
+                            <div class="h4 text-primary mb-0">{{ organization.users|length }}</div>
+                            <small class="text-muted">ผู้ใช้งาน</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 mb-2">
+                            <div class="h4 text-success mb-0">{{ organization.get_current_month_usage() }}</div>
+                            <small class="text-muted">นัดหมายเดือนนี้</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="small">
+                    <div class="d-flex justify-content-between">
+                        <span>สร้างบัญชี:</span>
+                        <span>{{ organization.created_at.strftime('%d/%m/%Y') }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>อัพเดตล่าสุด:</span>
+                        <span>{{ organization.updated_at.strftime('%d/%m/%Y') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> การดำเนินการด่วน</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('auth.manage_users') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-people"></i> จัดการผู้ใช้
+                    </a>
+                    <a href="{{ url_for('subcalendars') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-calendar2-week"></i> ปฏิทินย่อย
+                    </a>
+                    <a href="{{ url_for('reports') }}" class="btn btn-outline-info">
+                        <i class="bi bi-graph-up"></i> รายงาน
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('organizationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    
+    // Disable button and show loading
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังบันทึก...';
+    
+    fetch('{{ url_for("auth.organization_settings") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-check-circle"></i> ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const form = document.getElementById('organizationForm');
+            form.parentNode.insertBefore(alertDiv, form);
+        } else {
+            // Show error message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i> ${data.error}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const form = document.getElementById('organizationForm');
+            form.parentNode.insertBefore(alertDiv, form);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle"></i> เกิดข้อผิดพลาด กรุณาลองอีกครั้ง
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const form = document.getElementById('organizationForm');
+        form.parentNode.insertBefore(alertDiv, form);
+    })
+    .finally(() => {
+        // Re-enable button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> บันทึกการเปลี่ยนแปลง';
+    });
+});
+</script>
+{% endblock %}

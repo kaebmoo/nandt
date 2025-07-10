@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block title %}สมัครสมาชิก - NandT{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="card shadow">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <i class="fas fa-hospital fa-3x text-primary mb-3"></i>
+                    <h3 class="fw-bold">สมัครสมาชิก</h3>
+                    <p class="text-muted">เริ่มใช้งานฟรี 14 วัน</p>
+                </div>
+
+                <form id="registerForm" method="POST">
+                    <h5 class="border-bottom pb-2 mb-3">ข้อมูลโรงพยาบาล</h5>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="organization_name" class="form-label">ชื่อโรงพยาบาล/หน่วยงาน <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="organization_name" name="organization_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="contact_email" class="form-label">อีเมลติดต่อ <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="contact_email" name="contact_email" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="phone" class="form-label">เบอร์โทรศัพท์</label>
+                            <input type="tel" class="form-control" id="phone" name="phone">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="address" class="form-label">ที่อยู่</label>
+                            <input type="text" class="form-control" id="address" name="address">
+                        </div>
+                    </div>
+                    
+                    <h5 class="border-bottom pb-2 mb-3 mt-4">ข้อมูลผู้ดูแลระบบ</h5>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="first_name" class="form-label">ชื่อ <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="last_name" class="form-label">นามสกุล <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">อีเมลสำหรับเข้าสู่ระบบ <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="password" class="form-label">รหัสผ่าน <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="password" name="password" required minlength="8">
+                            <div class="form-text">อย่างน้อย 8 ตัวอักษร</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="confirm_password" class="form-label">ยืนยันรหัสผ่าน <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="agree_terms" required>
+                        <label class="form-check-label" for="agree_terms">
+                            ยอมรับ <a href="#" class="text-decoration-none">เงื่อนไขการใช้งาน</a> และ 
+                            <a href="#" class="text-decoration-none">นโยบายความเป็นส่วนตัว</a>
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-user-plus me-2"></i>สมัครสมาชิก
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="text-muted">
+                        มีบัญชีอยู่แล้ว? 
+                        <a href="{{ url_for('auth.login') }}" class="text-decoration-none">
+                            เข้าสู่ระบบ
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Helper function for showing notifications
+    function showAppNotification(message, type = 'info') {
+        if (window.app && typeof window.app.showNotification === 'function') {
+            window.app.showNotification(message, type);
+        } else if (typeof Toast !== 'undefined' && typeof Toast.fire === 'function') { // Fallback to SweetAlert2 Toast
+            Toast.fire({ icon: type, title: message });
+        } else {
+            console.warn('Notification system (window.app.showNotification or Toast.fire) not found.');
+            alert(message); // Final fallback
+        }
+    }
+
+    document.getElementById('registerForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm_password').value;
+        
+        if (password !== confirmPassword) {
+            showAppNotification('รหัสผ่านไม่ตรงกัน', 'error');
+            return;
+        }
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        
+        try {
+            const response = await fetch('{{ url_for("auth.register") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Using Swal.fire for success as it's a multi-step confirmation
+                Swal.fire({
+                    icon: 'success',
+                    title: 'สมัครสมาชิกสำเร็จ!',
+                    text: result.message,
+                    confirmButtonText: 'เข้าสู่ระบบ'
+                }).then(() => {
+                    window.location.href = '{{ url_for("auth.login") }}';
+                });
+            } else {
+                showAppNotification(result.error, 'error');
+            }
+        } catch (error) {
+            console.error('Fetch Error:', error); // Log the actual fetch error for debugging
+            showAppNotification('เกิดข้อผิดพลาด กรุณาลองอีกครั้ง', 'error');
+        }
+    });
+});
+</script>
+{% endblock %}
