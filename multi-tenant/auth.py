@@ -179,36 +179,40 @@ def register():
         try:
             data = request.get_json() if request.is_json else request.form
             
-            # Validate input using the new helper function
-            required_fields = ['organization_name', 'contact_email', 'first_name', 'last_name', 'email', 'password', 'confirm_password']
-            optional_fields = ['phone', 'address'] # Added 'phone' and 'address' as optional
+            # Validate input using the helper function
+            required_fields = ['email', 'password', 'first_name', 'last_name', 'organization_name', 'contact_email']
+            optional_fields = ['phone', 'address']
             
             sanitized_data, validation_errors = validate_input(data, required_fields, optional_fields)
             
             if validation_errors:
                 return jsonify({'error': 'Validation failed', 'details': validation_errors}), 400
             
-            # Check rate limiting for the client IP
+            # Check rate limiting
             client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
             if not rate_limit_check(client_ip):
                 return jsonify({'error': 'Too many registration attempts. Please try again later.'}), 429
             
             # Validate email format
             if not validate_email(sanitized_data['email']):
+                record_failed_attempt(client_ip)
                 return jsonify({'error': 'Invalid email format'}), 400
             
             # Validate password strength
             is_strong, message = validate_password_strength(sanitized_data['password'])
             if not is_strong:
+                record_failed_attempt(client_ip)
                 return jsonify({'error': message}), 400
             
-            # Check password confirmation
-            if sanitized_data['password'] != sanitized_data['confirm_password']:
-                return jsonify({'error': 'Passwords do not match'}), 400
+            # Check password confirmation if provided
+            if 'password_confirm' in data:
+                if sanitized_data['password'] != data.get('password_confirm'):
+                    record_failed_attempt(client_ip)
+                    return jsonify({'error': 'Passwords do not match'}), 400
             
             # Check if email already exists
             if User.query.filter_by(email=sanitized_data['email']).first():
-                record_failed_attempt(client_ip) # Record failed attempt even if email exists
+                record_failed_attempt(client_ip)
                 return jsonify({'error': 'Email already registered'}), 400
             
             # Create Organization
@@ -219,17 +223,18 @@ def register():
                 address=sanitized_data.get('address', '')
             )
             db.session.add(organization)
-            db.session.flush() # Get organization ID
+            db.session.flush()  # Get organization ID
             
             # Create TeamUp Calendar using hybrid strategy
             from hybrid_teamup_strategy import HybridTeamUpManager
             manager = HybridTeamUpManager()
             setup_result = manager.create_organization_setup(organization)
-            
+
             if not setup_result['success']:
                 db.session.rollback()
                 return jsonify({'error': f'Failed to create calendar: {setup_result["error"]}'}), 500
             
+            # Save calendar ID to organization
             organization.teamup_calendar_id = setup_result['primary_calendar_id']
             
             # Create Admin User
@@ -485,11 +490,11 @@ def send_welcome_email(user, organization):
             return False
         
         # สร้างเนื้อหาอีเมล
-        subject = f"ยินดีต้อนรับสู่ NandT - {organization.name}"
+        subject = f"ยินดีต้อนรับสู่ NudDee - {organization.name}"
         body = f"""
         สวัสดี {user.get_full_name()},
         
-        ยินดีต้อนรับสู่ระบบจัดการนัดหมาย NandT สำหรับ {organization.name}
+        ยินดีต้อนรับสู่ระบบจัดการนัดหมาย NudDee สำหรับ {organization.name}
         
         บัญชีของคุณได้ถูกสร้างเรียบร้อยแล้ว:
         - อีเมล: {user.email}
@@ -498,7 +503,7 @@ def send_welcome_email(user, organization):
         
         คุณสามารถเข้าสู่ระบบได้ที่: {os.getenv('APP_URL', 'http://localhost:5000')}/auth/login
         
-        ขอบคุณที่เลือกใช้ NandT
+        ขอบคุณที่เลือกใช้ NudDee
         """
         
         # ส่งอีเมล (สามารถปรับปรุงให้ใช้ Flask-Mail หรือ service อื่นได้)
@@ -514,11 +519,11 @@ def send_password_reset_email(user, reset_token):
     try:
         reset_url = f"{os.getenv('APP_URL', 'http://localhost:5000')}/auth/reset-password/{reset_token}"
         
-        subject = "รีเซ็ตรหัสผ่าน - NandT"
+        subject = "รีเซ็ตรหัสผ่าน - NudDee"
         body = f"""
         สวัสดี {user.get_full_name()},
         
-        คุณได้ขอรีเซ็ตรหัสผ่านสำหรับบัญชี NandT
+        คุณได้ขอรีเซ็ตรหัสผ่านสำหรับบัญชี NudDee
         
         กรุณาคลิกลิงก์ด้านล่างเพื่อรีเซ็ตรหัสผ่าน:
         {reset_url}
@@ -811,7 +816,7 @@ def delete_user(user_id):
 def send_new_password_email(user, new_password):
     """ส่งอีเมลรหัสผ่านใหม่"""
     try:
-        subject = "รหัสผ่านใหม่ - NandT"
+        subject = "รหัสผ่านใหม่ - NudDee"
         body = f"""
         สวัสดี {user.get_full_name()},
         
