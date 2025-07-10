@@ -1,4 +1,3 @@
-<!-- templates/auth/login.html -->
 {% extends 'base.html' %}
 
 {% block title %}เข้าสู่ระบบ - NudDee{% endblock %}
@@ -18,21 +17,24 @@
                     <div class="mb-3">
                         <label for="email" class="form-label">อีเมล</label>
                         <input type="email" class="form-control" id="email" name="email" required>
+                        <div class="text-danger field-error" id="email-error"></div> {# เพิ่ม div สำหรับแสดง error #}
                     </div>
                     
                     <div class="mb-3">
                         <label for="password" class="form-label">รหัสผ่าน</label>
                         <input type="password" class="form-control" id="password" name="password" required>
+                        <div class="text-danger field-error" id="password-error"></div> {# เพิ่ม div สำหรับแสดง error #}
                     </div>
                     
                     <div id="otpSection" class="mb-3" style="display: none;">
                         <label for="otp_code" class="form-label">รหัส OTP (2FA)</label>
                         <input type="text" class="form-control" id="otp_code" name="otp_code" maxlength="6" placeholder="123456">
                         <div class="form-text">กรุณากรอกรหัส 6 หลักจากแอป Authenticator</div>
+                        <div class="text-danger field-error" id="otp_code-error"></div> {# เพิ่ม div สำหรับแสดง error #}
                     </div>
                     
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="remember">
+                        <input type="checkbox" class="form-check-input" id="remember" name="remember"> {# เพิ่ม name="remember" #}
                         <label class="form-check-label" for="remember">จดจำการเข้าสู่ระบบ</label>
                     </div>
                     
@@ -60,49 +62,71 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData);
-    
-    try {
-        const response = await fetch('{{ url_for("auth.login") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    const otpSection = document.getElementById('otpSection');
+    const otpCodeInput = document.getElementById('otp_code');
+
+    if (loginForm && window.app) {
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault(); // Prevent default form submission
+            
+            const submitBtn = this.querySelector('button[type="submit"]');
+            window.app.setLoadingState(submitBtn, true); // Show loading state
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                // Clear previous errors displayed on form
+                window.app.clearFormErrors(this);
+
+                const response = await window.app.httpRequest('{{ url_for("auth.login") }}', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                
+                // If the request succeeds (response.ok is true)
+                if (response.require_2fa) {
+                    otpSection.style.display = 'block';
+                    otpCodeInput.focus();
+                    window.app.showNotification('กรุณากรอกรหัส OTP', 'info');
+                } else if (response.success) {
+                    window.app.showNotification('เข้าสู่ระบบสำเร็จ', 'success');
+                    window.location.href = response.redirect_url;
+                } else {
+                    // This block might not be hit if httpRequest throws on !response.ok
+                    window.app.showNotification(response.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+
+            } catch (error) {
+                // Handle errors thrown by window.app.httpRequest (e.g., non-2xx status, network error)
+                console.error('Login form submission error:', error);
+                
+                // Display field-specific errors if available in error object
+                if (error.field_errors) {
+                    for (const fieldName in error.field_errors) {
+                        const errorDiv = document.getElementById(`${fieldName}-error`);
+                        if (errorDiv) {
+                            errorDiv.textContent = error.field_errors[fieldName];
+                            const inputField = document.getElementById(fieldName);
+                            if (inputField) {
+                                inputField.classList.add('is-invalid');
+                            }
+                        }
+                    }
+                }
+                window.app.showNotification(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ', 'error');
+            } finally {
+                window.app.setLoadingState(submitBtn, false); // Hide loading state
+            }
         });
-        
-        const result = await response.json();
-        
-        if (result.require_2fa) {
-            document.getElementById('otpSection').style.display = 'block';
-            document.getElementById('otp_code').focus();
-            Toast.fire({
-                icon: 'info',
-                title: 'กรุณากรอกรหัส OTP'
-            });
-        } else if (result.success) {
-            Toast.fire({
-                icon: 'success',
-                title: 'เข้าสู่ระบบสำเร็จ'
-            });
-            window.location.href = result.redirect_url;
-        } else {
-            Toast.fire({
-                icon: 'error',
-                title: result.error
-            });
-        }
-    } catch (error) {
-        Toast.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด'
-        });
+    } else {
+        console.warn('loginForm or window.app not found on DOMContentLoaded for login page.');
     }
 });
 </script>

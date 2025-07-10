@@ -1,10 +1,13 @@
-# api.py - Create this new file for API endpoints
+# api.py - เพิ่ม import json
 
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
-from models import db, UsageStat, AuditLog, Organization
+from models import db, UsageStat, AuditLog, Organization, User # Import User for staff count
 from hybrid_teamup_strategy import get_hybrid_teamup_api
+from flask import current_app
+import json # ADD THIS LINE
+from datetime import timezone
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -14,10 +17,11 @@ def heartbeat():
     try:
         return jsonify({
             'status': 'ok',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'server': 'NudDee SaaS'
         }), 200
     except Exception as e:
+        current_app.logger.error(f"Heartbeat error: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -28,53 +32,65 @@ def heartbeat():
 def get_usage_stats():
     """Get usage statistics for current organization"""
     try:
-        # Create TeamUp API instance
+        if not current_user.is_authenticated or not current_user.user or not current_user.organization:
+            return jsonify({
+                'success': False,
+                'error': 'User or organization data not available.'
+            }), 400
+
         teamup_api = get_hybrid_teamup_api(
             organization_id=current_user.user.organization_id,
             user_id=current_user.user.id
         )
         
-        # Get organization stats
         stats = teamup_api.get_organization_stats()
         
-        # Get current month usage
         current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_stats = UsageStat.query.filter(
+        monthly_stats_records = UsageStat.query.filter(
             UsageStat.organization_id == current_user.user.organization_id,
             UsageStat.date >= current_month
         ).all()
         
-        total_appointments = sum(stat.appointments_created for stat in monthly_stats)
-        total_updates = sum(stat.appointments_updated for stat in monthly_stats)
+        total_appointments_created = sum(stat.appointments_created for stat in monthly_stats_records)
+        total_appointments_updated = sum(stat.appointments_updated for stat in monthly_stats_records)
+
+        active_staff_users = User.query.filter_by(
+            organization_id=current_user.user.organization_id,
+            role=User.role.STAFF, # Use Enum directly
+            is_active=True,
+            is_deleted=False
+        ).count()
         
-        # Get organization limits
         organization = current_user.organization
         max_appointments = organization.max_appointments_per_month
         max_staff = organization.max_staff_users
         
-        # Calculate usage percentages
-        appointment_usage = (total_appointments / max_appointments * 100) if max_appointments > 0 else 0
+        appointment_usage_percent = (total_appointments_created / max_appointments * 100) if max_appointments > 0 else 0
+        staff_usage_percent = (active_staff_users / max_staff * 100) if max_staff > 0 else 0
         
         return jsonify({
             'success': True,
             'data': {
-                'monthly_appointments': total_appointments,
-                'monthly_updates': total_updates,
+                'monthly_appointments': total_appointments_created,
+                'monthly_updates': total_appointments_updated,
+                'monthly_staff': active_staff_users,
                 'max_appointments': max_appointments,
                 'max_staff': max_staff,
-                'appointment_usage_percent': min(appointment_usage, 100),
+                'appointment_usage_percent': min(appointment_usage_percent, 100),
+                'staff_usage_percent': min(staff_usage_percent, 100),
                 'active_calendars': stats.get('active_calendars', 0),
                 'active_subcalendars': stats.get('active_subcalendars', 0),
                 'subscription_plan': organization.subscription_plan.value,
                 'subscription_status': organization.subscription_status.value,
                 'trial_expires_at': organization.trial_ends_at.isoformat() if organization.trial_ends_at else None,
-                'is_trial_expired': organization.is_trial_expired,
+                'is_trial_expired': organization.is_trial_expired, # Property, not callable
                 'can_create_appointment': organization.can_create_appointment(),
                 'can_add_staff': organization.can_add_staff()
             }
         })
         
     except Exception as e:
+        current_app.logger.error(f"Error getting usage stats: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -86,11 +102,10 @@ def health_check():
     try:
         health_status = {
             'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'checks': {}
         }
         
-        # Database check
         try:
             db.engine.execute('SELECT 1')
             health_status['checks']['database'] = 'healthy'
@@ -98,7 +113,6 @@ def health_check():
             health_status['checks']['database'] = f'unhealthy: {str(e)}'
             health_status['status'] = 'degraded'
         
-        # Check if we can import main modules
         try:
             from models import Organization
             from hybrid_teamup_strategy import HybridTeamUpManager
@@ -107,10 +121,10 @@ def health_check():
             health_status['checks']['modules'] = f'unhealthy: {str(e)}'
             health_status['status'] = 'degraded'
         
-        # TeamUp API check (basic)
         try:
             from config import Config
-            if Config.MASTER_TEAMUP_API and Config.TEMPLATE_CALENDAR_KEY:
+            if Config.MASTER_TEAMUP_API and Config.TEMPLATE_CALENDAR_KEY and \
+               Config.TEAMUP_ADMIN_EMAIL and Config.TEAMUP_ADMIN_PASSWORD:
                 health_status['checks']['teamup_config'] = 'healthy'
             else:
                 health_status['checks']['teamup_config'] = 'unhealthy: missing config'
@@ -122,10 +136,11 @@ def health_check():
         return jsonify(health_status), 200 if health_status['status'] == 'healthy' else 503
         
     except Exception as e:
+        current_app.logger.error(f"Health check error: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'unhealthy',
             'error': str(e),
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }), 500
 
 @api_bp.route('/organization/summary', methods=['GET'])
@@ -135,12 +150,13 @@ def organization_summary():
     try:
         organization = current_user.organization
         
-        # Get recent activities
+        if not organization:
+            return jsonify({'success': False, 'error': 'Organization data not found for current user.'}), 400
+
         recent_activities = AuditLog.query.filter_by(
             organization_id=organization.id
         ).order_by(AuditLog.created_at.desc()).limit(5).all()
         
-        # Get today's stats
         today = datetime.now().date()
         today_stats = UsageStat.query.filter_by(
             organization_id=organization.id,
@@ -167,14 +183,29 @@ def organization_summary():
         })
         
     except Exception as e:
+        current_app.logger.error(f"Error getting organization summary: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
+@api_bp.route('/errors', methods=['POST']) # NEW ENDPOINT FOR FRONTEND ERRORS
+def log_frontend_error():
+    """Receive frontend error reports from script.js"""
+    try:
+        error_report = request.get_json()
+        
+        current_app.logger.error(f"Frontend Error Report from IP: {request.remote_addr}\nDetails: {json.dumps(error_report, indent=2)}")
+        
+        return jsonify({'status': 'received'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Failed to process frontend error report: {str(e)}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Failed to process report'}), 500
+
 # Error handlers for API blueprint
 @api_bp.errorhandler(404)
 def api_not_found(error):
+    current_app.logger.warning(f"API 404: {request.url}")
     return jsonify({
         'success': False,
         'error': 'API endpoint not found',
@@ -183,6 +214,7 @@ def api_not_found(error):
 
 @api_bp.errorhandler(500)
 def api_server_error(error):
+    current_app.logger.error(f"API 500: {request.url}", exc_info=True)
     return jsonify({
         'success': False,
         'error': 'Internal server error',

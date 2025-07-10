@@ -13,6 +13,7 @@ import os
 import uuid
 import re
 import time
+from datetime import timezone
 
 from config import Config
 
@@ -739,7 +740,7 @@ class TeamUpBackup:
             'organization': {
                 'id': org.id,
                 'name': org.name,
-                'backup_date': datetime.utcnow().isoformat()
+                'backup_date': datetime.now(timezone.utc).isoformat()
             },
             'calendars': [],
             'events': []
@@ -982,7 +983,7 @@ class HybridTeamUpAPI:
                 for cal in self.calendars:
                     try:
                         single_event_response = requests.get(
-                            f"{self.manager.base_url}/{cal.calendar_id}/events/{event_id}", # Use ks-key here
+                            f"{self.manager.base_url}/{cal.calendar_id}/events/{event_id}",
                             headers=headers_with_auth,
                             timeout=15
                         )
@@ -999,19 +1000,30 @@ class HybridTeamUpAPI:
             calendars_to_query_keys = []
             
             if subcalendar_id:
-                subcal_mapping = OrganizationSubcalendar.query.filter_by(
-                    organization_id=self.organization_id,
-                    subcalendar_id=subcalendar_id,
-                    is_active=True
-                ).first()
-                
-                if not subcal_mapping:
-                    return {"error": "ไม่พบ subcalendar ที่ระบุ", "events": []}
-                
-                calendars_to_query_keys = [subcal_mapping.calendar_id] # This is a ks-key
-                subcalendar_filter_ids = [subcal_mapping.subcalendar_id]
+                # subcalendar_id ที่นี่จะถูกส่งมาเป็น list จาก app.py แล้ว
+                # ดังนั้น เราสามารถใช้มันได้เลย
+                if isinstance(subcalendar_id, list) and len(subcalendar_id) > 0:
+                    # ถ้ามี subcalendar_id ถูกส่งมา ให้ใช้ค่าแรกเพื่อหา calendar_id หลัก
+                    # (สมมติว่า subcalendar_id ใน filter มาจาก calendar เดียวกัน)
+                    first_subcal_id_for_lookup = subcalendar_id[0]
+                    subcal_mapping = OrganizationSubcalendar.query.filter_by(
+                        organization_id=self.organization_id,
+                        subcalendar_id=first_subcal_id_for_lookup,
+                        is_active=True
+                    ).first()
+                    
+                    if not subcal_mapping:
+                        return {"error": "ไม่พบ subcalendar ที่ระบุ", "events": []}
+                    
+                    calendars_to_query_keys = [subcal_mapping.calendar_id]
+                    subcalendar_filter_ids = subcalendar_id # ใช้ list ที่ส่งมาทั้งหมด
+                else:
+                    # ถ้า subcalendar_id ไม่ใช่ list หรือเป็น list ว่าง (หลังจากกรองแล้ว)
+                    # ให้กลับไป query ทุก calendar
+                    calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
+                    subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars] # ใช้ subcalendar ทั้งหมดใน org
             else:
-                calendars_to_query_keys = [cal.calendar_id for cal in self.calendars] # These are ks-keys
+                calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
                 subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars]
             
             if not isinstance(start_date, datetime):
@@ -1021,10 +1033,10 @@ class HybridTeamUpAPI:
             
             for calendar_id_key in calendars_to_query_keys:
                 events = self.fetch_calendar_events(
-                    calendar_id=calendar_id_key, # Use ks-key here
+                    calendar_id=calendar_id_key,
                     start_date=start_date,
                     end_date=end_date,
-                    subcalendar_ids=subcalendar_filter_ids
+                    subcalendar_ids=subcalendar_filter_ids # ส่งเป็น list เสมอ
                 )
                 
                 if events.get('events'):
@@ -1061,14 +1073,19 @@ class HybridTeamUpAPI:
             if end_date:
                 params['endDate'] = end_date.strftime('%Y-%m-%d')
             
-            if subcalendar_ids:
+            # **แก้ไขตรงนี้: ตรวจสอบว่า subcalendar_ids เป็น None หรือไม่ ถ้าเป็นให้ใช้ list ว่าง**
+            # requests library ต้องการ list ที่ไม่เป็น None สำหรับ parameter array
+            if subcalendar_ids is not None and len(subcalendar_ids) > 0: # Check if it's not None AND not empty
                 params['subcalendarId'] = [str(sid) for sid in subcalendar_ids]
-            
+            elif subcalendar_ids is None: # ถ้าเป็น None ให้ log และไม่ส่ง parameter นี้
+                print("Warning: subcalendar_ids parameter was None in fetch_calendar_events. Not filtering by subcalendar.")
+                # ไม่ต้องใส่ params['subcalendarId'] เลย ถ้าไม่ต้องการ filter
+
             headers_with_auth = self.manager._get_headers_with_auth()
             response = requests.get(
-                f"{self.manager.base_url}/{calendar_id}/events", # Use ks-key here
+                f"{self.manager.base_url}/{calendar_id}/events",
                 headers=headers_with_auth,
-                params=params,
+                params=params, # ส่ง params ที่อาจมี subcalendarId เป็น list หรือไม่มีเลย
                 timeout=15
             )
 

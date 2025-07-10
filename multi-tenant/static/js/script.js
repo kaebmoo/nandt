@@ -3,8 +3,8 @@
 class NudDeeSaaSApp {
     constructor() {
         this.config = {
-            debug: window.DEBUG || false,
-            apiBaseUrl: window.API_BASE_URL || '',
+            debug: window.DEBUG || false, // Assuming DEBUG is set globally or from Flask config
+            apiBaseUrl: window.API_BASE_URL || '', // Assuming API_BASE_URL is set globally
             csrfToken: this.getCSRFToken(),
             retryAttempts: 3,
             retryDelay: 1000
@@ -14,7 +14,8 @@ class NudDeeSaaSApp {
             currentUser: null,
             currentOrganization: null,
             eventsCache: new Map(),
-            formTokens: new Set()
+            formTokens: new Set(),
+            toastMixin: null // To store the SweetAlert2 Toast mixin
         };
         
         this.eventHandlers = new Map();
@@ -23,16 +24,41 @@ class NudDeeSaaSApp {
     
     init() {
         try {
+            this.setupSweetAlert2(); // Initialize SweetAlert2 mixin
             this.loadUserContext();
             this.setupEventListeners();
             this.initializeComponents();
             this.setupErrorHandling();
             this.startHeartbeat();
             
+            // Set moment locale to Thai (as per your dashboard.html)
+            if (typeof moment !== 'undefined') {
+                moment.locale('th');
+            }
+
             this.log('info', 'NudDee SaaS App initialized successfully');
         } catch (error) {
             this.log('error', 'Failed to initialize app:', error);
-            this.showNotification('เกิดข้อผิดพลาดในการเริ่มต้นระบบ', 'error');
+            this.showNotification('เกิดข้อผิดพลาดในการเริ่มต้นระบบ', 'error'); // Use its own notification
+        }
+    }
+
+    setupSweetAlert2() {
+        if (typeof Swal !== 'undefined') {
+            this.state.toastMixin = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000,
+                timerProgressBar: true,
+                didOpen: (toast) => {
+                    toast.addEventListener('mouseenter', Swal.stopTimer);
+                    toast.addEventListener('mouseleave', Swal.resumeTimer);
+                }
+            });
+        } else {
+            this.log('warn', 'SweetAlert2 (Swal) not found. Falling back to basic notifications.');
+            this.state.toastMixin = { fire: (options) => this.showFallbackNotification(options.title, options.icon, { duration: options.timer }) };
         }
     }
     
@@ -80,7 +106,8 @@ class NudDeeSaaSApp {
                 if (!response.ok) {
                     if (response.status === 401) {
                         this.handleUnauthorized();
-                        throw new Error('Unauthorized access');
+                        // Do not retry on 401 if it's already handled
+                        throw new Error('Unauthorized access'); 
                     }
                     
                     if (response.status >= 500 && attempt < this.config.retryAttempts) {
@@ -88,6 +115,7 @@ class NudDeeSaaSApp {
                         continue;
                     }
                     
+                    // Try to parse JSON error, fallback to text
                     const errorData = await response.json().catch(() => ({}));
                     throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -103,7 +131,7 @@ class NudDeeSaaSApp {
                 this.log('warn', `Request attempt ${attempt} failed:`, error);
                 
                 if (attempt === this.config.retryAttempts) {
-                    throw error;
+                    throw error; // Re-throw final error
                 }
                 
                 await this.delay(this.config.retryDelay * attempt);
@@ -117,18 +145,19 @@ class NudDeeSaaSApp {
     }
     
     getCSRFToken() {
-        const token = document.querySelector('meta[name="csrf-token"]');
-        return token ? token.getAttribute('content') : '';
+        const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        return tokenMeta ? tokenMeta.getAttribute('content') : '';
     }
     
     generateFormToken() {
-        return crypto.randomUUID ? crypto.randomUUID() : this.generateUUID();
+        return crypto.randomUUID ? crypto.randomUUID() : this.generateUUID(); // Fallback for older browsers
     }
     
     generateUUID() {
+        // Simple UUID v4 polyfill
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
             const r = Math.random() * 16 | 0;
-            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
     }
@@ -138,6 +167,7 @@ class NudDeeSaaSApp {
         try {
             const userMeta = document.querySelector('meta[name="current-user"]');
             const orgMeta = document.querySelector('meta[name="current-organization"]');
+            const debugMeta = document.querySelector('meta[name="debug-mode"]'); // Assuming you add this in base.html
             
             if (userMeta) {
                 this.state.currentUser = JSON.parse(userMeta.content);
@@ -145,6 +175,10 @@ class NudDeeSaaSApp {
             
             if (orgMeta) {
                 this.state.currentOrganization = JSON.parse(orgMeta.content);
+            }
+
+            if (debugMeta) {
+                this.config.debug = debugMeta.content === 'True';
             }
             
             this.log('debug', 'User context loaded:', this.state);
@@ -155,19 +189,16 @@ class NudDeeSaaSApp {
     
     // Event handling system
     setupEventListeners() {
-        // Global error handler
         window.addEventListener('error', (event) => {
             this.log('error', 'Global error:', event.error);
             this.reportError(event.error);
         });
         
-        // Unhandled promise rejection
         window.addEventListener('unhandledrejection', (event) => {
             this.log('error', 'Unhandled promise rejection:', event.reason);
             this.reportError(event.reason);
         });
         
-        // Network status
         window.addEventListener('online', () => {
             this.showNotification('เชื่อมต่ออินเทอร์เน็ตแล้ว', 'success');
             this.syncPendingData();
@@ -177,7 +208,6 @@ class NudDeeSaaSApp {
             this.showNotification('ขาดการเชื่อมต่ออินเทอร์เน็ต', 'warning');
         });
         
-        // Page visibility for cleanup
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.pauseOperations();
@@ -186,7 +216,6 @@ class NudDeeSaaSApp {
             }
         });
         
-        // Keyboard shortcuts
         document.addEventListener('keydown', (event) => {
             this.handleKeyboardShortcuts(event);
         });
@@ -199,6 +228,11 @@ class NudDeeSaaSApp {
         this.initializeForms();
         this.initializeSubscriptionMonitoring();
         this.initializeUsageLimits();
+
+        // Initialize moment.js for dashboard if loaded
+        if (typeof moment !== 'undefined') {
+            moment.locale('th'); // Set locale globally for moment.js
+        }
     }
     
     initializeTooltips() {
@@ -211,7 +245,6 @@ class NudDeeSaaSApp {
     }
     
     initializeModals() {
-        // Auto-focus first input in modals
         document.querySelectorAll('.modal').forEach(modal => {
             modal.addEventListener('shown.bs.modal', function() {
                 const firstInput = modal.querySelector('input, select, textarea');
@@ -223,25 +256,37 @@ class NudDeeSaaSApp {
     }
     
     initializeForms() {
-        // Enhanced form handling
-        document.querySelectorAll('form[data-async="true"]').forEach(form => {
-            form.addEventListener('submit', (event) => {
-                this.handleAsyncForm(event);
-            });
+        // Use a more specific selector if forms are not all async
+        document.querySelectorAll('form').forEach(form => { // Changed selector from data-async="true" to all forms
+            // Store original HTML for submit buttons initially
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.dataset.originalHtml = submitBtn.innerHTML;
+            }
+
+            // Only attach handleAsyncForm if not already attached via specific template code
+            // (e.g., register.html, appointments.html might attach it directly)
+            // Or remove inline addEventListener in templates if using this global one
+            if (!form.dataset.initializedAsync) { // Prevent duplicate listeners
+                form.addEventListener('submit', (event) => {
+                    // Check if the form has a submit button and prevent default only if it's an async form
+                    if (event.submitter && form.dataset.async !== 'false') { // Assuming forms default to async unless data-async="false"
+                        this.handleAsyncForm(event);
+                    }
+                });
+                form.dataset.initializedAsync = 'true';
+            }
         });
         
-        // Auto-save functionality
         document.querySelectorAll('form[data-autosave="true"]').forEach(form => {
             this.setupAutoSave(form);
         });
         
-        // Form validation
         document.querySelectorAll('form[data-validate="true"]').forEach(form => {
             this.setupFormValidation(form);
         });
     }
     
-    // Async form handling
     async handleAsyncForm(event) {
         event.preventDefault();
         
@@ -249,54 +294,63 @@ class NudDeeSaaSApp {
         const submitButton = form.querySelector('button[type="submit"]');
         const formData = new FormData(form);
         
+        // Convert FormData to plain object for JSON submission
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            data[key] = value;
+        }
+
         try {
-            // Prevent duplicate submissions
-            const formToken = formData.get('form_token');
+            const formToken = data['form_token']; // Access token from the converted object
             if (formToken && this.state.formTokens.has(formToken)) {
                 this.showNotification('กำลังประมวลผลคำขออยู่', 'info');
-                return;
+                return false; // Prevent further processing
             }
             
             if (formToken) {
                 this.state.formTokens.add(formToken);
             }
             
-            // Set loading state
             this.setLoadingState(submitButton, true);
-            
-            // Clear previous errors
             this.clearFormErrors(form);
             
-            // Submit form
             const response = await this.httpRequest(form.action, {
                 method: form.method || 'POST',
-                body: formData
+                body: JSON.stringify(data) // Send as JSON
             });
             
             if (response.success) {
-                this.showNotification('บันทึกข้อมูลสำเร็จ', 'success');
+                this.showNotification(response.message || 'บันทึกข้อมูลสำเร็จ', 'success');
                 this.handleFormSuccess(form, response);
+                return true; // Indicate success
             } else {
+                // If API returns field_errors, handle them
+                if (response.field_errors) {
+                    Object.keys(response.field_errors).forEach(fieldName => {
+                        this.showFieldError(form.querySelector(`[name="${fieldName}"]`), response.field_errors[fieldName]);
+                    });
+                }
                 throw new Error(response.error || 'Form submission failed');
             }
             
         } catch (error) {
             this.log('error', 'Form submission error:', error);
-            this.handleFormError(form, error);
+            // Don't show notification twice if field_errors were already handled and threw
+            if (!error.field_errors) {
+                this.showNotification(error.message || 'เกิดข้อผิดพลาดในการส่งข้อมูล', 'error');
+            }
+            return false; // Indicate failure
         } finally {
             this.setLoadingState(submitButton, false);
-            
-            // Remove form token after processing
-            const formToken = formData.get('form_token');
+            const formToken = data['form_token'];
             if (formToken) {
                 setTimeout(() => {
                     this.state.formTokens.delete(formToken);
-                }, 5000);
+                }, 5000); // Allow some time before token can be reused
             }
         }
     }
     
-    // Form validation
     setupFormValidation(form) {
         const inputs = form.querySelectorAll('input, select, textarea');
         
@@ -347,6 +401,7 @@ class NudDeeSaaSApp {
         }
         
         if (field.type === 'password') {
+            // Minimal password validation here, server-side validation is more robust
             rules.push({
                 validate: (value) => !value || value.length >= 8,
                 message: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'
@@ -356,7 +411,7 @@ class NudDeeSaaSApp {
         if (field.dataset.minLength) {
             const minLength = parseInt(field.dataset.minLength);
             rules.push({
-                validate: (value) => !value || value.length >= minLength,
+                validate: (value) => value.length >= minLength, // Apply only if value exists
                 message: `ต้องมีอย่างน้อย ${minLength} ตัวอักษร`
             });
         }
@@ -364,7 +419,7 @@ class NudDeeSaaSApp {
         if (field.dataset.maxLength) {
             const maxLength = parseInt(field.dataset.maxLength);
             rules.push({
-                validate: (value) => !value || value.length <= maxLength,
+                validate: (value) => value.length <= maxLength, // Apply only if value exists
                 message: `ต้องไม่เกิน ${maxLength} ตัวอักษร`
             });
         }
@@ -373,6 +428,7 @@ class NudDeeSaaSApp {
     }
     
     showFieldError(field, message) {
+        if (!field) return; // Guard against null field
         field.classList.remove('is-valid');
         field.classList.add('is-invalid');
         
@@ -386,6 +442,7 @@ class NudDeeSaaSApp {
     }
     
     clearFieldError(field) {
+        if (!field) return; // Guard against null field
         field.classList.remove('is-invalid');
         field.classList.add('is-valid');
         
@@ -395,15 +452,23 @@ class NudDeeSaaSApp {
         }
     }
     
+    clearFormErrors(form) {
+        form.querySelectorAll('.is-invalid').forEach(field => {
+            this.clearFieldError(field); // Use instance method
+        });
+        
+        form.querySelectorAll('.field-error').forEach(div => { // For custom field-error divs
+            div.textContent = '';
+        });
+    }
+
     // Auto-save functionality
     setupAutoSave(form) {
         const formId = form.id || `form_${Date.now()}`;
         let saveTimeout;
         
-        // Load saved data
         this.loadAutoSavedData(form, formId);
         
-        // Save on input
         form.addEventListener('input', () => {
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
@@ -411,7 +476,6 @@ class NudDeeSaaSApp {
             }, 2000);
         });
         
-        // Clear on successful submit
         form.addEventListener('submit', () => {
             this.clearAutoSavedData(formId);
         });
@@ -422,7 +486,6 @@ class NudDeeSaaSApp {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData);
             
-            // Remove sensitive data
             delete data.password;
             delete data.confirm_password;
             delete data.form_token;
@@ -458,7 +521,6 @@ class NudDeeSaaSApp {
     }
     
     showAutoSaveNotification() {
-        // Small, unobtrusive notification
         const notification = document.createElement('div');
         notification.className = 'position-fixed bottom-0 end-0 p-3';
         notification.style.zIndex = '9999';
@@ -480,24 +542,38 @@ class NudDeeSaaSApp {
         }, 3000);
     }
     
-    // Appointment management
+    // Appointment management (Refactored to use this.httpRequest)
     async loadAppointments(filters = {}) {
-        try {
-            const params = new URLSearchParams(filters);
-            const cacheKey = params.toString();
-            
-            // Check cache first
-            if (this.state.eventsCache.has(cacheKey)) {
-                const cached = this.state.eventsCache.get(cacheKey);
-                if (Date.now() - cached.timestamp < 60000) { // 1 minute cache
-                    this.displayAppointments(cached.data);
-                    return;
-                }
+        const container = document.getElementById('appointments-container');
+        if (!container) {
+            this.log('warn', 'Appointments container not found.');
+            return;
+        }
+        
+        const params = new URLSearchParams(filters);
+        const cacheKey = params.toString();
+        
+        if (this.state.eventsCache.has(cacheKey)) {
+            const cached = this.state.eventsCache.get(cacheKey);
+            if (Date.now() - cached.timestamp < 60000) { // 1 minute cache
+                this.log('debug', 'Loading appointments from cache.');
+                this.displayAppointments(cached.data);
+                return;
             }
+        }
+        
+        container.innerHTML = `
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">กำลังโหลด...</span>
+                </div>
+                <p class="mt-2">กำลังโหลดรายการนัดหมาย...</p>
+            </div>
+        `;
+
+        try {
+            const response = await this.httpRequest(`/get_events?${params.toString()}`, { method: 'GET' });
             
-            const response = await this.httpRequest(`/get_events?${params}`);
-            
-            // Cache the response
             this.state.eventsCache.set(cacheKey, {
                 data: response,
                 timestamp: Date.now()
@@ -507,6 +583,11 @@ class NudDeeSaaSApp {
             
         } catch (error) {
             this.log('error', 'Failed to load appointments:', error);
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>เกิดข้อผิดพลาดในการโหลดรายการนัดหมาย: ${this.escapeHtml(error.message || String(error))}
+                </div>
+            `;
             this.showNotification('ไม่สามารถโหลดรายการนัดหมายได้', 'error');
         }
     }
@@ -514,6 +595,8 @@ class NudDeeSaaSApp {
     displayAppointments(data) {
         const container = document.getElementById('appointments-container');
         if (!container) return;
+        
+        container.innerHTML = ''; // Clear loading spinner or previous content
         
         if (!data.events || data.events.length === 0) {
             container.innerHTML = `
@@ -524,10 +607,7 @@ class NudDeeSaaSApp {
             return;
         }
         
-        // Group events by date
         const eventsByDate = this.groupEventsByDate(data.events);
-        
-        container.innerHTML = '';
         
         Object.keys(eventsByDate).sort().forEach(date => {
             this.renderDateGroup(container, date, eventsByDate[date]);
@@ -580,12 +660,14 @@ class NudDeeSaaSApp {
         const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
         
         let statusClass = '';
-        if (event.title.includes('(มาตามนัด)')) {
+        if (event.notes && event.notes.includes('สถานะ: มาตามนัด')) { // Check notes for status
             statusClass = 'border-success';
-        } else if (event.title.includes('(ยกเลิก)')) {
+        } else if (event.notes && event.notes.includes('สถานะ: ยกเลิก')) {
             statusClass = 'border-danger';
-        } else if (event.title.includes('(ไม่มา)')) {
+        } else if (event.notes && event.notes.includes('สถานะ: ไม่มา')) {
             statusClass = 'border-warning';
+        } else {
+            statusClass = 'border-primary'; // Default color for appointments
         }
         
         const card = document.createElement('div');
@@ -620,10 +702,10 @@ class NudDeeSaaSApp {
                     </div>
                 </div>
                 <div class="text-end mt-2">
-                    <a href="/update_status?event_id=${event.id}" class="btn btn-sm btn-primary">
+                    <a href="/update_status?event_id=${event.id}&calendar_id=${event.source_calendar_id}" class="btn btn-sm btn-primary">
                         <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
                     </a>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="app.showEventDetails('${event.id}')">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.app.showEventDetails('${event.id}')">
                         <i class="fas fa-info-circle me-1"></i>รายละเอียด
                     </button>
                 </div>
@@ -636,6 +718,7 @@ class NudDeeSaaSApp {
     // Event details modal
     async showEventDetails(eventId) {
         try {
+            // Fetch event details including calendar_id
             const response = await this.httpRequest(`/get_events?event_id=${eventId}`);
             
             if (!response.events || response.events.length === 0) {
@@ -644,7 +727,37 @@ class NudDeeSaaSApp {
             }
             
             const event = response.events[0];
-            this.displayEventModal(event);
+            
+            // Create and show the modal
+            const modalElement = document.createElement('div');
+            modalElement.className = 'modal fade';
+            modalElement.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            ${this.renderEventDetails(event)}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                            <a href="/update_status?event_id=${event.id}&calendar_id=${event.source_calendar_id}" class="btn btn-primary">
+                                <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modalElement);
+            const bootstrapModal = new bootstrap.Modal(modalElement);
+            bootstrapModal.show();
+            
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                modalElement.remove();
+            });
             
         } catch (error) {
             this.log('error', 'Failed to load event details:', error);
@@ -652,57 +765,26 @@ class NudDeeSaaSApp {
         }
     }
     
-    displayEventModal(event) {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">รายละเอียดนัดหมาย</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        ${this.renderEventDetails(event)}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                        <a href="/update_status?event_id=${event.id}" class="btn btn-primary">
-                            <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
-                        </a>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        const bootstrapModal = new bootstrap.Modal(modal);
-        bootstrapModal.show();
-        
-        modal.addEventListener('hidden.bs.modal', () => {
-            modal.remove();
-        });
-    }
-    
+    // Render event details for modal
     renderEventDetails(event) {
-        const subcalendarDisplay = event.subcalendar_display || 'ไม่ระบุปฏิทิน';
-        const startDate = new Date(event.start_dt).toLocaleDateString('th-TH');
-        const startTime = event.start_dt.split('T')[1].substring(0, 5);
-        const endTime = event.end_dt.split('T')[1].substring(0, 5);
+        const subcalendarDisplay = this.escapeHtml(event.subcalendar_display || 'ไม่ระบุปฏิทิน');
+        const startDate = moment(event.start_dt).format('DD/MM/YYYY');
+        const startTime = moment(event.start_dt).format('HH:mm');
+        const endTime = moment(event.end_dt).format('HH:mm');
         
         return `
             <div class="row">
                 <div class="col-md-8">
-                    <h4>${this.escapeHtml(event.title)}</h4>
+                    <h4>${this.escapeHtml(event.title || 'ไม่ระบุหัวข้อ')}</h4>
                     <div class="mb-3">
                         <span class="badge bg-secondary me-2">
-                            <i class="fas fa-calendar me-1"></i>${this.escapeHtml(subcalendarDisplay)}
+                            <i class="fas fa-calendar me-1"></i>${subcalendarDisplay}
                         </span>
                     </div>
                 </div>
                 <div class="col-md-4 text-end">
-                    <small class="text-muted">Event ID: ${event.id}</small>
+                    <small class="text-muted">Event ID: ${event.id}</small><br>
+                    <small class="text-muted">Calendar ID: ${event.source_calendar_id}</small>
                 </div>
             </div>
             
@@ -735,21 +817,27 @@ class NudDeeSaaSApp {
         `;
     }
     
-    // Utility functions
+    // Helper to escape HTML for display
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
     
+    // Set loading state for a button
     setLoadingState(element, loading = true) {
+        if (!element) return;
         if (loading) {
             element.disabled = true;
-            element.dataset.originalText = element.innerHTML;
+            // Store original HTML for submit button if not already stored
+            if (!element.dataset.originalHtml) {
+                element.dataset.originalHtml = element.innerHTML;
+            }
             element.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังประมวลผล...';
         } else {
             element.disabled = false;
-            element.innerHTML = element.dataset.originalText || element.innerHTML;
+            // Restore original HTML
+            element.innerHTML = element.dataset.originalHtml || element.innerHTML;
         }
     }
     
@@ -761,42 +849,29 @@ class NudDeeSaaSApp {
         form.querySelectorAll('.invalid-feedback').forEach(feedback => {
             feedback.textContent = '';
         });
+
+        // Also clear custom 'field-error' divs if present
+        form.querySelectorAll('.field-error').forEach(div => {
+            div.textContent = '';
+        });
     }
     
     // Notification system
     showNotification(message, type = 'info', options = {}) {
-        const defaults = {
-            duration: 5000,
-            position: 'top-right',
-            closable: true
-        };
-        
-        const settings = { ...defaults, ...options };
-        
-        if (typeof Swal !== 'undefined') {
-            const toast = Swal.mixin({
-                toast: true,
-                position: settings.position,
-                showConfirmButton: false,
-                timer: settings.duration,
-                timerProgressBar: true,
-                didOpen: (toast) => {
-                    toast.addEventListener('mouseenter', Swal.stopTimer);
-                    toast.addEventListener('mouseleave', Swal.resumeTimer);
-                }
-            });
-            
-            toast.fire({
+        if (this.state.toastMixin) {
+            this.state.toastMixin.fire({
                 icon: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
                 title: message
             });
         } else {
-            // Fallback notification
-            this.showFallbackNotification(message, type, settings);
+            this.showFallbackNotification(message, type, options);
         }
     }
     
     showFallbackNotification(message, type, settings) {
+        const defaults = { duration: 5000, position: 'top-right', closable: true };
+        settings = { ...defaults, ...settings };
+
         const notification = document.createElement('div');
         notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
         notification.style.cssText = `
@@ -826,16 +901,24 @@ class NudDeeSaaSApp {
     
     // Subscription monitoring
     initializeSubscriptionMonitoring() {
-        if (!this.state.currentOrganization) return;
+        // Ensure currentOrganization is loaded before checking
+        if (!this.state.currentOrganization && this.state.currentUser) {
+            // Attempt to load organization data if not already present
+            // (e.g., from a meta tag or initial API call)
+            // For now, if it's null, we just skip.
+            this.log('debug', 'No currentOrganization data for subscription monitoring.');
+            return; 
+        } else if (!this.state.currentOrganization) {
+            return; // No user, no organization
+        }
         
         this.checkTrialStatus();
         this.checkSubscriptionStatus();
         
-        // Check every 5 minutes
         setInterval(() => {
             this.checkTrialStatus();
             this.checkSubscriptionStatus();
-        }, 300000);
+        }, 300000); // Every 5 minutes
     }
     
     checkTrialStatus() {
@@ -845,7 +928,9 @@ class NudDeeSaaSApp {
         const subscriptionStatus = this.state.currentOrganization.subscription_status;
         
         if (subscriptionStatus === 'trial' && trialEnds) {
-            const daysLeft = Math.ceil((new Date(trialEnds) - new Date()) / (1000 * 60 * 60 * 24));
+            const trialEndDate = new Date(trialEnds);
+            const now = new Date();
+            const daysLeft = Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
             
             if (daysLeft <= 3 && daysLeft > 0) {
                 this.showTrialWarning(daysLeft);
@@ -856,11 +941,10 @@ class NudDeeSaaSApp {
     }
     
     showTrialWarning(daysLeft) {
-        // Only show if not already shown recently
         const lastShown = localStorage.getItem('trial_warning_shown');
         const now = Date.now();
         
-        if (lastShown && (now - parseInt(lastShown)) < 3600000) { // 1 hour
+        if (lastShown && (now - parseInt(lastShown)) < (1 * 60 * 60 * 1000)) { // 1 hour
             return;
         }
         
@@ -894,13 +978,13 @@ class NudDeeSaaSApp {
     }
     
     handleSuspendedAccount() {
-        // Disable form submissions
         document.querySelectorAll('form').forEach(form => {
             form.addEventListener('submit', (event) => {
-                event.preventDefault();
+                event.preventDefault(); // Prevent default submission
                 this.showUpgradeModal('suspended');
             });
         });
+        this.showNotification('บัญชีของคุณถูกระงับการใช้งาน กรุณาอัพเกรดแพ็คเกจ', 'error', { duration: 0 });
     }
     
     handleCancelledAccount() {
@@ -915,64 +999,71 @@ class NudDeeSaaSApp {
     initializeUsageLimits() {
         this.checkUsageLimits();
         
-        // Check every 2 minutes
         setInterval(() => {
             this.checkUsageLimits();
-        }, 120000);
+        }, 120000); // Every 2 minutes
     }
     
     async checkUsageLimits() {
         try {
             const response = await this.httpRequest('/api/usage-stats');
             
-            if (response.appointment_usage_percent >= 90) {
-                this.showUsageLimitWarning('appointments', response.appointment_usage_percent);
+            if (response.success && response.data) {
+                // Update internal state
+                this.state.currentOrganization.max_appointments_per_month = response.data.max_appointments;
+                this.state.currentOrganization.max_staff_users = response.data.max_staff;
+                this.state.currentOrganization.can_create_appointment = response.data.can_create_appointment;
+                this.state.currentOrganization.can_add_staff = response.data.can_add_staff;
+
+                // Update UI elements on the dashboard (if present)
+                this.updateUsageIndicators(response.data);
+
+                if (!response.data.can_create_appointment) {
+                    this.showNotification(
+                        `คุณใช้งานนัดหมายครบ ${response.data.monthly_appointments} รายการแล้ว (${response.data.max_appointments} คือขีดจำกัด). กรุณาอัปเกรดแพ็คเกจ.`,
+                        'warning',
+                        { duration: 0 } // Sticky warning
+                    );
+                } else if (!response.data.can_add_staff) {
+                     this.showNotification(
+                        `คุณใช้งานเจ้าหน้าที่ครบ ${response.data.monthly_staff} รายการแล้ว (${response.data.max_staff} คือขีดจำกัด). กรุณาอัปเกรดแพ็คเกจ.`,
+                        'warning',
+                        { duration: 0 } // Sticky warning
+                    );
+                }
             }
-            
-            if (response.staff_usage_percent >= 90) {
-                this.showUsageLimitWarning('staff', response.staff_usage_percent);
-            }
-            
-            this.updateUsageIndicators(response);
             
         } catch (error) {
             this.log('warn', 'Failed to check usage limits:', error);
+            // Show notification if API is unreachable or returns critical error
+            this.showNotification('ไม่สามารถตรวจสอบขีดจำกัดการใช้งานได้', 'warning', { duration: 5000 });
         }
-    }
-    
-    showUsageLimitWarning(type, percentage) {
-        const typeText = type === 'appointments' ? 'นัดหมาย' : 'เจ้าหน้าที่';
-        
-        this.showNotification(
-            `การใช้งาน${typeText}ถึง ${percentage.toFixed(1)}% แล้ว`,
-            'warning',
-            { duration: 8000 }
-        );
     }
     
     updateUsageIndicators(data) {
-        // Update progress bars
-        const appointmentProgress = document.querySelector('.usage-appointments .progress-bar');
-        if (appointmentProgress) {
-            appointmentProgress.style.width = `${data.appointment_usage_percent}%`;
-            appointmentProgress.className = `progress-bar ${this.getProgressBarClass(data.appointment_usage_percent)}`;
+        // Find dashboard elements and update them
+        const apptUsageText = document.querySelector('.usage-appointments-text');
+        if (apptUsageText) {
+            apptUsageText.textContent = `${data.monthly_appointments} / ${data.max_appointments === -1 ? '∞' : data.max_appointments}`;
         }
         
-        const staffProgress = document.querySelector('.usage-staff .progress-bar');
-        if (staffProgress) {
-            staffProgress.style.width = `${data.staff_usage_percent}%`;
-            staffProgress.className = `progress-bar ${this.getProgressBarClass(data.staff_usage_percent)}`;
+        const apptProgressBar = document.querySelector('.usage-appointments-progress .progress-bar');
+        if (apptProgressBar && data.max_appointments > 0) {
+            const percentage = (data.monthly_appointments / data.max_appointments) * 100;
+            apptProgressBar.style.width = `${Math.min(percentage, 100)}%`;
+            apptProgressBar.className = `progress-bar ${this.getProgressBarClass(percentage)}`;
         }
-        
-        // Update text
-        const appointmentText = document.querySelector('.usage-appointments .usage-text');
-        if (appointmentText) {
-            appointmentText.textContent = `${data.appointments_used} / ${data.appointments_limit || 'ไม่จำกัด'}`;
+
+        const staffUsageText = document.querySelector('.usage-staff-text');
+        if (staffUsageText) {
+            staffUsageText.textContent = `${data.monthly_staff || 0} / ${data.max_staff === -1 ? '∞' : data.max_staff}`;
         }
-        
-        const staffText = document.querySelector('.usage-staff .usage-text');
-        if (staffText) {
-            staffText.textContent = `${data.staff_used} / ${data.staff_limit || 'ไม่จำกัด'}`;
+
+        const staffProgressBar = document.querySelector('.usage-staff-progress .progress-bar');
+        if (staffProgressBar && data.max_staff > 0) {
+            const percentage = ((data.monthly_staff || 0) / data.max_staff) * 100;
+            staffProgressBar.style.width = `${Math.min(percentage, 100)}%`;
+            staffProgressBar.className = `progress-bar ${this.getProgressBarClass(percentage)}`;
         }
     }
     
@@ -983,36 +1074,40 @@ class NudDeeSaaSApp {
     }
     
     showUpgradeModal(reason) {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header bg-warning text-dark">
-                        <h5 class="modal-title">
-                            <i class="fas fa-exclamation-triangle"></i> 
-                            ${reason === 'suspended' ? 'บัญชีถูกระงับ' : 'ถึงขีดจำกัดการใช้งาน'}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        ${this.getUpgradeModalContent(reason)}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                        <a href="/billing/choose-plan" class="btn btn-warning">อัพเกรดเลย</a>
+        const modalElement = document.getElementById('upgradeModal'); // Assuming a pre-existing modal
+        if (!modalElement) { // If modal doesn't exist, create it dynamically
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = `
+                <div class="modal fade" id="upgradeModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header bg-warning text-dark">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-exclamation-triangle"></i> 
+                                    ${reason === 'suspended' ? 'บัญชีถูกระงับ' : 'ถึงขีดจำกัดการใช้งาน'}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${this.getUpgradeModalContent(reason)}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                                <a href="/billing/choose-plan" class="btn btn-warning">อัพเกรดเลย</a>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        const bootstrapModal = new bootstrap.Modal(modal);
+            `;
+            document.body.appendChild(tempDiv.firstElementChild);
+            modalElement = document.getElementById('upgradeModal');
+        }
+
+        const bootstrapModal = new bootstrap.Modal(modalElement);
         bootstrapModal.show();
         
-        modal.addEventListener('hidden.bs.modal', () => {
-            modal.remove();
+        modalElement.addEventListener('hidden.bs.modal', () => {
+            // modalElement.remove(); // Only remove if dynamically created
         });
     }
     
@@ -1031,10 +1126,7 @@ class NudDeeSaaSApp {
     
     // Error handling and reporting
     setupErrorHandling() {
-        // Set up global error boundaries
         this.setupGlobalErrorHandlers();
-        
-        // Set up error reporting
         this.setupErrorReporting();
     }
     
@@ -1043,7 +1135,6 @@ class NudDeeSaaSApp {
     }
     
     setupErrorReporting() {
-        // Could integrate with Sentry, LogRocket, etc.
         this.errorQueue = [];
         this.maxErrorQueueSize = 10;
     }
@@ -1060,15 +1151,12 @@ class NudDeeSaaSApp {
             context: context
         };
         
-        // Add to queue
         this.errorQueue.push(errorReport);
         
-        // Keep queue size manageable
         if (this.errorQueue.length > this.maxErrorQueueSize) {
             this.errorQueue.shift();
         }
         
-        // Send to server (if configured)
         this.sendErrorReport(errorReport);
     }
     
@@ -1085,7 +1173,6 @@ class NudDeeSaaSApp {
     
     // Keyboard shortcuts
     handleKeyboardShortcuts(event) {
-        // Ctrl/Cmd + K = Quick search
         if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
             event.preventDefault();
             const searchInput = document.querySelector('#quickSearch');
@@ -1094,7 +1181,6 @@ class NudDeeSaaSApp {
             }
         }
         
-        // Ctrl/Cmd + N = New appointment
         if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
             event.preventDefault();
             const newTab = document.querySelector('#new-tab');
@@ -1103,7 +1189,6 @@ class NudDeeSaaSApp {
             }
         }
         
-        // Escape = Close modals
         if (event.key === 'Escape') {
             const openModal = document.querySelector('.modal.show');
             if (openModal) {
@@ -1115,22 +1200,17 @@ class NudDeeSaaSApp {
         }
     }
     
-    // Form handling utilities
+    // Form handling utilities (already integrated into handleAsyncForm)
     handleFormSuccess(form, response) {
-        // Reset form
         form.reset();
+        this.updateFormToken(form, response.new_form_token); // Pass new token
         
-        // Update form token
-        this.updateFormToken(form);
-        
-        // Handle specific success actions
         if (response.redirect_url) {
             setTimeout(() => {
                 window.location.href = response.redirect_url;
             }, 1000);
         }
         
-        // Refresh data if needed
         if (form.dataset.refreshTarget) {
             this.refreshComponent(form.dataset.refreshTarget);
         }
@@ -1138,11 +1218,8 @@ class NudDeeSaaSApp {
     
     handleFormError(form, error) {
         this.showNotification(error.message || 'เกิดข้อผิดพลาดในการส่งข้อมูล', 'error');
+        this.updateFormToken(form, error.new_form_token); // Pass new token from error response
         
-        // Update form token
-        this.updateFormToken(form);
-        
-        // Show field errors if available
         if (error.field_errors) {
             Object.keys(error.field_errors).forEach(fieldName => {
                 const field = form.querySelector(`[name="${fieldName}"]`);
@@ -1153,23 +1230,22 @@ class NudDeeSaaSApp {
         }
     }
     
-    updateFormToken(form) {
+    updateFormToken(form, newToken = null) {
         const tokenField = form.querySelector('input[name="form_token"]');
         if (tokenField) {
-            tokenField.value = this.generateFormToken();
+            tokenField.value = newToken || this.generateFormToken(); // Use provided token or generate new one
         }
     }
     
     refreshComponent(target) {
         switch (target) {
             case 'appointments':
-                this.loadAppointments();
+                this.loadAppointments({}); // Refresh with default filters
                 break;
             case 'usage':
                 this.checkUsageLimits();
                 break;
             default:
-                // Generic refresh
                 window.location.reload();
         }
     }
@@ -1178,7 +1254,7 @@ class NudDeeSaaSApp {
     startHeartbeat() {
         this.heartbeatInterval = setInterval(() => {
             this.sendHeartbeat();
-        }, 60000); // Every minute
+        }, 60000);
     }
     
     async sendHeartbeat() {
@@ -1190,6 +1266,7 @@ class NudDeeSaaSApp {
                     page: window.location.pathname
                 })
             });
+            this.log('debug', 'Heartbeat sent.');
         } catch (error) {
             this.log('warn', 'Heartbeat failed:', error);
             this.handleConnectionLoss();
@@ -1206,21 +1283,17 @@ class NudDeeSaaSApp {
     
     // Lifecycle management
     pauseOperations() {
-        // Pause background operations when page is hidden
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
         }
     }
     
     resumeOperations() {
-        // Resume operations when page becomes visible
         this.startHeartbeat();
         this.checkUsageLimits();
     }
     
-    // Data synchronization
     async syncPendingData() {
-        // Sync any pending data when connection is restored
         try {
             const pendingForms = JSON.parse(localStorage.getItem('pending_forms') || '[]');
             
@@ -1235,7 +1308,6 @@ class NudDeeSaaSApp {
                 }
             }
             
-            // Clear pending data
             localStorage.removeItem('pending_forms');
             
         } catch (error) {
@@ -1251,70 +1323,52 @@ class NudDeeSaaSApp {
         }, 2000);
     }
     
-    // Public API methods
-    // These methods can be called from other scripts or inline event handlers
+    // Public API methods for direct access from templates (e.g., onclick="window.app.showEventDetails('ID')")
+    // These functions should only call the internal class methods.
+
+    // No need to define createAppointment here if it's handled by handleAsyncForm globally
+    // createAppointment(formData) is no longer required as a public method directly exposed.
+    // The handleAsyncForm already takes care of the submission logic.
     
-    async createAppointment(formData) {
-        try {
-            const response = await this.httpRequest('/create_appointment', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (response.success) {
-                this.showNotification('สร้างนัดหมายสำเร็จ', 'success');
-                this.loadAppointments(); // Refresh appointments list
-                return true;
-            } else {
-                throw new Error(response.error);
-            }
-        } catch (error) {
-            this.showNotification(error.message, 'error');
-            return false;
-        }
-    }
+    // showEventDetails is already a public method of window.app due to the class instance assignment.
+    // No explicit public declaration needed here.
+
+    // checkUsageLimits is also accessible via window.app.checkUsageLimits
+    // getCSRFToken is accessible via window.app.getCSRFToken
+    // httpRequest is accessible via window.app.httpRequest
+
+    // Expose utility functions if needed directly in HTML
+    // window.app.escapeHtml = this.escapeHtml; // Not strictly necessary if always called via this.
     
     // Cleanup
     destroy() {
-        // Clean up intervals
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
         }
         
-        // Clear event listeners
         this.eventHandlers.clear();
-        
-        // Clear caches
         this.state.eventsCache.clear();
         this.state.formTokens.clear();
     }
 }
 
-// Initialize the application
-let app;
-
+// Global initialization of the app
+// This makes the app instance accessible via `window.app`
 document.addEventListener('DOMContentLoaded', function() {
     try {
-        app = new NudDeeSaaSApp();
-        
-        // Make app globally available for debugging
-        if (window.DEBUG) {
-            window.app = app;
-        }
-        
+        window.app = new NudDeeSaaSApp(); // Assign the instance to window.app directly
     } catch (error) {
         console.error('Failed to initialize NudDee SaaS App:', error);
         
-        // Fallback notification
-        const alert = document.createElement('div');
-        alert.className = 'alert alert-danger position-fixed';
-        alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
-        alert.textContent = 'เกิดข้อผิดพลาดในการเริ่มต้นระบบ กรุณารีเฟรชหน้าเว็บ';
-        document.body.appendChild(alert);
+        // Fallback notification for critical startup errors
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger position-fixed';
+        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+        alertDiv.textContent = 'เกิดข้อผิดพลาดร้ายแรงในการเริ่มต้นระบบ กรุณารีเฟรชหน้าเว็บ';
+        document.body.appendChild(alertDiv);
     }
 });
 
-// Export for module usage
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = NudDeeSaaSApp;
-}
+// For Moment.js usage in templates like dashboard.html:
+// Ensure that moment.js and its locale are loaded before any script attempts to use `moment()`.
+// base.html now correctly loads moment.js before script.js and any block scripts.

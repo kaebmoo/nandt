@@ -5,6 +5,7 @@ import stripe
 import os
 from datetime import datetime, timedelta
 from models import db, Organization, Subscription, SubscriptionPlan, SubscriptionStatus, PRICING_PLANS
+from datetime import timezone
 
 billing_bp = Blueprint('billing', __name__, url_prefix='/billing')
 
@@ -283,7 +284,7 @@ def upgrade_to_free_plan():
         # อัปเดตแพ็คเกจ
         organization.subscription_plan = SubscriptionPlan.FREE
         organization.subscription_status = SubscriptionStatus.ACTIVE
-        organization.subscription_expires_at = datetime.utcnow() + timedelta(days=365)  # 1 ปี
+        organization.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=365)  # 1 ปี
         organization.max_appointments_per_month = PRICING_PLANS[SubscriptionPlan.FREE]['appointments_per_month']
         organization.max_staff_users = PRICING_PLANS[SubscriptionPlan.FREE]['max_staff']
         
@@ -294,7 +295,7 @@ def upgrade_to_free_plan():
             billing_cycle='yearly',
             amount=0,
             status=SubscriptionStatus.ACTIVE,
-            current_period_start=datetime.utcnow(),
+            current_period_start=datetime.now(timezone.utc),
             current_period_end=organization.subscription_expires_at
         )
         

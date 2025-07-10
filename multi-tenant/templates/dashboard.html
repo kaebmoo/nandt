@@ -3,7 +3,6 @@
 {% block title %}Dashboard - {{ current_organization.name }}{% endblock %}
 
 {% block content %}
-<!-- Welcome Section -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="card bg-primary text-white">
@@ -14,8 +13,9 @@
                         <p class="mb-0">ยินดีต้อนรับสู่ระบบจัดการนัดหมาย {{ current_organization.name }}</p>
                     </div>
                     <div class="col-md-4 text-md-end">
-                        <div class="h5 mb-0">{{ "วันนี้" if moment().format('YYYY-MM-DD') == moment().format('YYYY-MM-DD') else moment().format('DD/MM/YYYY') }}</div>
-                        <small>{{ moment().format('dddd') }}</small>
+                        {# REMOVED Moment.js calls from here. Will be handled by JS or Python context #}
+                        <div class="h5 mb-0" id="current-date-display"></div>
+                        <small id="current-weekday-display"></small>
                     </div>
                 </div>
             </div>
@@ -23,7 +23,6 @@
     </div>
 </div>
 
-<!-- Stats Cards -->
 <div class="row mb-4">
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="card border-start border-primary border-4">
@@ -78,7 +77,8 @@
                             {% if summary_data and summary_data.stats %}
                                 {{ summary_data.stats.monthly_appointments }}
                             {% else %}
-                                {{ current_organization.get_current_month_usage() }}
+                                {# Call get_current_month_usage as property, not method #}
+                                {{ current_organization.get_current_month_usage }} 
                             {% endif %}
                         </h4>
                         <p class="mb-0">นัดหมายเดือนนี้</p>
@@ -96,7 +96,7 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h4 class="text-warning mb-1">{{ current_organization.users|length }}</h4>
+                        <h4 class="text-warning mb-1">{{ current_organization.users.count() }}</h4>
                         <p class="mb-0">ผู้ใช้งาน</p>
                     </div>
                     <div class="align-self-center">
@@ -110,7 +110,6 @@
 
 <div class="row">
     <div class="col-lg-8">
-        <!-- Quick Actions -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-lightning"></i> การดำเนินการด่วน</h5>
@@ -145,7 +144,6 @@
             </div>
         </div>
 
-        <!-- Recent Activities -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-clock-history"></i> กิจกรรมล่าสุด</h5>
@@ -177,7 +175,10 @@
                                         <div class="text-muted small">{{ activity.details.title }}</div>
                                     {% endif %}
                                 </div>
-                                <small class="text-muted">{{ moment(activity.created_at).fromNow() }}</small>
+                                {# Use data-timestamp for JS to format #}
+                                <small class="text-muted activity-timestamp" data-timestamp="{{ activity.created_at.isoformat() }}">
+                                    {# This will be populated by JS #}
+                                </small>
                             </div>
                         </div>
                         {% endfor %}
@@ -194,14 +195,13 @@
     </div>
     
     <div class="col-lg-4">
-        <!-- Subscription Status -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-shield-check"></i> สถานะการสมัครสมาชิก</h5>
             </div>
             <div class="card-body text-center">
                 {% if current_organization.subscription_status.value == 'trial' %}
-                    {% if current_organization.is_trial_expired() %}
+                    {% if current_organization.is_trial_expired %} {# Property #}
                         <div class="text-danger mb-3">
                             <i class="bi bi-exclamation-triangle" style="font-size: 3em;"></i>
                             <h6 class="mt-2">การทดลองหมดอายุ</h6>
@@ -214,7 +214,9 @@
                             <h6 class="mt-2">ทดลองใช้งาน</h6>
                         </div>
                         <p class="text-muted">
-                            เหลือ {{ (current_organization.trial_ends_at - moment.utcnow()).days }} วัน
+                            {# Calculate days left in Python #}
+                            {% set days_left = (current_organization.trial_ends_at - datetime.now(timezone.utc)).days %}
+                            เหลือ {{ days_left }} วัน
                         </p>
                         <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-primary">อัพเกรดเลย</a>
                     {% endif %}
@@ -237,7 +239,6 @@
             </div>
         </div>
 
-        <!-- Subcalendars -->
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-calendar2-week"></i> ปฏิทินย่อย</h5>
@@ -268,55 +269,35 @@
             </div>
         </div>
 
-        <!-- Usage Progress -->
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-speedometer2"></i> การใช้งานเดือนนี้</h5>
             </div>
             <div class="card-body">
-                {% set current_usage = current_organization.get_current_month_usage() %}
-                {% set max_usage = current_organization.max_appointments_per_month %}
-                {% set usage_percent = (current_usage / max_usage * 100) if max_usage > 0 else 0 %}
-                
+                {# These will be updated by JS from /api/usage-stats #}
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                         <span>นัดหมาย</span>
-                        <span>{{ current_usage }}/{% if max_usage == -1 %}∞{% else %}{{ max_usage }}{% endif %}</span>
+                        <span class="usage-appointments-text">กำลังโหลด...</span>
                     </div>
-                    {% if max_usage != -1 %}
-                    <div class="progress">
-                        <div class="progress-bar {% if usage_percent >= 80 %}bg-warning{% elif usage_percent >= 95 %}bg-danger{% else %}bg-success{% endif %}" 
-                             style="width: {{ usage_percent }}%"></div>
+                    <div class="progress usage-appointments-progress">
+                        <div class="progress-bar bg-success" style="width: 0%"></div>
                     </div>
-                    {% endif %}
                 </div>
 
-                {% set current_staff = current_organization.users|selectattr('role.value', 'equalto', 'staff')|list|length %}
-                {% set max_staff = current_organization.max_staff_users %}
-                {% set staff_percent = (current_staff / max_staff * 100) if max_staff > 0 else 0 %}
-                
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                         <span>เจ้าหน้าที่</span>
-                        <span>{{ current_staff }}/{% if max_staff == -1 %}∞{% else %}{{ max_staff }}{% endif %}</span>
+                        <span class="usage-staff-text">กำลังโหลด...</span>
                     </div>
-                    {% if max_staff != -1 %}
-                    <div class="progress">
-                        <div class="progress-bar {% if staff_percent >= 80 %}bg-warning{% elif staff_percent >= 95 %}bg-danger{% else %}bg-info{% endif %}" 
-                             style="width: {{ staff_percent }}%"></div>
+                    <div class="progress usage-staff-progress">
+                        <div class="progress-bar bg-info" style="width: 0%"></div>
                     </div>
-                    {% endif %}
                 </div>
 
-                {% if usage_percent >= 80 or staff_percent >= 80 %}
-                <div class="alert alert-warning alert-sm">
-                    <small>
-                        <i class="bi bi-exclamation-triangle"></i>
-                        การใช้งานใกล้เต็ม 
-                        <a href="{{ url_for('billing.choose_plan') }}" class="alert-link">อัพเกรด</a>
-                    </small>
+                <div id="usage-alert-container">
+                    {# JS will inject alerts here if usage is high #}
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -324,27 +305,32 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/th.min.js"></script>
 <script>
-// Set moment locale to Thai
-moment.locale('th');
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if app is initialized, if not, wait
+    function checkAppReady() {
+        if (window.app && typeof window.app.httpRequest === 'function') {
+            // Display current date and weekday
+            const currentMoment = moment();
+            document.getElementById('current-date-display').textContent = currentMoment.format('DD/MM/YYYY');
+            document.getElementById('current-weekday-display').textContent = currentMoment.format('dddd');
 
-// Auto-refresh every 5 minutes
-setInterval(function() {
-    location.reload();
-}, 300000);
+            // Format recent activity timestamps
+            document.querySelectorAll('.activity-timestamp').forEach(el => {
+                const timestamp = el.dataset.timestamp;
+                if (timestamp) {
+                    el.textContent = moment(timestamp).fromNow();
+                }
+            });
 
-// Add some interactivity to cards
-document.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('mouseenter', function() {
-        this.style.transition = 'transform 0.2s';
-        this.style.transform = 'translateY(-2px)';
-    });
-    
-    card.addEventListener('mouseleave', function() {
-        this.style.transform = 'translateY(0)';
-    });
+            // Trigger usage limits check immediately
+            window.app.checkUsageLimits();
+
+        } else {
+            setTimeout(checkAppReady, 50); // Retry after 50ms
+        }
+    }
+    checkAppReady();
 });
 </script>
 {% endblock %}

@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}NudDee - ระบบจัดการนัดหมาย{% endblock %}</title>
     
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
-    <!-- Custom CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     
     {% block head %}{% endblock %}
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
@@ -58,7 +58,6 @@
                         </a>
                     </li>
                     
-                    <!-- Admin Menu -->
                     {% if current_user_role == UserRole.ADMIN %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
@@ -83,9 +82,7 @@
                     {% endif %}
                 </ul>
                 
-                <!-- User Menu -->
                 <ul class="navbar-nav">
-                    <!-- Subscription Status -->
                     <li class="nav-item">
                         {% if subscription_status == SubscriptionStatus.TRIAL %}
                             {% if is_trial_expired %}
@@ -144,7 +141,6 @@
         </div>
     </nav>
 
-    <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="container mt-3">
@@ -158,14 +154,13 @@
         {% endif %}
     {% endwith %}
 
-    <!-- Subscription Warning Banner -->
     {% if current_user.is_authenticated and (is_trial_expired or not is_subscription_active) %}
         <div class="alert alert-warning alert-dismissible fade show m-0" role="alert">
             <div class="container">
                 <i class="bi bi-exclamation-triangle"></i>
                 {% if is_trial_expired %}
                     <strong>การทดลองใช้หมดอายุแล้ว!</strong> 
-                    กรุณาเลือกแพ็คเกจเพื่อใช้งานต่อ
+                    การใช้งานถูกจำกัด กรุณาอัปเกรดแพ็คเกจ
                     <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-warning btn-sm ms-2">เลือกแพ็คเกจ</a>
                 {% else %}
                     <strong>บัญชีของคุณถูกระงับ!</strong> 
@@ -175,12 +170,10 @@
         </div>
     {% endif %}
 
-    <!-- Main Content -->
     <main class="{% block main_class %}container mt-4{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Footer -->
     <footer class="bg-light mt-5 py-4">
         <div class="container">
             <div class="row">
@@ -199,9 +192,13 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/th.min.js"></script>
+    
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     
     {% block scripts %}{% endblock %}

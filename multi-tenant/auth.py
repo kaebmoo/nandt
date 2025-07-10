@@ -16,6 +16,7 @@ import uuid
 import os
 import requests
 import re # Added for input validation
+from datetime import timezone
 from functools import wraps # Added for decorator
 import hashlib # Added for HMAC (though not used in provided snippet, good for security)
 import hmac # Added for HMAC (though not used in provided snippet, good for security)
@@ -33,7 +34,7 @@ def rate_limit_check(identifier, max_attempts=5, window_minutes=15):
     Check if an identifier (e.g., IP address or email) is rate limited.
     Prevents brute-force attacks by limiting failed attempts within a time window.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     window_start = now - timedelta(minutes=window_minutes)
     
     if identifier in failed_attempts:
@@ -56,7 +57,7 @@ def record_failed_attempt(identifier):
     """
     if identifier not in failed_attempts:
         failed_attempts[identifier] = []
-    failed_attempts[identifier].append(datetime.utcnow())
+    failed_attempts[identifier].append(datetime.now(timezone.utc))
 
 def validate_input(data, required_fields, optional_fields=None):
     """
@@ -150,26 +151,39 @@ def require_admin(f):
 class AuthUser(UserMixin):
     def __init__(self, user_id):
         self.id = user_id
-        self._user = None
-    
+        self._user_instance = None
+
     @property
     def user(self):
-        if self._user is None:
-            self._user = User.query.get(self.id)
-        return self._user
+        from flask import current_app
+        from models import db, User # Import db and User
+
+        # ถ้า user_instance ยังไม่มี หรือถ้ามัน detached (ไม่อยู่ใน session ปัจจุบัน)
+        # ให้โหลดใหม่จาก session ที่ active หรือ merge เข้าไป
+        # วิธีแก้: ใช้ db.session.get() หรือ db.session.query.get() ซึ่งจะดึงจาก session ที่ active อยู่แล้ว
+        if self._user_instance is None or self._user_instance.id != self.id: # ตรวจสอบ ID เผื่อมีการเปลี่ยน user (ไม่น่าเกิดแต่เผื่อไว้)
+            with current_app.app_context():
+                # ใช้ .options(joinedload(User.organization)) เพื่อ eager load organization
+                # การใช้ .get() หรือ .query.get() จะดึงจาก session ปัจจุบันอยู่แล้ว
+                from sqlalchemy.orm import joinedload # Import joinedload
+                self._user_instance = User.query.options(joinedload(User.organization)).get(self.id)
+                
+        return self._user_instance
     
     def get_id(self):
-        return self.id
+        return str(self.id)
     
     @property
     def organization(self):
+        # self.user property จะจัดการการโหลด user และ organization ให้แล้ว
         return self.user.organization if self.user else None
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = User.query.get(user_id)
+    # load_user ถูกเรียกใน request context อยู่แล้ว
+    user = User.query.get(user_id) # โหลด User object
     if user and user.is_active:
-        return AuthUser(user_id)
+        return AuthUser(user.id) # ส่งแค่ ID ไปให้ AuthUser เพื่อให้ AuthUser.user โหลดเต็มรูปแบบ
     return None
 
 # Enhanced Registration Route
@@ -186,7 +200,9 @@ def register():
             sanitized_data, validation_errors = validate_input(data, required_fields, optional_fields)
             
             if validation_errors:
-                return jsonify({'error': 'Validation failed', 'details': validation_errors}), 400
+                # ส่ง field_errors กลับไปให้ Frontend จัดการ (ถ้ามี)
+                errors_dict = {field: "This field is required" for field in validation_errors}
+                return jsonify({'error': 'Validation failed', 'field_errors': errors_dict}), 400
             
             # Check rate limiting
             client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
@@ -196,24 +212,24 @@ def register():
             # Validate email format
             if not validate_email(sanitized_data['email']):
                 record_failed_attempt(client_ip)
-                return jsonify({'error': 'Invalid email format'}), 400
+                return jsonify({'error': 'Invalid email format', 'field_errors': {'email': 'Invalid email format'}}), 400
             
             # Validate password strength
             is_strong, message = validate_password_strength(sanitized_data['password'])
             if not is_strong:
                 record_failed_attempt(client_ip)
-                return jsonify({'error': message}), 400
+                return jsonify({'error': message, 'field_errors': {'password': message}}), 400
             
-            # Check password confirmation if provided
-            if 'password_confirm' in data:
-                if sanitized_data['password'] != data.get('password_confirm'):
+            # Check password confirmation if provided (assuming frontend handles this mostly)
+            if 'confirm_password' in data: # Make sure 'confirm_password' is in data (from request)
+                if sanitized_data['password'] != data.get('confirm_password'):
                     record_failed_attempt(client_ip)
-                    return jsonify({'error': 'Passwords do not match'}), 400
+                    return jsonify({'error': 'Passwords do not match', 'field_errors': {'confirm_password': 'Passwords do not match'}}), 400
             
             # Check if email already exists
             if User.query.filter_by(email=sanitized_data['email']).first():
                 record_failed_attempt(client_ip)
-                return jsonify({'error': 'Email already registered'}), 400
+                return jsonify({'error': 'Email already registered', 'field_errors': {'email': 'Email already registered'}}), 400
             
             # Create Organization
             organization = Organization(
@@ -250,16 +266,20 @@ def register():
             db.session.add(admin_user)
             db.session.commit()
             
-            # Send welcome email
-            send_welcome_email(admin_user, organization)
+            # Send welcome email (implement actual email sending if needed)
+            # send_welcome_email(admin_user, organization) # Uncomment when email service is ready
+            print(f"Welcome email would be sent to {admin_user.email}") # For debug
             
             return jsonify({
                 'success': True,
                 'message': 'Registration successful. Please check your email to verify your account.',
-                'organization_id': organization.id
+                'organization_id': organization.id,
+                'redirect_url': url_for('auth.login') # Redirect to login after successful registration
             })
             
         except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Exception during registration POST: {str(e)}", exc_info=True)
             db.session.rollback()
             return jsonify({'error': f'Registration failed: {str(e)}'}), 500
     
@@ -272,29 +292,41 @@ def login():
         try:
             data = request.get_json() if request.is_json else request.form
             
-            # Validate input using the new helper function
             required_fields = ['email', 'password']
             optional_fields = ['otp_code']
             
             sanitized_data, validation_errors = validate_input(data, required_fields, optional_fields)
             
             if validation_errors:
-                return jsonify({'error': 'Please provide email and password'}), 400
+                return jsonify({'error': 'Please provide email and password', 'field_errors': {'email': 'Email is required', 'password': 'Password is required'}}), 400
             
-            # Check rate limiting for the client IP
             client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
             if not rate_limit_check(client_ip):
                 return jsonify({'error': 'Too many login attempts. Please try again later.'}), 429
             
+            # **นี่คือจุดที่ 'user' จะถูกกำหนดค่า**
             user = User.query.filter_by(email=sanitized_data['email'], is_active=True).first()
             
             if not user or not user.check_password(sanitized_data['password']):
-                record_failed_attempt(client_ip) # Record failed attempt on invalid credentials
+                record_failed_attempt(client_ip)
                 return jsonify({'error': 'Invalid email or password'}), 401
             
+            # **ย้ายบล็อกนี้มาไว้ตรงนี้ เพื่อให้แน่ใจว่า 'user' ถูกกำหนดแล้ว**
+            if not user.organization:
+                # ถ้า user ไม่มี organization (อาจจะข้อมูลไม่สมบูรณ์)
+                from flask import current_app
+                current_app.logger.error(f"User {user.email} found but has no associated organization.")
+                return jsonify({'error': 'Organization data missing for this user. Please contact support.'}), 500
+
             # Check organization status
-            if not user.organization.is_subscription_active() and user.organization.subscription_status != SubscriptionStatus.TRIAL:
-                return jsonify({'error': 'Organization account is suspended. Please contact administrator.'}), 403
+            # user.organization.is_subscription_active เป็น hybrid_property (property), ไม่ใช่ method
+            if not user.organization.is_subscription_active \
+               and user.organization.subscription_status != SubscriptionStatus.TRIAL:
+                from flask import current_app
+                current_app.logger.warning(
+                    f"Login blocked for user {user.email}: Subscription not active ({user.organization.subscription_status.value}) and not in trial."
+                )
+                return jsonify({'error': 'Organization account is suspended or expired. Please contact administrator.'}), 403
             
             # 2FA Check
             if user.two_factor_enabled:
@@ -303,18 +335,16 @@ def login():
                     return jsonify({'require_2fa': True}), 200
                 
                 if not verify_2fa_code(user, otp_code):
-                    record_failed_attempt(client_ip) # Record failed attempt on invalid OTP
+                    record_failed_attempt(client_ip)
                     return jsonify({'error': 'Invalid OTP code'}), 401
             
             # Login successful
             auth_user = AuthUser(user.id)
             login_user(auth_user, remember=True)
             
-            # Update last login
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(timezone.utc)
             db.session.commit()
             
-            # Store organization context in session
             session['organization_id'] = user.organization_id
             session['teamup_calendar_id'] = user.organization.teamup_calendar_id
             
@@ -329,6 +359,9 @@ def login():
             })
             
         except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Exception during login POST: {str(e)}", exc_info=True)
+            db.session.rollback()
             return jsonify({'error': f'Login failed: {str(e)}'}), 500
     
     return render_template('auth/login.html')

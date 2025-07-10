@@ -2,6 +2,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+from datetime import timezone
 import uuid
 from enum import Enum
 from sqlalchemy import Index, event, Numeric # Import Numeric for Decimal type
@@ -52,20 +53,20 @@ class Organization(db.Model):
     # Subscription
     subscription_plan = db.Column(db.Enum(SubscriptionPlan), default=SubscriptionPlan.FREE, index=True)
     subscription_status = db.Column(db.Enum(SubscriptionStatus), default=SubscriptionStatus.TRIAL, index=True)
-    subscription_expires_at = db.Column(db.DateTime, index=True)
-    trial_ends_at = db.Column(db.DateTime, index=True)
+    subscription_expires_at = db.Column(db.DateTime(timezone=True), index=True)
+    trial_ends_at = db.Column(db.DateTime(timezone=True), index=True)
     
     # Usage Limits
     max_appointments_per_month = db.Column(db.Integer, default=50)
     max_staff_users = db.Column(db.Integer, default=2)
     
     # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
     
     # Soft delete
     is_deleted = db.Column(db.Boolean, default=False, index=True)
-    deleted_at = db.Column(db.DateTime)
+    deleted_at = db.Column(db.DateTime(timezone=True))
     
     # Relationships with lazy loading
     users = db.relationship('User', backref='organization', lazy='dynamic', 
@@ -79,17 +80,17 @@ class Organization(db.Model):
     def __init__(self, **kwargs):
         super(Organization, self).__init__(**kwargs)
         # Set trial period (14 days)
-        self.trial_ends_at = datetime.utcnow() + timedelta(days=14)
+        self.trial_ends_at = datetime.now(timezone.utc) + timedelta(days=14)
         self.subscription_expires_at = self.trial_ends_at
     
     @hybrid_property
     def is_trial_expired(self):
-        return datetime.utcnow() > self.trial_ends_at
+        return datetime.now(timezone.utc) > self.trial_ends_at
     
     @hybrid_property
     def is_subscription_active(self):
         return (self.subscription_status == SubscriptionStatus.ACTIVE and 
-                datetime.utcnow() < self.subscription_expires_at)
+                datetime.now(timezone.utc) < self.subscription_expires_at)
     
     def can_create_appointment(self):
         """Check if organization can create more appointments with caching"""
@@ -129,7 +130,7 @@ class Organization(db.Model):
     def soft_delete(self):
         """Soft delete organization"""
         self.is_deleted = True
-        self.deleted_at = datetime.utcnow()
+        self.deleted_at = datetime.now(timezone.utc)
         db.session.commit()
 
 class User(db.Model):
@@ -152,19 +153,19 @@ class User(db.Model):
     # Account Status
     is_active = db.Column(db.Boolean, default=True, index=True)
     email_verified = db.Column(db.Boolean, default=False)
-    last_login = db.Column(db.DateTime, index=True)
+    last_login = db.Column(db.DateTime(timezone=True), index=True)
     
     # Password Reset
     reset_token = db.Column(db.String(100), index=True)
-    reset_token_expires = db.Column(db.DateTime)
+    reset_token_expires = db.Column(db.DateTime(timezone=True))
     
     # Soft delete
     is_deleted = db.Column(db.Boolean, default=False, index=True)
-    deleted_at = db.Column(db.DateTime)
+    deleted_at = db.Column(db.DateTime(timezone=True))
     
     # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
     
     # Relationships
     audit_logs = db.relationship('AuditLog', backref='user', lazy='dynamic')
@@ -187,18 +188,18 @@ class User(db.Model):
     
     def generate_reset_token(self):
         self.reset_token = str(uuid.uuid4())
-        self.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+        self.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         return self.reset_token
     
     def is_reset_token_valid(self):
         return (self.reset_token and 
                 self.reset_token_expires and 
-                datetime.utcnow() < self.reset_token_expires)
+                datetime.now(timezone.utc) < self.reset_token_expires)
     
     def soft_delete(self):
         """Soft delete user"""
         self.is_deleted = True
-        self.deleted_at = datetime.utcnow()
+        self.deleted_at = datetime.now(timezone.utc)
         self.is_active = False
         db.session.commit()
 
@@ -220,14 +221,14 @@ class Subscription(db.Model):
     stripe_payment_method_id = db.Column(db.String(255))
     
     # Billing
-    current_period_start = db.Column(db.DateTime)
-    current_period_end = db.Column(db.DateTime)
-    next_billing_date = db.Column(db.DateTime)
+    current_period_start = db.Column(db.DateTime(timezone=True))
+    current_period_end = db.Column(db.DateTime(timezone=True))
+    next_billing_date = db.Column(db.DateTime(timezone=True))
     
     status = db.Column(db.Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
 
 class UsageStat(db.Model):
     __tablename__ = 'usage_stats'
@@ -240,7 +241,7 @@ class UsageStat(db.Model):
     appointments_updated = db.Column(db.Integer, default=0)
     staff_active = db.Column(db.Integer, default=0)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         db.UniqueConstraint('organization_id', 'date', name='unique_org_date'),
@@ -281,7 +282,7 @@ class AuditLog(db.Model):
     ip_address = db.Column(db.String(45))
     user_agent = db.Column(db.Text)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     
     __table_args__ = (
         Index('idx_audit_org_action', 'organization_id', 'action'),
@@ -305,8 +306,8 @@ class TeamUpCalendar(db.Model):
     subcalendar_count = db.Column(db.Integer, default=0)
     max_subcalendars = db.Column(db.Integer, default=8)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
     
     # Relationships
     subcalendars = db.relationship('OrganizationSubcalendar', backref='teamup_calendar', lazy='dynamic')
@@ -324,7 +325,7 @@ class OrganizationSubcalendar(db.Model):
     
     is_active = db.Column(db.Boolean, default=True)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         db.UniqueConstraint('organization_id', 'subcalendar_id'),
@@ -334,11 +335,11 @@ class OrganizationSubcalendar(db.Model):
 # Database event listeners for automatic updates
 @event.listens_for(User, 'before_update')
 def receive_before_update(mapper, connection, target):
-    target.updated_at = datetime.utcnow()
+    target.updated_at = datetime.now(timezone.utc)
 
 @event.listens_for(Organization, 'before_update')
 def receive_before_update_org(mapper, connection, target):
-    target.updated_at = datetime.utcnow()
+    target.updated_at = datetime.now(timezone.utc)
 
 # Pricing Plans with enhanced features
 PRICING_PLANS = {
