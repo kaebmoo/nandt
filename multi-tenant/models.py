@@ -81,8 +81,9 @@ class Organization(db.Model):
     
     def __init__(self, **kwargs):
         super(Organization, self).__init__(**kwargs)
-        # Set trial period (14 days)
-        self.trial_ends_at = datetime.now(timezone.utc) + timedelta(days=14)
+        # Set trial period (14 days) - ใช้ timezone-aware
+        now_utc = datetime.now(timezone.utc)
+        self.trial_ends_at = now_utc + timedelta(days=14)
         self.subscription_expires_at = self.trial_ends_at
     
     @hybrid_property
@@ -230,7 +231,20 @@ class User(db.Model):
         if expires_at_aware.tzinfo is None:
             expires_at_aware = expires_at_aware.replace(tzinfo=timezone.utc)
         
-        return datetime.now(timezone.utc) < expires_at_aware        
+        return datetime.now(timezone.utc) < expires_at_aware    
+
+    def ensure_timezone_aware(dt_obj, default_tz=timezone.utc):
+        """
+        Helper function to ensure datetime object is timezone-aware
+        แปลง naive datetime เป็น timezone-aware
+        """
+        if dt_obj is None:
+            return None
+        
+        if dt_obj.tzinfo is None:
+            return dt_obj.replace(tzinfo=default_tz)
+        
+        return dt_obj    
     
     def soft_delete(self):
         """Soft delete user"""
