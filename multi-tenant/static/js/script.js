@@ -1416,10 +1416,316 @@ class NudDeeSaaSApp {
     }
 
     /**
-     * รีเฟรช calendar (สำหรับ compatibility)
+     * แสดงรายละเอียดนัดหมายใน modal (แก้ไขปุ่ม copy)
      */
-    refreshCalendar() {
-        this.loadAppointments();
+    async showEventDetails(eventId) {
+        this.log('debug', "แสดงรายละเอียดสำหรับ event_id:", eventId);
+        
+        try {
+            // แสดง loading spinner
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'กำลังโหลด...',
+                    text: 'กำลังโหลดข้อมูลนัดหมาย',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+            }
+            
+            // ดึงข้อมูลโดยตรงจาก API สำหรับกิจกรรมนี้เท่านั้น
+            const data = await this.httpRequest(`/get_events?event_id=${eventId}`);
+            
+            if (typeof Swal !== 'undefined') {
+                Swal.close(); // ปิด loading spinner
+            }
+            
+            if (!data.events || data.events.length === 0) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'ไม่พบข้อมูล',
+                        text: 'ไม่พบข้อมูลนัดหมายสำหรับ ID นี้'
+                    });
+                } else {
+                    this.showNotification('ไม่พบข้อมูลนัดหมายสำหรับ ID นี้', 'warning');
+                }
+                return;
+            }
+            
+            const event = data.events[0];
+            
+            // ปรับปรุงการหาชื่อปฏิทิน
+            let subcalendarDisplay = 'ไม่ระบุปฏิทิน';
+            if (event.subcalendar_display) {
+                subcalendarDisplay = event.subcalendar_display;
+            } else if (event.subcalendar_name) {
+                subcalendarDisplay = event.subcalendar_name;
+            } else if (event.calendar_name) {
+                subcalendarDisplay = event.calendar_name;
+            } else if (event.subcalendar_id) {
+                subcalendarDisplay = `ปฏิทิน ${event.subcalendar_id}`;
+            } else if (event.subcalendar_ids && event.subcalendar_ids.length > 0) {
+                subcalendarDisplay = `ปฏิทิน ${event.subcalendar_ids[0]}`;
+            }
+            
+            // ปรับปรุงการแสดงผล notes
+            let notesDisplay = '';
+            if (event.notes) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = event.notes;
+                notesDisplay = tempDiv.textContent || tempDiv.innerText || '';
+                
+                if (!notesDisplay.trim()) {
+                    notesDisplay = event.notes;
+                }
+            }
+            
+            const appointmentId = event.id || 'ไม่ระบุ';
+            
+            // สร้าง unique ID สำหรับปุ่ม copy
+            const copyButtonId = `copy-btn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            // สร้าง modal แสดงรายละเอียดแบบใหม่ (ไม่มีปุ่ม copy)
+            if (typeof Swal !== 'undefined') {
+                const result = await Swal.fire({
+                    title: 'รายละเอียดนัดหมาย',
+                    html: `
+                        <div class="text-start">
+                            <h5>${this.escapeHtml(event.title)}</h5>
+                            
+                            <!-- แสดงหมายเลขนัดโดยสามารถเลือกได้ -->
+                            <div class="alert alert-info d-flex align-items-center mb-3">
+                                <i class="fas fa-id-card me-2"></i>
+                                <div class="flex-grow-1">
+                                    <strong>หมายเลขนัด:</strong> 
+                                    <span class="text-primary fw-bold user-select-all" 
+                                          style="font-family: 'Courier New', monospace; cursor: text;"
+                                          title="คลิกเพื่อเลือกและคัดลอก">${this.escapeHtml(appointmentId)}</span>
+                                </div>
+                                <small class="text-muted">
+                                    <i class="fas fa-mouse-pointer me-1"></i>คลิกเพื่อเลือก
+                                </small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-calendar me-1"></i>${this.escapeHtml(subcalendarDisplay)}
+                                </span>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <p><strong>วันที่:</strong> ${this.formatDate(event.start_dt.split('T')[0])}</p>
+                                </div>
+                                <div class="col-6">
+                                    <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <p><strong>สถานที่:</strong> ${this.escapeHtml(event.location || 'ไม่ระบุ')}</p>
+                                </div>
+                                <div class="col-6">
+                                    <p><strong>ผู้ดูแล:</strong> ${this.escapeHtml(event.who || 'ไม่ระบุ')}</p>
+                                </div>
+                            </div>
+                            
+                            ${notesDisplay ? `
+                            <div class="mt-3">
+                                <h6>บันทึกเพิ่มเติม:</h6>
+                                <div class="border p-2 rounded bg-light">
+                                    <span style="white-space: pre-wrap;">${this.escapeHtml(notesDisplay)}</span>
+                                </div>
+                            </div>
+                            ` : ''}
+                            
+                            <!-- คำแนะนำวิธีคัดลอก -->
+                            <div class="mt-3 p-2 bg-light rounded">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <strong>วิธีคัดลอกหมายเลขนัด:</strong> คลิกที่หมายเลขข้างบน แล้วกด Ctrl+C (Windows) หรือ Cmd+C (Mac) เพื่อคัดลอก
+                                </small>
+                            </div>
+                        </div>
+                    `,
+                    width: '600px',
+                    showCloseButton: true,
+                    showCancelButton: true,
+                    focusConfirm: false,
+                    confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
+                    cancelButtonText: 'ปิด',
+                    // เพิ่ม CSS เพื่อให้หมายเลขนัดเลือกได้ง่าย
+                    didOpen: () => {
+                        const appointmentIdSpan = document.querySelector('.user-select-all');
+                        if (appointmentIdSpan) {
+                            // เพิ่ม event listener สำหรับการคลิกเพื่อเลือกหมายเลขนัด
+                            appointmentIdSpan.addEventListener('click', function() {
+                                // เลือกข้อความทั้งหมด
+                                const range = document.createRange();
+                                range.selectNodeContents(this);
+                                const selection = window.getSelection();
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                
+                                // แสดง feedback ชั่วคราว
+                                const originalBg = this.style.backgroundColor;
+                                this.style.backgroundColor = '#cce5ff';
+                                setTimeout(() => {
+                                    this.style.backgroundColor = originalBg;
+                                }, 500);
+                                
+                                console.log('✅ เลือกหมายเลขนัด:', appointmentId);
+                            });
+                            
+                            // เพิ่ม CSS เพื่อให้ดูคลิกได้
+                            appointmentIdSpan.style.padding = '4px 8px';
+                            appointmentIdSpan.style.borderRadius = '4px';
+                            appointmentIdSpan.style.border = '1px dashed #007bff';
+                            appointmentIdSpan.style.background = '#f8f9fa';
+                        }
+                    }
+                });
+                
+                if (result.isConfirmed) {
+                    // กดปุ่มอัปเดตสถานะ
+                    window.location.href = `/update_status?event_id=${appointmentId}`;
+                }
+            } else {
+                // Fallback สำหรับกรณีที่ไม่มี SweetAlert2
+                const details = `
+${event.title}
+หมายเลขนัด: ${appointmentId}
+ปฏิทิน: ${subcalendarDisplay}
+วันที่: ${this.formatDate(event.start_dt.split('T')[0])}
+เวลา: ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}
+สถานที่: ${event.location || 'ไม่ระบุ'}
+ผู้ดูแล: ${event.who || 'ไม่ระบุ'}
+${notesDisplay ? `\nบันทึก: ${notesDisplay}` : ''}
+                `;
+                
+                if (confirm(details + '\n\nต้องการอัปเดตสถานะหรือไม่?')) {
+                    window.location.href = `/update_status?event_id=${appointmentId}`;
+                }
+            }
+            
+        } catch (error) {
+            this.log('error', 'Error fetching event details:', error);
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message
+                });
+            } else {
+                this.showNotification('ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message, 'error');
+            }
+        }
+    }
+
+    /**
+     * ฟังก์ชันคัดลอกหมายเลขนัดโดยเฉพาะ (แก้ไขแล้ว)
+     */
+    copyAppointmentId(appointmentId) {
+        if (!appointmentId || appointmentId === 'ไม่ระบุ') {
+            this.showNotification('ไม่พบหมายเลขนัดที่จะคัดลอก', 'warning');
+            return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(appointmentId).then(() => {
+                // เปลี่ยนจาก SweetAlert2 toast เป็น simple notification
+                this.showSimpleCopySuccess(appointmentId);
+            }).catch((err) => {
+                this.log('error', 'Clipboard write failed:', err);
+                this.fallbackCopyToClipboard(appointmentId);
+            });
+        } else {
+            // Fallback สำหรับ browser เก่า
+            this.fallbackCopyToClipboard(appointmentId);
+        }
+    }
+
+    /**
+     * แสดงการแจ้งเตือนคัดลอกสำเร็จแบบไม่รบกวน modal
+     */
+    showSimpleCopySuccess(appointmentId) {
+        // สร้าง visual feedback แบบง่ายๆ
+        const copyButtons = document.querySelectorAll('[id*="copy-btn"]');
+        copyButtons.forEach(btn => {
+            if (btn.offsetParent !== null) { // ตรวจสอบว่า visible
+                const originalHtml = btn.innerHTML;
+                const originalClass = btn.className;
+                
+                // เปลี่ยนสีและไอคอน
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                btn.className = btn.className.replace('btn-outline-primary', 'btn-success');
+                
+                // เปลี่ยนกลับหลัง 1.5 วินาที
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.className = originalClass;
+                }, 1500);
+            }
+        });
+        
+        // แสดง notification ปกติ
+        this.showNotification(`คัดลอกหมายเลขนัดแล้ว: ${appointmentId}`, 'success');
+        
+        // เพิ่ก console log สำหรับ debug
+        console.log('Copied to clipboard:', appointmentId);
+    }
+
+    /**
+     * Fallback method สำหรับการคัดลอก
+     */
+    fallbackCopyToClipboard(text) {
+        try {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+                this.showNotification(`คัดลอกหมายเลขนัดแล้ว: ${text}`, 'success');
+            } else {
+                this.showManualCopyDialog(text);
+            }
+        } catch (err) {
+            this.log('error', 'Fallback copy failed:', err);
+            this.showManualCopyDialog(text);
+        }
+    }
+
+    /**
+     * แสดง dialog สำหรับคัดลอกด้วยตนเอง
+     */
+    showManualCopyDialog(text) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'หมายเลขนัด',
+                html: `
+                    <div class="text-center">
+                        <p>กรุณาคัดลอกหมายเลขนัดด้านล่าง:</p>
+                        <input type="text" class="form-control text-center" value="${text}" readonly 
+                               onclick="this.select()" style="font-family: monospace; font-size: 1.2em; font-weight: bold;">
+                    </div>
+                `,
+                icon: 'info',
+                confirmButtonText: 'ตกลง'
+            });
+        } else {
+            prompt('กรุณาคัดลอกหมายเลขนัด:', text);
+        }
     }
 
     // === Cleanup ===
