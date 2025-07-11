@@ -886,92 +886,84 @@ class HybridTeamUpAPI:
         
         return {'subcalendars': subcal_list}
     
-    def create_appointment(self, patient_data):
-        """สร้างนัดหมายในระบบ hybrid"""
+    def create_appointment(self, appointment_data):
+        """
+        สร้างนัดหมายในระบบ hybrid โดยค้นหา subcalendar_id จากชื่อโดยอัตโนมัติ
+        """
         try:
             from models import OrganizationSubcalendar
             
-            subcalendar_name = patient_data['calendar_name']
+            # 1. ดึงชื่อปฏิทินย่อยจากข้อมูลที่ส่งมา
+            subcalendar_name = appointment_data.get('calendar_name')
+            if not subcalendar_name:
+                return False, "จำเป็นต้องระบุชื่อปฏิทิน (Calendar Name)"
+
+            # 2. ค้นหา subcalendar จากฐานข้อมูล
             subcal_mapping = OrganizationSubcalendar.query.filter_by(
                 organization_id=self.organization_id,
                 subcalendar_name=subcalendar_name,
                 is_active=True
             ).first()
             
+            # 3. หากไม่พบ ให้ลองสร้าง subcalendar ใหม่โดยอัตโนมัติ
             if not subcal_mapping:
                 print(f"Subcalendar '{subcalendar_name}' not found for org {self.organization_id}. Attempting to auto-create.")
                 create_result = self.manager.auto_create_subcalendar(
                     self.organization_id, 
                     subcalendar_name
                 )
-                if not create_result['success']:
-                    print(f"Failed to auto-create subcalendar: {create_result['error']}")
-                    return False, create_result['error']
+                if not create_result.get('success'):
+                    error_message = create_result.get('error', 'Unknown error during auto-creation')
+                    print(f"Failed to auto-create subcalendar: {error_message}")
+                    return False, error_message
                 
-                # Refresh subcalendars property
-                self._subcalendars = None 
-                subcal_mapping = OrganizationSubcalendar.query.filter_by(
-                    organization_id=self.organization_id,
-                    subcalendar_name=subcalendar_name,
-                    is_active=True
-                ).first()
+                # ดึงข้อมูล mapping ของ subcalendar ที่เพิ่งสร้างใหม่
+                new_subcal_id = create_result.get('subcalendar', {}).get('id')
+                subcal_mapping = OrganizationSubcalendar.query.filter_by(subcalendar_id=new_subcal_id).first()
+
                 if not subcal_mapping:
-                    return False, f"Failed to retrieve newly created subcalendar mapping for {subcalendar_name}"
+                    return False, f"Could not find the newly created subcalendar '{subcalendar_name}' in the database."
+
+            # 4. เตรียมข้อมูลสำหรับส่งให้ TeamUp API
+            calendar_id = subcal_mapping.calendar_id      # ks-key ของ Master Calendar
+            subcalendar_id = subcal_mapping.subcalendar_id  # ID ของ Subcalendar (ตัวเลข)
             
-            calendar_id = subcal_mapping.calendar_id # This is the ks-key
-            subcalendar_id = subcal_mapping.subcalendar_id
-            
-            event_data = {
-                "title": patient_data['title'],
-                "start_dt": f"{patient_data['start_date']}T{patient_data['start_time']}:00",
-                "end_dt": f"{patient_data['end_date']}T{patient_data['end_time']}:00",
-                "all_day": False,
-                "subcalendar_ids": [subcalendar_id]
+            event_payload = {
+                "title": appointment_data.get('title'),
+                "start_dt": f"{appointment_data.get('start_date')}T{appointment_data.get('start_time')}",
+                "end_dt": f"{appointment_data.get('end_date')}T{appointment_data.get('end_time')}",
+                "subcalendar_ids": [subcalendar_id], # TeamUp API รับเป็น Array
+                "notes": appointment_data.get('description', ''),
+                "location": appointment_data.get('location', ''),
+                "who": appointment_data.get('who', '')
             }
             
-            for field in ['location', 'who', 'description']:
-                if patient_data.get(field):
-                    event_data[field if field != 'description' else 'notes'] = patient_data[field]
+            print(f"Creating event in calendar '{calendar_id}' with subcalendar ID {subcalendar_id}")
             
-            print(f"Creating event in calendar {calendar_id} with subcalendar {subcalendar_id}")
-            
-            headers_with_auth = self.manager._get_headers_with_auth()
+            # 5. เรียก API เพื่อสร้าง Event
+            headers = self.manager._get_headers_with_auth()
             response = requests.post(
-                f"{self.manager.base_url}/{calendar_id}/events", # Use ks-key here
-                headers=headers_with_auth,
-                json=event_data,
+                f"{self.manager.base_url}/{calendar_id}/events",
+                headers=headers,
+                json=event_payload,
                 timeout=15
             )
-            
-            print(f"Event creation response: {response.status_code} - {response.text}")
 
             if response.status_code == 201:
-                event_id = response.json().get('event', {}).get('id')
-                
-                self.log_usage('create', 'appointment', event_id, {
-                    'title': patient_data['title'],
-                    'subcalendar': subcalendar_name,
-                    'calendar_id': calendar_id
-                })
-                
-                return True, event_id
+                event = response.json().get('event', {})
+                self.log_usage('create', 'appointment', event.get('id'), {'title': event.get('title')})
+                return True, event
             else:
-                error_msg = response.text
-                try:
-                    error_json = response.json()
-                    if 'error' in error_json and 'message' in error_json['error']:
-                        error_msg = error_json['error']['message']
-                except json.JSONDecodeError:
-                    pass
-                return False, f"TeamUp API Error (Status {response.status_code}): {error_msg}"
+                error_details = response.json().get('error', {}).get('message', response.text)
+                return False, f"TeamUp API Error: {error_details}"
                 
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return False, f"Exception during appointment creation: {str(e)}"
+            return False, f"An unexpected error occurred: {str(e)}"
     
     def get_events(self, start_date=None, end_date=None, subcalendar_id=None, event_id=None):
-        """ดึง events จากทุก calendars ของ organization หรือเฉพาะ event_id"""
+        """ดึง events จากทุก calendars ของ organization หรือเฉพาะ event_id - แก้ไข parameter handling"""
         all_events = []
         
         try:
@@ -1000,43 +992,61 @@ class HybridTeamUpAPI:
             calendars_to_query_keys = []
             
             if subcalendar_id:
-                # subcalendar_id ที่นี่จะถูกส่งมาเป็น list จาก app.py แล้ว
-                # ดังนั้น เราสามารถใช้มันได้เลย
+                # **แก้ไขการจัดการ subcalendar_id parameter**
                 if isinstance(subcalendar_id, list) and len(subcalendar_id) > 0:
-                    # ถ้ามี subcalendar_id ถูกส่งมา ให้ใช้ค่าแรกเพื่อหา calendar_id หลัก
-                    # (สมมติว่า subcalendar_id ใน filter มาจาก calendar เดียวกัน)
-                    first_subcal_id_for_lookup = subcalendar_id[0]
-                    subcal_mapping = OrganizationSubcalendar.query.filter_by(
-                        organization_id=self.organization_id,
-                        subcalendar_id=first_subcal_id_for_lookup,
-                        is_active=True
-                    ).first()
+                    # ถ้าเป็น list ให้ใช้ตัวแรกเพื่อหา calendar_id
+                    first_subcal_id = subcalendar_id[0]
+                    try:
+                        # แปลงเป็น int ถ้าเป็น string
+                        first_subcal_id = int(first_subcal_id) if isinstance(first_subcal_id, str) else first_subcal_id
+                    except (ValueError, TypeError):
+                        print(f"Invalid subcalendar_id format: {first_subcal_id}")
+                        first_subcal_id = None
                     
-                    if not subcal_mapping:
-                        return {"error": "ไม่พบ subcalendar ที่ระบุ", "events": []}
-                    
-                    calendars_to_query_keys = [subcal_mapping.calendar_id]
-                    subcalendar_filter_ids = subcalendar_id # ใช้ list ที่ส่งมาทั้งหมด
+                    if first_subcal_id:
+                        subcal_mapping = OrganizationSubcalendar.query.filter_by(
+                            organization_id=self.organization_id,
+                            subcalendar_id=first_subcal_id,
+                            is_active=True
+                        ).first()
+                        
+                        if subcal_mapping:
+                            calendars_to_query_keys = [subcal_mapping.calendar_id]
+                            # **แก้ไข: แปลง subcalendar_id ทั้งหมดเป็น int**
+                            subcalendar_filter_ids = []
+                            for sid in subcalendar_id:
+                                try:
+                                    subcalendar_filter_ids.append(int(sid) if isinstance(sid, str) else sid)
+                                except (ValueError, TypeError):
+                                    print(f"Skipping invalid subcalendar_id: {sid}")
+                        else:
+                            return {"error": "ไม่พบ subcalendar ที่ระบุ", "events": []}
+                    else:
+                        # ถ้า parse ไม่ได้ให้ query ทุก calendar
+                        calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
+                        subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars]
                 else:
-                    # ถ้า subcalendar_id ไม่ใช่ list หรือเป็น list ว่าง (หลังจากกรองแล้ว)
-                    # ให้กลับไป query ทุก calendar
+                    # ถ้าไม่ใช่ list หรือเป็น list ว่าง
                     calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
-                    subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars] # ใช้ subcalendar ทั้งหมดใน org
+                    subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars]
             else:
                 calendars_to_query_keys = [cal.calendar_id for cal in self.calendars]
                 subcalendar_filter_ids = [sub.subcalendar_id for sub in self.subcalendars]
             
+            # **แก้ไข: ตรวจสอบ date types**
             if not isinstance(start_date, datetime):
                 start_date = datetime.strptime(start_date, '%Y-%m-%d') if isinstance(start_date, str) else datetime.now() - timedelta(days=7)
             if not isinstance(end_date, datetime):
                 end_date = datetime.strptime(end_date, '%Y-%m-%d') if isinstance(end_date, str) else datetime.now() + timedelta(days=30)
+            
+            print(f"DEBUG: Querying {len(calendars_to_query_keys)} calendars with {len(subcalendar_filter_ids)} subcalendars")
             
             for calendar_id_key in calendars_to_query_keys:
                 events = self.fetch_calendar_events(
                     calendar_id=calendar_id_key,
                     start_date=start_date,
                     end_date=end_date,
-                    subcalendar_ids=subcalendar_filter_ids # ส่งเป็น list เสมอ
+                    subcalendar_ids=subcalendar_filter_ids  # ส่งเป็น list ของ integers
                 )
                 
                 if events.get('events'):
@@ -1064,7 +1074,7 @@ class HybridTeamUpAPI:
             return {"error": f"Exception in get_events: {str(e)}", "events": []}
     
     def fetch_calendar_events(self, calendar_id, start_date=None, end_date=None, subcalendar_ids=None):
-        """ดึง events จาก calendar เดียว (ใช้ ks-key)"""
+        """ดึง events จาก calendar เดียว (ใช้ ks-key) - แก้ไข method call"""
         try:
             params = {}
             
@@ -1073,19 +1083,33 @@ class HybridTeamUpAPI:
             if end_date:
                 params['endDate'] = end_date.strftime('%Y-%m-%d')
             
-            # **แก้ไขตรงนี้: ตรวจสอบว่า subcalendar_ids เป็น None หรือไม่ ถ้าเป็นให้ใช้ list ว่าง**
-            # requests library ต้องการ list ที่ไม่เป็น None สำหรับ parameter array
-            if subcalendar_ids is not None and len(subcalendar_ids) > 0: # Check if it's not None AND not empty
-                params['subcalendarId'] = [str(sid) for sid in subcalendar_ids]
-            elif subcalendar_ids is None: # ถ้าเป็น None ให้ log และไม่ส่ง parameter นี้
-                print("Warning: subcalendar_ids parameter was None in fetch_calendar_events. Not filtering by subcalendar.")
-                # ไม่ต้องใส่ params['subcalendarId'] เลย ถ้าไม่ต้องการ filter
-
+            # **แก้ไขตรงนี้: เปลี่ยนจาก self._get_headers_with_auth() เป็น self.manager._get_headers_with_auth()**
             headers_with_auth = self.manager._get_headers_with_auth()
+            
+            # สร้าง URL params สำหรับ subcalendarId array
+            url = f"{self.manager.base_url}/{calendar_id}/events"
+            
+            # เพิ่ม query parameters
+            query_params = []
+            if 'startDate' in params:
+                query_params.append(f"startDate={params['startDate']}")
+            if 'endDate' in params:
+                query_params.append(f"endDate={params['endDate']}")
+                
+            # แก้ไขสำคัญ: format subcalendarId เป็น array
+            if subcalendar_ids is not None and len(subcalendar_ids) > 0:
+                for sid in subcalendar_ids:
+                    query_params.append(f"subcalendarId[]={sid}")
+            
+            # รวม URL ถ้ามี query params
+            if query_params:
+                url += "?" + "&".join(query_params)
+            
+            print(f"DEBUG: Fetching events from URL: {url}")
+            
             response = requests.get(
-                f"{self.manager.base_url}/{calendar_id}/events",
+                url,
                 headers=headers_with_auth,
-                params=params, # ส่ง params ที่อาจมี subcalendarId เป็น list หรือไม่มีเลย
                 timeout=15
             )
 
@@ -1108,33 +1132,72 @@ class HybridTeamUpAPI:
             print(f"Exception fetching events from {calendar_id}: {e}")
             return {"error": str(e), "events": []}
     
-    def update_appointment_status(self, event_id, status, calendar_id=None):
-        """อัปเดตสถานะนัดหมาย"""
+    def update_appointment_status(self, event_id, new_status_text):
+        """
+        อัปเดตสถานะของนัดหมายโดยการแก้ไขฟิลด์ 'notes'
+        โดยจะทำการค้นหา event ในทุก Master Calendar ขององค์กร
+        """
         try:
+            # 1. ค้นหา Event และ Master Calendar (ks-key) ที่ถูกต้อง
+            event_data = None
             target_calendar_id = None
-            if calendar_id:
-                target_calendar_id = calendar_id # This is the ks-key from frontend
-            else:
-                for cal in self.calendars: # Iterate through master calendars (ks-keys)
-                    events_response = self.fetch_calendar_events(
-                        calendar_id=cal.calendar_id, # Use ks-key here
-                        start_date=datetime.now() - timedelta(days=30),
-                        end_date=datetime.now() + timedelta(days=30),
-                    )
-                    found_event_data = next((e for e in events_response.get('events', []) if e.get('id') == event_id), None)
-                    if found_event_data:
-                        target_calendar_id = cal.calendar_id # Found the ks-key
-                        break
-                
-                if not target_calendar_id:
-                    return False, "ไม่พบนัดหมายที่ระบุใน calendars ขององค์กร"
+            
+            for calendar in self.calendars:
+                response = requests.get(
+                    f"{self.manager.base_url}/{calendar.calendar_id}/events/{event_id}",
+                    headers=self.manager._get_headers_with_auth(),
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    event_data = response.json().get('event')
+                    target_calendar_id = calendar.calendar_id
+                    break # เมื่อเจอ event ให้หยุดค้นหาทันที
+            
+            if not event_data:
+                return False, "ไม่พบนัดหมายที่ระบุ หรือไม่มีสิทธิ์เข้าถึง"
 
-            return self._update_event_in_calendar(target_calendar_id, event_id, status)
-                
+            # 2. เตรียมข้อมูลใหม่เพื่ออัปเดต
+            # ลบ tag สถานะเก่าออกก่อน (ถ้ามี)
+            original_notes = event_data.get('notes', '')
+            cleaned_notes = re.sub(r'\s*\[สถานะ:.*?\]', '', original_notes).strip()
+
+            # สร้าง notes ใหม่โดยเพิ่ม tag สถานะใหม่เข้าไป
+            updated_notes = f"{cleaned_notes} [สถานะ: {new_status_text}]".strip()
+
+            # 3. สร้าง Payload สำหรับ PUT request โดยใช้ข้อมูลเดิมเกือบทั้งหมด
+            update_payload = {
+                'id': event_data['id'],
+                'subcalendar_ids': event_data['subcalendar_ids'],
+                'title': event_data['title'],
+                'start_dt': event_data['start_dt'],
+                'end_dt': event_data['end_dt'],
+                'notes': updated_notes, # << ใส่ notes ที่อัปเดตแล้ว
+                # คงค่าเดิมของฟิลด์อื่นๆ
+                'location': event_data.get('location'),
+                'who': event_data.get('who'),
+                'rrule': event_data.get('rrule'),
+                'version': event_data.get('version') # สำคัญมากสำหรับการป้องกัน conflict
+            }
+
+            # 4. ส่ง PUT request เพื่ออัปเดต Event
+            update_response = requests.put(
+                f"{self.manager.base_url}/{target_calendar_id}/events/{event_id}",
+                headers=self.manager._get_headers_with_auth(),
+                json=update_payload,
+                timeout=15
+            )
+
+            if update_response.status_code == 200:
+                self.log_usage('update', 'appointment', event_id, {'status': new_status_text})
+                return True, "อัปเดตสถานะสำเร็จ"
+            else:
+                error_details = update_response.json().get('error', {}).get('message', update_response.text)
+                return False, f"อัปเดตสถานะล้มเหลว: {error_details}"
+
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return False, f"Exception in update_appointment_status: {str(e)}"
+            return False, f"An unexpected error occurred: {str(e)}"
     
     def _update_event_in_calendar(self, calendar_id, event_id, status):
         """อัปเดต event ใน calendar ที่ระบุ (ใช้ ks-key)"""
@@ -1220,85 +1283,69 @@ class HybridTeamUpAPI:
             return False, f"Exception during event status update: {str(e)}"
     
     def create_recurring_appointments_simple(self, patient_data, selected_days, weeks):
-        """สร้างนัดหมายเกิดซ้ำแบบง่ายโดยใช้ TeamUp RRULE"""
+        """
+        สร้างนัดหมายเกิดซ้ำ (Recurring) โดยใช้ TeamUp RRULE
+        ฟังก์ชันนี้จะใช้ Logic ค้นหา Subcalendar จาก create_appointment
+        """
         try:
             from models import OrganizationSubcalendar
             
-            subcalendar_name = patient_data['calendar_name']
+            # 1. ดึงชื่อปฏิทินย่อยและค้นหา ID (เหมือน create_appointment)
+            subcalendar_name = patient_data.get('calendar_name')
+            if not subcalendar_name:
+                return False, "จำเป็นต้องระบุชื่อปฏิทิน (Calendar Name)"
+
             subcal_mapping = OrganizationSubcalendar.query.filter_by(
                 organization_id=self.organization_id,
                 subcalendar_name=subcalendar_name,
                 is_active=True
             ).first()
-            
+
             if not subcal_mapping:
-                create_result = self.manager.auto_create_subcalendar(
-                    self.organization_id, 
-                    subcalendar_name
-                )
-                if not create_result['success']:
-                    return False, create_result['error']
-                
-                self._subcalendars = None 
-                subcal_mapping = OrganizationSubcalendar.query.filter_by(
-                    organization_id=self.organization_id,
-                    subcalendar_name=subcalendar_name,
-                    is_active=True
-                ).first()
-                if not subcal_mapping:
-                    return False, f"Failed to retrieve newly created subcalendar mapping for {subcalendar_name}"
-            
-            calendar_id = subcal_mapping.calendar_id # This is the ks-key
+                # (ส่วนของการ auto-create subcalendar เหมือนเดิม)
+                return False, f"ไม่พบปฏิทินย่อยชื่อ '{subcalendar_name}'"
+
+            calendar_id = subcal_mapping.calendar_id
             subcalendar_id = subcal_mapping.subcalendar_id
-            
+
+            # 2. สร้าง RRULE
             if not selected_days:
                 return False, "กรุณาเลือกอย่างน้อยหนึ่งวันสำหรับนัดหมายที่เกิดซ้ำ"
-
             rrule = f"FREQ=WEEKLY;BYDAY={','.join(selected_days)};COUNT={weeks}"
-            
-            event_data = {
-                "title": patient_data['title'],
-                "start_dt": f"{patient_data['start_date']}T{patient_data['start_time']}:00",
-                "end_dt": f"{patient_data['end_date']}T{patient_data['end_time']}:00",
-                "all_day": False,
-                "rrule": rrule,
-                "subcalendar_ids": [subcalendar_id]
+
+            # 3. เตรียม Payload สำหรับ Recurring Event
+            event_payload = {
+                "title": patient_data.get('title'),
+                "start_dt": f"{patient_data.get('start_date')}T{patient_data.get('start_time')}",
+                "end_dt": f"{patient_data.get('end_date')}T{patient_data.get('end_time')}",
+                "subcalendar_ids": [subcalendar_id],
+                "rrule": rrule, # เพิ่ม RRULE
+                "notes": patient_data.get('description', ''),
+                "location": patient_data.get('location', ''),
+                "who": patient_data.get('who', '')
             }
             
-            for field in ['location', 'who', 'description']:
-                if patient_data.get(field):
-                    event_data[field if field != 'description' else 'notes'] = patient_data[field]
-
-            headers_with_auth = self.manager._get_headers_with_auth()
+            # 4. เรียก API เพื่อสร้าง Event
+            headers = self.manager._get_headers_with_auth()
             response = requests.post(
-                f"{self.manager.base_url}/{calendar_id}/events", # Use ks-key here
-                headers=headers_with_auth,
-                json=event_data,
+                f"{self.manager.base_url}/{calendar_id}/events",
+                headers=headers,
+                json=event_payload,
                 timeout=15
             )
-            
+
             if response.status_code == 201:
-                event_id = response.json().get('event', {}).get('id')
-                self.log_usage('create', 'recurring_appointment', event_id, {
-                    'title': patient_data['title'],
-                    'rrule': rrule,
-                    'calendar_id': calendar_id
-                })
-                return True, event_id
+                event = response.json().get('event', {})
+                self.log_usage('create', 'recurring_appointment', event.get('id'), {'title': event.get('title'), 'rrule': rrule})
+                return True, event
             else:
-                error_msg = response.text
-                try:
-                    error_json = response.json()
-                    if 'error' in error_json and 'message' in error_json['error']:
-                        error_msg = error_json['error']['message']
-                except json.JSONDecodeError:
-                    pass
-                return False, f"TeamUp API Error (Status {response.status_code}): {error_msg}"
+                error_details = response.json().get('error', {}).get('message', response.text)
+                return False, f"TeamUp API Error: {error_details}"
                 
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return False, f"Exception during recurring appointment creation: {str(e)}"
+            return False, f"An unexpected error occurred: {str(e)}"
     
     def get_organization_stats(self):
         """ดึงสถิติการใช้งานของ organization"""
@@ -1390,6 +1437,43 @@ class HybridTeamUpAPI:
             print(f"Error logging usage: {e}")
             import traceback
             traceback.print_exc()
+
+    def build_teamup_url_with_array_params(base_url, params):
+        """
+        Helper สำหรับสร้าง URL ที่มี array parameters
+        เช่น subcalendarId[]=123&subcalendarId[]=456
+        """
+        url = base_url
+        query_parts = []
+        
+        for key, value in params.items():
+            if isinstance(value, list):
+                # สำหรับ array parameters
+                for item in value:
+                    query_parts.append(f"{key}[]={item}")
+            else:
+                # สำหรับ normal parameters
+                query_parts.append(f"{key}={value}")
+        
+        if query_parts:
+            url += "?" + "&".join(query_parts)
+        
+        return url
+
+    # Test function สำหรับทดสอบ API call
+    def test_teamup_api_call():
+        """ทดสอบการเรียก TeamUp API ด้วย subcalendarId array"""
+        # สำหรับ debug เท่านั้น
+        test_url = build_teamup_url_with_array_params(
+            "https://api.teamup.com/ksa5n83we4xo5qtb1c/events",
+            {
+                'startDate': '2025-07-01',
+                'endDate': '2025-07-31',
+                'subcalendarId': [123, 456, 789]
+            }
+        )
+        print(f"Test URL: {test_url}")
+        # Expected: https://api.teamup.com/ksa5n83we4xo5qtb1c/events?startDate=2025-07-01&endDate=2025-07-31&subcalendarId[]=123&subcalendarId[]=456&subcalendarId[]=789
 
 # Factory function
 def get_hybrid_teamup_api(organization_id, user_id=None):

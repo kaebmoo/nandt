@@ -1,8 +1,8 @@
-"""Re-initial migration with timezone support and correct defaults
+"""Initial setup with timezone-aware datetimes
 
-Revision ID: 42059aa8e95e
+Revision ID: 76d05780c286
 Revises: 
-Create Date: 2025-07-10 21:32:42.843086
+Create Date: 2025-07-10 22:41:09.297096
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '42059aa8e95e'
+revision = '76d05780c286'
 down_revision = None
 branch_labels = None
 depends_on = None

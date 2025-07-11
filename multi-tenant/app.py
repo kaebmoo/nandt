@@ -1,4 +1,4 @@
-# app.py - แก้ไข TypeError ใน inject_global_vars และ subcalendarId ใน get_events
+# multi-tenant/app.py - แก้ไข TypeError ใน inject_global_vars และ subcalendarId ใน get_events
 
 import logging
 import traceback
@@ -15,7 +15,7 @@ import csv
 from datetime import timezone
 
 # Import SaaS modules
-from models import db, Organization, User, SubscriptionPlan, SubscriptionStatus, UserRole, PRICING_PLANS, UsageStat
+from models import db, cache, Organization, User, SubscriptionPlan, SubscriptionStatus, UserRole, PRICING_PLANS, UsageStat
 from auth import auth_bp, login_manager
 from hybrid_teamup_strategy import get_hybrid_teamup_api as get_teamup_api
 from forms import AppointmentForm
@@ -32,6 +32,7 @@ app.config.from_object(Config)
 # Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
+cache.init_app(app) 
 
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
@@ -190,8 +191,14 @@ def inject_error_context():
 # เพิ่มฟังก์ชันสำหรับ context processor
 @app.context_processor
 def inject_global_vars():
-    """เพิ่มตัวแปรสำหรับทุกเทมเพลต"""
-    context = {}
+    """เพิ่มตัวแปรสำหรับทุกเทมเพลต - รวม timezone"""
+    from datetime import timezone  # เพิ่ม import นี้
+    
+    context = {
+        'datetime': datetime,
+        'timezone': timezone,  # **เพิ่มบรรทัดนี้**
+        'timedelta': timedelta  # เพิ่มด้วยเผื่อใช้
+    }
     
     if current_user.is_authenticated and current_user.user:
         org = current_user.organization
@@ -253,17 +260,35 @@ def index():
         
         events = teamup_api.get_events(start_date=start_date, end_date=end_date)
         today_appointments = len(events.get('events', []))
+
+        # Calculate days_left here in Python
+        days_left_trial = None
+        if current_user.organization.subscription_status == SubscriptionStatus.TRIAL and \
+           current_user.organization.trial_ends_at:
+            # Ensure trial_ends_at is timezone-aware for comparison if it comes from DB as naive
+            # If models.py is fixed and db is migrated, it should be aware.
+            # Otherwise, use .replace(tzinfo=timezone.utc)
+            trial_ends_aware = current_user.organization.trial_ends_at
+            if trial_ends_aware.tzinfo is None: # Fallback for old naive data
+                trial_ends_aware = trial_ends_aware.replace(tzinfo=timezone.utc)
+
+            days_left_trial = (trial_ends_aware - datetime.now(timezone.utc)).days
+            if days_left_trial < 0: # Ensure it doesn't show negative days if expired
+                days_left_trial = 0
         
         summary_data = {
             'subcalendar_count': subcalendar_count,
             'today_appointments': today_appointments,
             'subcalendars': subcals.get('subcalendars', [])[:5],
-            'stats': stats
+            'stats': stats,
+            'days_left_trial': days_left_trial # Pass this to template
         }
         
         return render_template('dashboard.html', 
                              summary_data=summary_data,
-                             organization=current_user.organization)
+                             organization=current_user.organization,
+                             days_left_trial=days_left_trial # Pass explicitly as well for consistency
+                            )
         
     except Exception as e:
         app.logger.error(f"Error loading dashboard for user {current_user.get_id()}: {str(e)}", exc_info=True)
@@ -410,13 +435,13 @@ def get_events():
 @app.route('/create_appointment', methods=['POST'])
 @login_required
 def create_appointment():
-    """API endpoint for creating appointments with enhanced error handling"""
+    """API endpoint for creating appointments with enhanced validation and error handling"""
     if not current_user.organization:
         app.logger.error(f"Error: Authenticated user {current_user.get_id()} has no associated organization trying to create appointment.")
         return jsonify({'error': 'Organization data missing for user.'}), 400
 
     try:
-        # Ensure that current_user.organization exists before accessing these properties
+        # ตรวจสอบ subscription status
         org_active = current_user.organization.is_subscription_active if current_user.organization else False
         org_trial_expired = current_user.organization.is_trial_expired if current_user.organization else True
 
@@ -424,7 +449,6 @@ def create_appointment():
             if org_trial_expired:
                 raise SubscriptionError('Trial period has expired. Please choose a subscription plan.')
         
-        # current_user.organization.can_create_appointment() is a method, so () is correct here.
         if not current_user.organization.can_create_appointment():
             raise SubscriptionError('Monthly appointment limit reached. Please upgrade your plan.')
         
@@ -433,8 +457,41 @@ def create_appointment():
             user_id=current_user.user.id
         )
         
-        data = request.get_json()
+        # **แก้ไข: จัดการข้อมูลที่รับเข้ามาให้รองรับทั้ง JSON และ Form Data**
+        data = None
+        content_type = request.headers.get('Content-Type', '')
         
+        if 'application/json' in content_type:
+            data = request.get_json()
+            if data is None:
+                app.logger.error("Failed to parse JSON data despite JSON Content-Type")
+                return jsonify({
+                    'error': 'Invalid JSON data',
+                    'new_form_token': str(uuid.uuid4())
+                }), 400
+        else:
+            # Handle form data
+            app.logger.info(f"Handling form data with Content-Type: {content_type}")
+            data = {}
+            for key in request.form.keys():
+                value = request.form.get(key)
+                # Convert string 'true'/'false' to boolean for form data
+                if value in ('true', 'True'):
+                    data[key] = True
+                elif value in ('false', 'False'):
+                    data[key] = False
+                else:
+                    data[key] = value
+            
+            app.logger.info(f"Form data received: {data}")
+        
+        if not data:
+            return jsonify({
+                'error': 'No data received',
+                'new_form_token': str(uuid.uuid4())
+            }), 400
+        
+        # **สร้าง form และ validate**
         form = AppointmentForm(data=data)
         
         try:
@@ -446,77 +503,16 @@ def create_appointment():
             app.logger.error(f'Failed to get subcalendars during appointment creation: {str(e)}', exc_info=True)
             raise TeamUpAPIError('Unable to access calendar service for subcalendars')
         
-        if form.validate_on_submit():
-            form_token = form.form_token.data
-            if form_token and form_token in session.get('processed_forms', []):
-                return jsonify({
-                    'error': 'Request already processed',
-                    'new_form_token': str(uuid.uuid4())
-                }), 400
-            
-            if form.is_recurring.data:
-                is_valid, error_msg = form.validate_recurring_days()
-                if not is_valid:
-                    return jsonify({
-                        'error': error_msg,
-                        'new_form_token': str(uuid.uuid4())
-                    }), 400
-            
-            if 'processed_forms' not in session:
-                session['processed_forms'] = []
-            session['processed_forms'].append(form_token)
-            
-            if len(session['processed_forms']) > 20:
-                session['processed_forms'] = session['processed_forms'][-20:]
-            
-            patient_data = {
-                'title': form.title.data,
-                'calendar_name': form.calendar_name.data,
-                'start_date': form.start_date.data.strftime('%Y-%m-%d'),
-                'start_time': form.start_time.data.strftime('%H:%M'),
-                'end_date': form.end_date.data.strftime('%Y-%m-%d'),
-                'end_time': form.end_time.data.strftime('%H:%M'),
-                'location': form.location.data or '',
-                'who': form.who.data or '',
-                'description': form.description.data or ''
-            }
-            
-            try:
-                if form.is_recurring.data:
-                    day_mapping = {
-                        'mon': 'MO', 'tue': 'TU', 'wed': 'WE', 'thu': 'TH',
-                        'fri': 'FR', 'sat': 'SA', 'sun': 'SU'
-                    }
-                    
-                    selected_days = []
-                    for day_key, day_abbr in day_mapping.items():
-                        if getattr(form, day_key).data:
-                            selected_days.append(day_abbr)
-                    
-                    weeks = form.weeks.data or 4
-                    
-                    success, result = teamup_api.create_recurring_appointments_simple(
-                        patient_data, selected_days, weeks
-                    )
-                else:
-                    success, result = teamup_api.create_appointment(patient_data)
-                
-                if success:
-                    app.logger.info(f'Appointment created: {result} - User: {current_user.user.id}')
-                    
-                    usage_stat = UsageStat.get_or_create_today(current_user.user.organization_id)
-                    usage_stat.appointments_created += 1
-                    db.session.commit()
-                    
-                    return jsonify({'success': True, 'event_id': result})
-                else:
-                    raise AppointmentError(result)
-                    
-            except Exception as e:
-                app.logger.error(f'TeamUp API error during appointment creation: {str(e)}', exc_info=True)
-                raise TeamUpAPIError(f'Failed to create appointment: {str(e)}')
-                
-        else:
+        # **ตรวจสอบ CSRF และ form token**
+        form_token = form.form_token.data
+        if form_token and form_token in session.get('processed_forms', []):
+            return jsonify({
+                'error': 'Request already processed',
+                'new_form_token': str(uuid.uuid4())
+            }), 400
+        
+        # **Validate form**
+        if not form.validate_on_submit():
             errors = {}
             for field, error_list in form.errors.items():
                 errors[field] = error_list[0] if error_list else 'Invalid data'
@@ -528,6 +524,86 @@ def create_appointment():
                 'field_errors': errors,
                 'new_form_token': str(uuid.uuid4())
             }), 400
+        
+        # **เพิ่ม: ตรวจสอบ appointment logic**
+        logic_valid, logic_errors = form.validate_appointment_logic()
+        if not logic_valid:
+            app.logger.warning(f'Appointment logic validation failed: {logic_errors} - User: {current_user.user.id}')
+            return jsonify({
+                'error': 'Please check your appointment settings',
+                'logic_errors': logic_errors,
+                'new_form_token': str(uuid.uuid4())
+            }), 400
+        
+        # **เพิ่ม: ตรวจสอบ recurring validation**
+        if form.is_recurring.data:
+            is_valid, error_msg = form.validate_recurring_days()
+            if not is_valid:
+                return jsonify({
+                    'error': error_msg,
+                    'new_form_token': str(uuid.uuid4())
+                }), 400
+        
+        # **จัดการ form token เพื่อป้องกัน double submit**
+        if 'processed_forms' not in session:
+            session['processed_forms'] = []
+        session['processed_forms'].append(form_token)
+        
+        if len(session['processed_forms']) > 20:
+            session['processed_forms'] = session['processed_forms'][-20:]
+        
+        # **ใช้ form.to_dict() เพื่อแปลงข้อมูลและ auto-correct**
+        try:
+            patient_data = form.to_dict()
+            app.logger.info(f'Patient data prepared: {patient_data}')
+        except ValidationError as e:
+            return jsonify({
+                'error': str(e),
+                'new_form_token': str(uuid.uuid4())
+            }), 400
+        
+        # **สร้าง appointment**
+        try:
+            if form.is_recurring.data:
+                # สร้าง recurring appointment
+                day_mapping = {
+                    'mon': 'MO', 'tue': 'TU', 'wed': 'WE', 'thu': 'TH',
+                    'fri': 'FR', 'sat': 'SA', 'sun': 'SU'
+                }
+                
+                selected_days = []
+                for day_key, day_abbr in day_mapping.items():
+                    if patient_data['recurring_days'].get(day_key):
+                        selected_days.append(day_abbr)
+                
+                weeks = patient_data['weeks'] or 4
+                
+                success, result = teamup_api.create_recurring_appointments_simple(
+                    patient_data, selected_days, weeks
+                )
+            else:
+                # สร้าง single appointment
+                success, result = teamup_api.create_appointment(patient_data)
+            
+            if success:
+                app.logger.info(f'Appointment created successfully: {result} - User: {current_user.user.id}')
+                
+                # อัปเดต usage statistics
+                usage_stat = UsageStat.get_or_create_today(current_user.user.organization_id)
+                usage_stat.appointments_created += 1
+                db.session.commit()
+                
+                return jsonify({
+                    'success': True, 
+                    'event_id': result,
+                    'message': 'นัดหมายถูกสร้างเรียบร้อยแล้ว'
+                })
+            else:
+                raise AppointmentError(result)
+                
+        except Exception as e:
+            app.logger.error(f'TeamUp API error during appointment creation: {str(e)}', exc_info=True)
+            raise TeamUpAPIError(f'Failed to create appointment: {str(e)}')
             
     except SubscriptionError as e:
         return handle_subscription_error(e)
@@ -542,65 +618,56 @@ def create_appointment():
             'new_form_token': str(uuid.uuid4())
         }), 500
 
+
 @app.route('/update_status', methods=['GET', 'POST'])
 @login_required
 def update_status():
-    """หน้าอัปเดตสถานะนัดหมาย"""
+    """หน้าอัปเดตสถานะนัดหมาย (เวอร์ชันปรับปรุง)"""
     if not current_user.organization:
-        app.logger.error(f"Error: Authenticated user {current_user.get_id()} has no associated organization trying to update status.")
         flash('ข้อมูลองค์กรไม่สมบูรณ์ กรุณาติดต่อผู้ดูแลระบบ', 'danger')
         return redirect(url_for('index'))
-    try:
-        teamup_api = get_teamup_api(
-            organization_id=current_user.user.organization_id,
-            user_id=current_user.user.id
-        )
+
+    teamup_api = get_teamup_api(
+        organization_id=current_user.user.organization_id,
+        user_id=current_user.user.id
+    )
+    event_id = request.args.get('event_id', '')
+    event_data = None
+
+    if event_id:
+        try:
+            # ดึงข้อมูลล่าสุดของ event เพื่อแสดงในฟอร์ม
+            response = teamup_api.get_events(event_id=event_id)
+            if response.get('events'):
+                event_data = response['events'][0]
+            else:
+                flash('ไม่พบนัดหมายที่ระบุ', 'danger')
+        except Exception as e:
+            flash(f'ไม่สามารถดึงข้อมูลนัดหมายได้: {e}', 'danger')
+    
+    if request.method == 'POST':
+        post_event_id = request.form.get('event_id')
+        status = request.form.get('status')
         
-        event_data = None
-        event_id = request.args.get('event_id', '')
-        calendar_id = request.args.get('calendar_id', '') # Keep this if calendar_id is needed for context
+        if not post_event_id or not status:
+            flash('ข้อมูลไม่ครบถ้วน', 'danger')
+            return render_template('update_status.html', event_data=event_data)
         
-        if event_id:
-            try:
-                events_response = teamup_api.get_events(event_id=event_id, start_date=datetime.now() - timedelta(days=30), end_date=datetime.now() + timedelta(days=30))
-                events_list = events_response.get('events', [])
-                if events_list:
-                    event_data = events_list[0]
+        try:
+            # เรียกฟังก์ชันที่แก้ไขแล้วใน strategy ซึ่งจัดการความซับซ้อนทั้งหมด
+            success, result = teamup_api.update_appointment_status(post_event_id, status)
+            
+            if success:
+                flash('อัปเดตสถานะสำเร็จ', 'success')
+                return redirect(url_for('appointments'))
+            else:
+                flash(f'การอัปเดตสถานะล้มเหลว: {result}', 'danger')
                 
-                if not event_data:
-                    flash('ไม่พบนัดหมายที่ระบุ', 'danger')
-            except Exception as e:
-                app.logger.error(f'Error fetching event {event_id} for update_status: {str(e)}', exc_info=True)
-                flash('เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย', 'danger')
-        
-        if request.method == 'POST':
-            try:
-                post_event_id = request.form.get('event_id')
-                status = request.form.get('status')
-                post_calendar_id = request.form.get('calendar_id') or calendar_id
-                
-                if not post_event_id or not status:
-                    flash('กรุณากรอก Event ID และเลือกสถานะ', 'danger')
-                    return render_template('update_status.html', event_data=event_data, event_id=event_id)
-                
-                success, result = teamup_api.update_appointment_status(post_event_id, status, post_calendar_id)
-                
-                if success:
-                    flash('อัปเดตสถานะสำเร็จ', 'success')
-                    return redirect(url_for('appointments')) # Use 'appointments' as it's directly on app
-                else:
-                    flash(f'การอัปเดตสถานะล้มเหลว: {result}', 'danger')
-                    
-            except Exception as e:
-                app.logger.error(f'Error updating appointment status: {str(e)}', exc_info=True)
-                flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
-        
-        return render_template('update_status.html', event_data=event_data, event_id=event_id)
-        
-    except Exception as e:
-        app.logger.error(f'Unexpected error on update_status page: {str(e)}', exc_info=True)
-        flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
-        return redirect(url_for('appointments')) # Use 'appointments' as it's directly on app
+        except Exception as e:
+            app.logger.error(f'Error updating appointment status: {str(e)}', exc_info=True)
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+
+    return render_template('update_status.html', event_data=event_data)
 
 @app.route('/subcalendars')
 @login_required

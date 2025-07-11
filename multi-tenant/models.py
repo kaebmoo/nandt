@@ -19,6 +19,8 @@ except ImportError:
             return None
         def set(self, key, value, timeout=None):
             pass
+        def init_app(self, app):
+            pass
     cache = DummyCache()
 
 db = SQLAlchemy()
@@ -62,7 +64,7 @@ class Organization(db.Model):
     
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Soft delete
     is_deleted = db.Column(db.Boolean, default=False, index=True)
@@ -85,12 +87,36 @@ class Organization(db.Model):
     
     @hybrid_property
     def is_trial_expired(self):
-        return datetime.now(timezone.utc) > self.trial_ends_at
+        """ตรวจสอบว่า trial หมดอายุแล้วหรือไม่ - แก้ไข timezone issue"""
+        if not self.trial_ends_at:
+            return True
+        
+        # แก้ไข: ตรวจสอบและแปลง timezone
+        trial_end_aware = self.trial_ends_at
+        
+        # ถ้า trial_ends_at ไม่มี timezone info ให้เพิ่ม UTC
+        if trial_end_aware.tzinfo is None:
+            trial_end_aware = trial_end_aware.replace(tzinfo=timezone.utc)
+        
+        return datetime.now(timezone.utc) > trial_end_aware
     
     @hybrid_property
     def is_subscription_active(self):
-        return (self.subscription_status == SubscriptionStatus.ACTIVE and 
-                datetime.now(timezone.utc) < self.subscription_expires_at)
+        """ตรวจสอบว่า subscription ยังใช้งานได้หรือไม่ - แก้ไข timezone issue"""
+        if self.subscription_status != SubscriptionStatus.ACTIVE:
+            return False
+            
+        if not self.subscription_expires_at:
+            return False
+        
+        # แก้ไข: ตรวจสอบและแปลง timezone
+        expires_at_aware = self.subscription_expires_at
+        
+        # ถ้า subscription_expires_at ไม่มี timezone info ให้เพิ่ม UTC
+        if expires_at_aware.tzinfo is None:
+            expires_at_aware = expires_at_aware.replace(tzinfo=timezone.utc)
+        
+        return datetime.now(timezone.utc) < expires_at_aware
     
     def can_create_appointment(self):
         """Check if organization can create more appointments with caching"""
@@ -117,12 +143,13 @@ class Organization(db.Model):
         return current_staff_count < self.max_staff_users
     
     def get_current_month_usage(self):
-        """Get current month usage with optimized query"""
-        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        """Get current month usage with timezone-aware comparison"""
+        # แก้ไข: ใช้ timezone-aware datetime
+        current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         usage = db.session.query(db.func.sum(UsageStat.appointments_created)).filter(
             UsageStat.organization_id == self.id,
-            UsageStat.date >= current_month
+            UsageStat.date >= current_month.date()  # เปรียบเทียบแค่ date part
         ).scalar()
         
         return usage or 0
@@ -165,7 +192,7 @@ class User(db.Model):
     
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     audit_logs = db.relationship('AuditLog', backref='user', lazy='dynamic')
@@ -192,9 +219,18 @@ class User(db.Model):
         return self.reset_token
     
     def is_reset_token_valid(self):
-        return (self.reset_token and 
-                self.reset_token_expires and 
-                datetime.now(timezone.utc) < self.reset_token_expires)
+        """ตรวจสอบว่า reset token ยังใช้งานได้หรือไม่ - แก้ไข timezone issue"""
+        if not self.reset_token or not self.reset_token_expires:
+            return False
+        
+        # แก้ไข: ตรวจสอบและแปลง timezone
+        expires_at_aware = self.reset_token_expires
+        
+        # ถ้า reset_token_expires ไม่มี timezone info ให้เพิ่ม UTC
+        if expires_at_aware.tzinfo is None:
+            expires_at_aware = expires_at_aware.replace(tzinfo=timezone.utc)
+        
+        return datetime.now(timezone.utc) < expires_at_aware        
     
     def soft_delete(self):
         """Soft delete user"""
@@ -228,7 +264,7 @@ class Subscription(db.Model):
     status = db.Column(db.Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
     
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class UsageStat(db.Model):
     __tablename__ = 'usage_stats'
@@ -307,7 +343,7 @@ class TeamUpCalendar(db.Model):
     max_subcalendars = db.Column(db.Integer, default=8)
     
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     subcalendars = db.relationship('OrganizationSubcalendar', backref='teamup_calendar', lazy='dynamic')

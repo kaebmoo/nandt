@@ -627,4 +627,4 @@ def inject_api_status():
     return dict(api_connected=is_api_connected())
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=9000)

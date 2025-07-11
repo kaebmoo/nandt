@@ -154,20 +154,30 @@
         {% endif %}
     {% endwith %}
 
-    {% if current_user.is_authenticated and (is_trial_expired or not is_subscription_active) %}
-        <div class="alert alert-warning alert-dismissible fade show m-0" role="alert">
-            <div class="container">
-                <i class="bi bi-exclamation-triangle"></i>
-                {% if is_trial_expired %}
+    {% if current_user.is_authenticated %}
+        {# กรณีที่ 1: ตรวจสอบว่า "หมดช่วงทดลองใช้งานแล้ว" หรือยัง #}
+        {% if current_organization.is_trial_expired %}
+            <div class="alert alert-warning alert-dismissible fade show m-0" role="alert">
+                <div class="container">
+                    <i class="bi bi-exclamation-triangle"></i>
                     <strong>การทดลองใช้หมดอายุแล้ว!</strong> 
                     การใช้งานถูกจำกัด กรุณาอัปเกรดแพ็คเกจ
                     <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-warning btn-sm ms-2">เลือกแพ็คเกจ</a>
-                {% else %}
-                    <strong>บัญชีของคุณถูกระงับ!</strong> 
-                    กรุณาติดต่อผู้ดูแลหรือชำระค่าบริการ
-                {% endif %}
+                </div>
             </div>
-        </div>
+
+        {# กรณีที่ 2: ถ้ายังไม่หมดช่วงทดลองใช้ ให้ตรวจสอบว่า "บัญชีถูกระงับ/ยกเลิก" หรือไม่ #}
+        {# โดยเงื่อนไขคือ "ไม่แอคทีฟ" และสถานะ "ไม่ใช่ช่วงทดลองใช้" #}
+        {% elif not current_organization.is_subscription_active and current_organization.subscription_status != SubscriptionStatus.TRIAL %}
+            <div class="alert alert-danger alert-dismissible fade show m-0" role="alert">
+                <div class="container">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>บัญชีของคุณถูกระงับหรือหมดอายุ!</strong> 
+                    กรุณาติดต่อผู้ดูแลหรือชำระค่าบริการ
+                    <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-danger btn-sm ms-2">จัดการการชำระเงิน</a>
+                </div>
+            </div>
+        {% endif %}
     {% endif %}
 
     <main class="{% block main_class %}container mt-4{% endblock %}">
@@ -198,6 +208,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/th.min.js"></script>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     

@@ -176,7 +176,7 @@
                                     {% endif %}
                                 </div>
                                 {# Use data-timestamp for JS to format #}
-                                <small class="text-muted activity-timestamp" data-timestamp="{{ activity.created_at.isoformat() }}">
+                                <small class="text-muted activity-timestamp" data-timestamp="{{ activity.created_at|string }}">
                                     {# This will be populated by JS #}
                                 </small>
                             </div>
@@ -215,7 +215,16 @@
                         </div>
                         <p class="text-muted">
                             {# Calculate days left in Python #}
-                            {% set days_left = (current_organization.trial_ends_at - datetime.now(timezone.utc)).days %}
+                            {# เปลี่ยนไปใช้ current_organization.trial_ends_at.astimezone(timezone.utc) หรือ make_aware() #}
+                            {# แต่ Jinja2 ไม่รู้จัก make_aware() ที่นิยามใน models.py #}
+                            {# ทางออกคือ คำนวณ days_left ใน app.py แล้วส่งมาให้ template #}
+                            {# หรือเปลี่ยน datetime.now(timezone.utc) เป็น offset-naive ก่อนลบ #}
+                            {# แต่เพื่อความสอดคล้องกับ models.py, เราจะใช้ astimezone(timezone.utc) กับค่าที่มาจาก DB #}
+                            {# หรือให้ดีที่สุดคือ, คำนวณ `days_left` ใน app.py แล้วส่งมาให้ template เลย #}
+                            {% set now_utc = datetime.now(timezone.utc) %}
+                            {% set trial_ends_aware = current_organization.trial_ends_at.astimezone(timezone.utc) if current_organization.trial_ends_at.tzinfo else current_organization.trial_ends_at.replace(tzinfo=timezone.utc) %}
+                            {% set days_left = (trial_ends_aware - now_utc).days %}
+                            {# หรือถ้าต้องการแค่แสดงผล, ให้ render_template ส่ง days_left มาเลย #}
                             เหลือ {{ days_left }} วัน
                         </p>
                         <a href="{{ url_for('billing.choose_plan') }}" class="btn btn-primary">อัพเกรดเลย</a>

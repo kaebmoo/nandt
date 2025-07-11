@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
-from models import db, UsageStat, AuditLog, Organization, User # Import User for staff count
+from models import db, UsageStat, AuditLog, Organization, User, UserRole 
 from hybrid_teamup_strategy import get_hybrid_teamup_api
 from flask import current_app
 import json # ADD THIS LINE
@@ -27,41 +27,53 @@ def heartbeat():
             'message': str(e)
         }), 500
 
+# แก้ไขในไฟล์ api.py
+
 @api_bp.route('/usage-stats', methods=['GET'])
 @login_required
 def get_usage_stats():
     """Get usage statistics for current organization"""
     try:
-        if not current_user.is_authenticated or not current_user.user or not current_user.organization:
-            return jsonify({
-                'success': False,
-                'error': 'User or organization data not available.'
-            }), 400
-
+        if not (current_user.is_authenticated and current_user.user):
+            return jsonify({'success': False, 'error': 'User data not available.'}), 400
+        
+        # ==========================================================
+        #  จุดแก้ไข: ดึง Organization object ขึ้นมาใหม่จาก DB
+        #  เพื่อให้แน่ใจว่ามันผูกอยู่กับ Session ปัจจุบัน
+        # ==========================================================
+        organization = Organization.query.get(current_user.user.organization_id)
+        if not organization:
+            return jsonify({'success': False, 'error': 'Organization not found for the current user.'}), 404
+        
+        # โค้ดส่วนที่เหลือจะใช้ object `organization` ที่เพิ่งดึงมาใหม่นี้
+        # ซึ่งจะสามารถเรียกใช้ method ที่มี lazy load ได้โดยไม่มีปัญหา
+        
         teamup_api = get_hybrid_teamup_api(
-            organization_id=current_user.user.organization_id,
+            organization_id=organization.id,
             user_id=current_user.user.id
         )
         
         stats = teamup_api.get_organization_stats()
         
         current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # ใช้ DB Session ปัจจุบันในการ Query
         monthly_stats_records = UsageStat.query.filter(
-            UsageStat.organization_id == current_user.user.organization_id,
-            UsageStat.date >= current_month
+            UsageStat.organization_id == organization.id,
+            UsageStat.date >= current_month.date()
         ).all()
         
         total_appointments_created = sum(stat.appointments_created for stat in monthly_stats_records)
-        total_appointments_updated = sum(stat.appointments_updated for stat in monthly_stats_records)
+        total_updates = sum(stat.appointments_updated for stat in monthly_stats_records)
 
         active_staff_users = User.query.filter_by(
-            organization_id=current_user.user.organization_id,
-            role=User.role.STAFF, # Use Enum directly
+            organization_id=organization.id,
+            role=UserRole.STAFF,  
             is_active=True,
             is_deleted=False
         ).count()
         
-        organization = current_user.organization
+        # ไม่ต้องดึง organization จาก current_user.organization อีก
         max_appointments = organization.max_appointments_per_month
         max_staff = organization.max_staff_users
         
@@ -72,7 +84,7 @@ def get_usage_stats():
             'success': True,
             'data': {
                 'monthly_appointments': total_appointments_created,
-                'monthly_updates': total_appointments_updated,
+                'monthly_updates': total_updates,
                 'monthly_staff': active_staff_users,
                 'max_appointments': max_appointments,
                 'max_staff': max_staff,
@@ -83,9 +95,9 @@ def get_usage_stats():
                 'subscription_plan': organization.subscription_plan.value,
                 'subscription_status': organization.subscription_status.value,
                 'trial_expires_at': organization.trial_ends_at.isoformat() if organization.trial_ends_at else None,
-                'is_trial_expired': organization.is_trial_expired, # Property, not callable
-                'can_create_appointment': organization.can_create_appointment(),
-                'can_add_staff': organization.can_add_staff()
+                'is_trial_expired': organization.is_trial_expired,
+                'can_create_appointment': organization.can_create_appointment(), # <-- บรรทัดนี้จะทำงานได้แล้ว
+                'can_add_staff': organization.can_add_staff() # <-- บรรทัดนี้จะทำงานได้แล้ว
             }
         })
         
