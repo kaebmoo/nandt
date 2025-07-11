@@ -853,7 +853,7 @@ class HybridTeamUpAPI:
     
     # method get_subcalendars ของ class HybridTeamUpAPI
     def get_subcalendars(self):
-        """ดึงรายการ subcalendars ทั้งหมดของ organization (จาก TeamUp API + DB)"""
+        """ดึงรายการ subcalendars ทั้งหมดของ organization (จาก TeamUp API พร้อมข้อมูลสี)"""
         subcal_list = []
         
         try:
@@ -870,29 +870,32 @@ class HybridTeamUpAPI:
                         timeout=10
                     )
                     
+                    print(f"Response status: {response.status_code}")
+                    print(f"Response text: {response.text[:500]}")  # Debug first 500 chars
+                    
                     if response.status_code == 200:
                         teamup_data = response.json()
+                        print(f"TeamUp subcalendars data: {teamup_data}")
                         
                         for subcal_info in teamup_data.get('subcalendars', []):
-                            # รวมข้อมูลจาก TeamUp API + Database
+                            print(f"Processing subcalendar: {subcal_info}")
+                            
+                            # รวมข้อมูลจาก TeamUp API (ครบถ้วนพร้อมสี)
                             enhanced_subcal = {
+                                # ข้อมูลหลักจาก TeamUp API
                                 'id': subcal_info['id'],
                                 'name': subcal_info['name'],
-                                'calendar_id': calendar.calendar_id,
-                                'is_active': subcal_info.get('active', True),
-                                
-                                # ข้อมูลเพิ่มเติมจาก TeamUp API
-                                'color': subcal_info.get('color', 5),
+                                'color': subcal_info.get('color', 5),  # ข้อมูลสีจาก TeamUp
+                                'active': subcal_info.get('active', True),
                                 'readonly': subcal_info.get('readonly', False),
-                                'creation_dt': subcal_info.get('creation_dt', ''),
                                 'overlap': subcal_info.get('overlap', True),
+                                'creation_dt': subcal_info.get('creation_dt', ''),
                                 
-                                # ข้อมูลจาก database
+                                # ข้อมูลเพิ่มเติมจาก database
+                                'calendar_id': calendar.calendar_id,
+                                'is_active': subcal_info.get('active', True),  # alias
                                 'calendar_name': calendar.calendar_name,
                                 'is_primary': calendar.is_primary,
-                                
-                                # ข้อมูลสำหรับ template
-                                'active': subcal_info.get('active', True),  # alias สำหรับ is_active
                             }
                             
                             subcal_list.append(enhanced_subcal)
@@ -900,27 +903,28 @@ class HybridTeamUpAPI:
                     else:
                         print(f"Warning: Failed to get subcalendars from TeamUp for {calendar.calendar_id}: {response.status_code} - {response.text}")
                         
-                        # Fallback: ใช้ข้อมูลจาก database
-                        db_subcals = self.subcalendars
+                        # Fallback: ใช้ข้อมูลจาก database (แต่ไม่มีสี)
+                        db_subcals = [s for s in self.subcalendars if s.calendar_id == calendar.calendar_id]
                         for subcal_obj in db_subcals:
-                            if subcal_obj.calendar_id == calendar.calendar_id:
-                                fallback_subcal = {
-                                    'id': subcal_obj.subcalendar_id,
-                                    'name': subcal_obj.subcalendar_name,
-                                    'calendar_id': subcal_obj.calendar_id,
-                                    'is_active': subcal_obj.is_active,
-                                    'color': 5,  # default color
-                                    'readonly': False,  # default
-                                    'creation_dt': '',
-                                    'overlap': True,
-                                    'calendar_name': calendar.calendar_name,
-                                    'is_primary': calendar.is_primary,
-                                    'active': subcal_obj.is_active,
-                                }
-                                subcal_list.append(fallback_subcal)
+                            fallback_subcal = {
+                                'id': subcal_obj.subcalendar_id,
+                                'name': subcal_obj.subcalendar_name,
+                                'calendar_id': subcal_obj.calendar_id,
+                                'is_active': subcal_obj.is_active,
+                                'color': 5,  # default color เนื่องจากไม่มีข้อมูลจาก API
+                                'active': subcal_obj.is_active,
+                                'readonly': False,  # default
+                                'overlap': True,    # default
+                                'creation_dt': '',  # ไม่มีข้อมูล
+                                'calendar_name': calendar.calendar_name,
+                                'is_primary': calendar.is_primary,
+                            }
+                            subcal_list.append(fallback_subcal)
                                 
                 except Exception as e:
                     print(f"Error fetching subcalendars from calendar {calendar.calendar_id}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
                     continue
         
         except Exception as e:
@@ -928,24 +932,24 @@ class HybridTeamUpAPI:
             import traceback
             traceback.print_exc()
             
-            # Ultimate fallback: ข้อมูลจาก database เท่านั้น
+            # Ultimate fallback: ข้อมูลจาก database เท่านั้น (ไม่มีสี)
             for subcal_obj in self.subcalendars:
                 fallback_subcal = {
                     'id': subcal_obj.subcalendar_id,
                     'name': subcal_obj.subcalendar_name,
                     'calendar_id': subcal_obj.calendar_id,
                     'is_active': subcal_obj.is_active,
-                    'color': 5,
-                    'readonly': False,
-                    'creation_dt': '',
-                    'overlap': True,
+                    'color': 5,  # default color
                     'active': subcal_obj.is_active,
+                    'readonly': False,
+                    'overlap': True,
+                    'creation_dt': '',
                 }
                 subcal_list.append(fallback_subcal)
         
         print(f"Final subcalendars list: {len(subcal_list)} items")
         if subcal_list:
-            print(f"Sample subcalendar: {subcal_list[0]}")
+            print(f"Sample subcalendar with all fields: {subcal_list[0]}")
         
         return {'subcalendars': subcal_list}
     
