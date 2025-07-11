@@ -1201,73 +1201,98 @@ class HybridTeamUpAPI:
     
     def update_appointment_status(self, event_id, new_status_text):
         """
-        อัปเดตสถานะของนัดหมายโดยการแก้ไขฟิลด์ 'notes'
-        โดยจะทำการค้นหา event ในทุก Master Calendar ขององค์กร
+        อัปเดตสถานะของนัดหมายโดยการแก้ไขฟิลด์ 'title' (แก้ไขจาก notes เป็น title)
+        ให้เหมือนระบบเดิมที่อัปเดตที่ title เป็น "ชื่อผู้ป่วย (สถานะ)"
         """
         try:
             # 1. ค้นหา Event และ Master Calendar (ks-key) ที่ถูกต้อง
             event_data = None
             target_calendar_id = None
             
+            headers_with_auth = self.manager._get_headers_with_auth()
+            
             for calendar in self.calendars:
                 response = requests.get(
                     f"{self.manager.base_url}/{calendar.calendar_id}/events/{event_id}",
-                    headers=self.manager._get_headers_with_auth(),
+                    headers=headers_with_auth,
                     timeout=10
                 )
                 if response.status_code == 200:
                     event_data = response.json().get('event')
                     target_calendar_id = calendar.calendar_id
-                    break # เมื่อเจอ event ให้หยุดค้นหาทันที
+                    break  # เมื่อเจอ event ให้หยุดค้นหาทันที
             
             if not event_data:
                 return False, "ไม่พบนัดหมายที่ระบุ หรือไม่มีสิทธิ์เข้าถึง"
 
-            # 2. เตรียมข้อมูลใหม่เพื่ออัปเดต
-            # ลบ tag สถานะเก่าออกก่อน (ถ้ามี)
-            original_notes = event_data.get('notes', '')
-            cleaned_notes = re.sub(r'\s*\[สถานะ:.*?\]', '', original_notes).strip()
-
-            # สร้าง notes ใหม่โดยเพิ่ม tag สถานะใหม่เข้าไป
-            updated_notes = f"{cleaned_notes} [สถานะ: {new_status_text}]".strip()
+            # 2. แก้ไข title แทน notes (ตามระบบเดิม)
+            current_title = event_data.get('title', '')
+            
+            # ลบสถานะเก่าออกจากชื่อเรื่อง
+            clean_title = current_title
+            status_markers = ['(มาตามนัด)', '(ยกเลิก)', '(ไม่มา)']
+            for marker in status_markers:
+                clean_title = clean_title.replace(marker, '').strip()
+            
+            # เพิ่มสถานะใหม่ที่ title
+            new_title = f"{clean_title} ({new_status_text})"
 
             # 3. สร้าง Payload สำหรับ PUT request โดยใช้ข้อมูลเดิมเกือบทั้งหมด
             update_payload = {
                 'id': event_data['id'],
                 'subcalendar_ids': event_data['subcalendar_ids'],
-                'title': event_data['title'],
+                'title': new_title,  # << อัปเดต title แทน notes
                 'start_dt': event_data['start_dt'],
                 'end_dt': event_data['end_dt'],
-                'notes': updated_notes, # << ใส่ notes ที่อัปเดตแล้ว
+                'notes': event_data.get('notes', ''),  # รักษา notes เดิม
                 # คงค่าเดิมของฟิลด์อื่นๆ
-                'location': event_data.get('location'),
-                'who': event_data.get('who'),
-                'rrule': event_data.get('rrule'),
-                'version': event_data.get('version') # สำคัญมากสำหรับการป้องกัน conflict
+                'location': event_data.get('location', ''),
+                'who': event_data.get('who', ''),
+                'all_day': event_data.get('all_day', False),
+                'signup_enabled': event_data.get('signup_enabled', False),
+                'comments_enabled': event_data.get('comments_enabled', False),
+                'attachments': event_data.get('attachments', []),
+                'rrule': event_data.get('rrule', ''),
+                'version': event_data.get('version')  # สำคัญมากสำหรับการป้องกัน conflict
             }
 
             # 4. ส่ง PUT request เพื่ออัปเดต Event
             update_response = requests.put(
                 f"{self.manager.base_url}/{target_calendar_id}/events/{event_id}",
-                headers=self.manager._get_headers_with_auth(),
+                headers=headers_with_auth,
                 json=update_payload,
                 timeout=15
             )
 
+            print(f"อัปเดตสถานะ: {update_response.status_code}")
+            print(f"ข้อมูลที่ส่ง: {update_payload}")
+            print(f"ผลลัพธ์: {update_response.text}")
+
             if update_response.status_code == 200:
-                self.log_usage('update', 'appointment', event_id, {'status': new_status_text})
-                return True, "อัปเดตสถานะสำเร็จ"
+                self.log_usage('update', 'appointment', event_id, {
+                    'status': new_status_text,
+                    'old_title': current_title,
+                    'new_title': new_title
+                })
+                return True, f"อัปเดตสถานะเป็น '{new_status_text}' สำเร็จ"
             else:
-                error_details = update_response.json().get('error', {}).get('message', update_response.text)
-                return False, f"อัปเดตสถานะล้มเหลว: {error_details}"
+                error_msg = update_response.text
+                try:
+                    error_data = update_response.json()
+                    if 'error' in error_data:
+                        error_msg = error_data['error'].get('message', error_msg)
+                except:
+                    pass
+                return False, f"การอัปเดตสถานะล้มเหลว: {error_msg}"
 
         except Exception as e:
+            print(f"Exception in update_appointment_status: {e}")
             import traceback
             traceback.print_exc()
-            return False, f"An unexpected error occurred: {str(e)}"
+            return False, f"เกิดข้อผิดพลาดที่ไม่คาดคิด: {str(e)}"
     
     def _update_event_in_calendar(self, calendar_id, event_id, status):
-        """อัปเดต event ใน calendar ที่ระบุ (ใช้ ks-key)"""
+        """อัปเดต event ใน calendar ที่ระบุ (ใช้ ks-key) - แก้ไขให้เหมือนระบบเดิม"""
         try:
             headers_with_auth = self.manager._get_headers_with_auth()
 
@@ -1289,23 +1314,24 @@ class HybridTeamUpAPI:
             
             event_data = response.json()['event']
             current_title = event_data.get('title', '')
-            current_notes = event_data.get('notes', '')
             current_version = event_data.get('version')
             
-            updated_notes = re.sub(r'\s*\[สถานะ:.*?\]\s*', '', current_notes)
-            new_status_tag = f" [สถานะ: {status}]"
+            # **แก้ไขตามระบบเดิม: อัปเดตที่ title แทน notes**
+            # ล้างสถานะเก่าออกจากชื่อเรื่อง
+            clean_title = current_title
+            status_markers = ['มาตามนัด', 'ยกเลิก', 'ไม่มา']
             
-            if updated_notes:
-                if updated_notes.endswith('.'):
-                    updated_notes = updated_notes[:-1] + new_status_tag + "."
-                else:
-                    updated_notes += new_status_tag
-            else:
-                updated_notes = new_status_tag.strip()
+            for marker in status_markers:
+                # ลบทั้งรูปแบบ '(marker)' และ ' (marker)'
+                clean_title = re.sub(f'\\s*\\({re.escape(marker)}\\)\\s*', '', clean_title).strip()
             
+            # เพิ่มสถานะใหม่
+            new_title = f"{clean_title} ({status})"
+            
+            # สร้างข้อมูลสำหรับการอัปเดต - ต้องใส่ ID แม้ว่า API doc จะบอกว่า readOnly
             update_data = {
-                'title': current_title,
-                'notes': updated_notes,
+                'id': event_data['id'],  # API ยังต้องการ id อยู่
+                'title': new_title,  # **อัปเดต title แทน notes**
                 'start_dt': event_data['start_dt'],
                 'end_dt': event_data['end_dt'],
                 'all_day': event_data.get('all_day', False),
@@ -1317,7 +1343,8 @@ class HybridTeamUpAPI:
             if current_version:
                 update_data['version'] = current_version
 
-            for field in ['location', 'who', 'rrule', 'subcalendar_ids', 'subcalendar_remote_ids']:
+            # เพิ่มข้อมูลอื่นๆ ที่อาจจำเป็น (รักษา notes เดิม)
+            for field in ['location', 'who', 'notes', 'rrule', 'subcalendar_ids', 'subcalendar_remote_ids']:
                 if field in event_data:
                     update_data[field] = event_data[field]
             
@@ -1331,13 +1358,15 @@ class HybridTeamUpAPI:
             if update_response.status_code == 200:
                 self.log_usage('update', 'appointment', event_id, {
                     'status': status,
-                    'calendar_id': calendar_id
+                    'calendar_id': calendar_id,
+                    'old_title': current_title,
+                    'new_title': new_title
                 })
-                return True, "อัปเดตสถานะสำเร็จ"
+                return True, f"อัปเดตสถานะเป็น '{status}' สำเร็จ"
             else:
                 error_msg = update_response.text
                 try:
-                    error_json = response.json()
+                    error_json = update_response.json()
                     if 'error' in error_json and 'message' in error_json['error']:
                         error_msg = error_json['error']['message']
                 except json.JSONDecodeError:
@@ -1348,6 +1377,114 @@ class HybridTeamUpAPI:
             import traceback
             traceback.print_exc()
             return False, f"Exception during event status update: {str(e)}"
+    
+    def get_events(self, start_date=None, end_date=None, subcalendar_id=None, event_id=None):
+        """
+        ดึงข้อมูล events จาก TeamUp API พร้อมข้อมูล subcalendar names
+        """
+        try:
+            from models import OrganizationSubcalendar
+            
+            events_list = []
+            
+            # ดึงข้อมูล subcalendar mappings ครั้งเดียว
+            subcal_mappings = OrganizationSubcalendar.query.filter_by(
+                organization_id=self.organization_id,
+                is_active=True
+            ).all()
+            
+            # สร้าง dict สำหรับ mapping subcalendar_id -> name
+            subcal_name_map = {
+                mapping.subcalendar_id: mapping.subcalendar_name 
+                for mapping in subcal_mappings
+            }
+            
+            # วนลูปผ่านทุก calendar ของ organization
+            for calendar in self.calendars:
+                try:
+                    calendar_id = calendar.calendar_id
+                    
+                    # สร้าง URL สำหรับ API call
+                    url = f"{self.manager.base_url}/{calendar_id}/events"
+                    params = {}
+                    
+                    if start_date:
+                        params['startDate'] = start_date.strftime('%Y-%m-%d')
+                    if end_date:
+                        params['endDate'] = end_date.strftime('%Y-%m-%d')
+                    
+                    # จัดการ subcalendar_id parameter
+                    if subcalendar_id:
+                        if isinstance(subcalendar_id, list):
+                            # สำหรับ list ของ subcalendar IDs
+                            for subcal_id in subcalendar_id:
+                                params[f'subcalendarId[]'] = subcal_id
+                        else:
+                            # สำหรับ subcalendar ID เดียว
+                            params['subcalendarId[]'] = subcalendar_id
+                    
+                    headers = self.manager._get_headers_with_auth()
+                    
+                    # เรียก TeamUp API
+                    response = requests.get(
+                        url,
+                        headers=headers,
+                        params=params,
+                        timeout=15
+                    )
+                    
+                    if response.status_code == 200:
+                        calendar_events = response.json().get('events', [])
+                        
+                        # เพิ่มข้อมูล subcalendar name ให้กับแต่ละ event
+                        for event in calendar_events:
+                            # หาชื่อ subcalendar จาก mapping
+                            event_subcal_ids = event.get('subcalendar_ids', [])
+                            if event_subcal_ids:
+                                subcal_id = event_subcal_ids[0]  # ใช้ subcalendar แรก
+                                subcal_name = subcal_name_map.get(subcal_id, f'Calendar {subcal_id}')
+                                event['subcalendar_display'] = subcal_name
+                                event['subcalendar_name'] = subcal_name
+                                event['subcalendar_id'] = subcal_id
+                            else:
+                                event['subcalendar_display'] = 'ไม่ระบุปฏิทิน'
+                                event['subcalendar_name'] = 'ไม่ระบุปฏิทิน'
+                        
+                        events_list.extend(calendar_events)
+                        
+                    else:
+                        self.manager.log_usage('error', 'get_events', calendar_id, {
+                            'status_code': response.status_code,
+                            'error': response.text
+                        })
+                        
+                except Exception as calendar_error:
+                    print(f"Error fetching events from calendar {calendar.calendar_id}: {calendar_error}")
+                    continue
+            
+            # ถ้าค้นหา event เฉพาะ ID
+            if event_id:
+                filtered_events = [event for event in events_list if event.get('id') == event_id]
+                return {'events': filtered_events}
+            
+            # เรียงลำดับ events ตามเวลา
+            events_list.sort(key=lambda x: x.get('start_dt', ''))
+            
+            print(f"Retrieved {len(events_list)} events from {len(self.calendars)} calendars")
+            
+            return {
+                'events': events_list,
+                'count': len(events_list)
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error in get_events: {str(e)}")
+            return {
+                'events': [],
+                'error': str(e)
+            }
     
     def create_recurring_appointments_simple(self, patient_data, selected_days, weeks):
         """

@@ -1,4 +1,4 @@
-// static/js/script.js
+// dialysis_scheduler/static/js/script.js
 
 // แปลงรูปแบบวันที่
 function formatDate(dateString) {

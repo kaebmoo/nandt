@@ -1,34 +1,45 @@
-// static/js/appointment-helper.js - Enhanced and Corrected
+// multi-tenant/static/js/appointment-helper.js - Fixed Version
 
 document.addEventListener('DOMContentLoaded', function() {
-    // โหลดข้อมูลเริ่มต้นเมื่อ DOM โหลดเสร็จ
-    // ตรวจสอบให้แน่ใจว่า app object (NudDeeSaaSApp instance) พร้อมใช้งานแล้ว
-    // app object ถูกสร้างและกำหนดให้ window.app ใน script.js
-    if (window.app) {
-        // เรียกใช้เมธอด loadAppointments จาก instance ของ NudDeeSaaSApp
-        window.app.loadAppointments();
-    } else {
-        console.warn('NudDeeSaaSApp (app) not yet initialized. Cannot load initial events from appointment-helper.js.');
-        // สามารถเพิ่ม fallback notification ได้หากต้องการ แต่ควรจัดการที่ script.js เป็นหลัก
-    }
+    // รอให้ NudDeeSaaSApp โหลดเสร็จก่อน
+    const initializeWhenReady = () => {
+        if (window.app && typeof window.app.loadAppointments === 'function') {
+            // โหลดข้อมูลเริ่มต้นเมื่อ DOM โหลดเสร็จ
+            window.app.loadAppointments();
+            
+            // ปรับแต่งฟังก์ชันดูรายละเอียดกิจกรรม
+            enhanceViewDetails();
+            
+            // Setup filter button
+            setupFilterButton();
+            
+            console.log('Appointment helper initialized successfully');
+        } else {
+            // รอ 100ms แล้วลองใหม่
+            setTimeout(initializeWhenReady, 100);
+        }
+    };
     
-    // ปรับแต่งฟังก์ชันดูรายละเอียดกิจกรรม
-    enhanceViewDetails();
+    initializeWhenReady();
 });
 
 /**
- * ปรับปรุงการทำงานของปุ่มดูรายละเอียดกิจกรรม (details-btn)
- * ให้เรียกใช้เมธอด showEventDetails ของ NudDeeSaaSApp
+ * ปรับปรุงการทำงานของปุ่มดูรายละเอียดกิจกรรม
  */
 function enhanceViewDetails() {
-    // หาทุก element ที่มีคลาส 'details-btn'
-    const detailsButtons = document.querySelectorAll('.details-btn');
-    
-    detailsButtons.forEach(button => {
-        button.addEventListener('click', async function(e) { // เพิ่ม async เนื่องจาก showEventDetails อาจเป็น async
-            e.preventDefault(); // ป้องกันการทำงานเริ่มต้นของลิงก์
+    // ใช้ event delegation เพื่อจัดการปุ่มที่ถูกสร้างใหม่ dynamically
+    document.addEventListener('click', function(event) {
+        // ตรวจสอบว่า element ที่ถูกคลิกเป็นปุ่มดูรายละเอียดหรือไม่
+        if (event.target.classList.contains('view-details') || 
+            event.target.closest('.view-details')) {
             
-            const eventId = this.getAttribute('data-event-id');
+            event.preventDefault();
+            
+            const button = event.target.classList.contains('view-details') ? 
+                          event.target : event.target.closest('.view-details');
+            
+            const eventId = button.getAttribute('data-event-id');
+            
             if (!eventId) {
                 console.warn('Missing data-event-id on details button.');
                 return;
@@ -36,28 +47,54 @@ function enhanceViewDetails() {
             
             // ตรวจสอบว่า app object และเมธอด showEventDetails พร้อมใช้งานหรือไม่
             if (window.app && typeof window.app.showEventDetails === 'function') {
-                try {
-                    // เรียกใช้เมธอด showEventDetails จาก instance ของ NudDeeSaaSApp
-                    await window.app.showEventDetails(eventId);
-                } catch (error) {
-                    console.error('Error calling app.showEventDetails:', error);
-                    // ใช้ Notification System ของแอปพลิเคชันแทน alert()
+                window.app.showEventDetails(eventId).catch(error => {
+                    console.error('Error showing event details:', error);
                     if (window.app && typeof window.app.showNotification === 'function') {
                         window.app.showNotification('เกิดข้อผิดพลาดในการแสดงรายละเอียดกิจกรรม', 'error');
                     } else {
-                        // Fallback alert หาก Notification System ยังไม่พร้อม
                         alert('เกิดข้อผิดพลาดในการแสดงรายละเอียดกิจกรรม');
                     }
-                }
+                });
             } else {
-                console.error('NudDeeSaaSApp (app) or showEventDetails method not found. Cannot display event details.');
-                // ใช้ Notification System ของแอปพลิเคชันแทน alert()
+                console.error('NudDeeSaaSApp (app) or showEventDetails method not found.');
                 if (window.app && typeof window.app.showNotification === 'function') {
                     window.app.showNotification('ระบบแสดงรายละเอียดกิจกรรมยังไม่พร้อมใช้งาน', 'error');
                 } else {
                     alert('ระบบแสดงรายละเอียดกิจกรรมยังไม่พร้อมใช้งาน');
                 }
             }
-        });
+        }
     });
 }
+
+/**
+ * Setup filter button functionality
+ */
+function setupFilterButton() {
+    const filterBtn = document.getElementById('filter-btn');
+    if (filterBtn) {
+        filterBtn.addEventListener('click', function() {
+            if (window.app && typeof window.app.loadAppointments === 'function') {
+                window.app.loadAppointments();
+            }
+        });
+    }
+}
+
+// เพิ่มฟังก์ชัน global สำหรับ backward compatibility กับ script เดิม
+window.loadAppointments = function() {
+    if (window.app && typeof window.app.loadAppointments === 'function') {
+        window.app.loadAppointments();
+    } else {
+        console.warn('NudDeeSaaSApp not available for loadAppointments');
+    }
+};
+
+window.showEventDetails = function(eventId) {
+    if (window.app && typeof window.app.showEventDetails === 'function') {
+        return window.app.showEventDetails(eventId);
+    } else {
+        console.warn('NudDeeSaaSApp not available for showEventDetails');
+        return Promise.reject(new Error('NudDeeSaaSApp not available'));
+    }
+};

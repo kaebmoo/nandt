@@ -1,4 +1,4 @@
-// static/js/script.js - Complete Version with All Missing Methods
+// multi-tenant/static/js/script.js - Complete Version with All Missing Methods
 
 class NudDeeSaaSApp {
     constructor() {
@@ -965,6 +965,409 @@ class NudDeeSaaSApp {
         }
     }
     
+    // === Event and Appointment Management Methods ===
+
+    /**
+     * โหลดรายการนัดหมาย (สำหรับหน้ารายการนัดหมาย)
+     */
+    async loadAppointments() {
+        const container = document.getElementById('appointments-container');
+        if (!container) {
+            this.log('debug', 'appointments-container not found');
+            return;
+        }
+        
+        const subcalendarId = document.getElementById('subcalendar-filter') ? document.getElementById('subcalendar-filter').value : '';
+        const startDate = document.getElementById('date-from') ? document.getElementById('date-from').value : '';
+        const endDate = document.getElementById('date-to') ? document.getElementById('date-to').value : '';
+        
+        container.innerHTML = `
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">กำลังโหลด...</span>
+                </div>
+                <p class="mt-2">กำลังโหลดรายการนัดหมาย...</p>
+            </div>
+        `;
+        
+        try {
+            // สร้าง URL พร้อมพารามิเตอร์
+            let url = '/get_events';
+            const params = new URLSearchParams();
+            
+            if (subcalendarId) params.append('subcalendar_id', subcalendarId);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            this.log('debug', 'Loading appointments from:', url);
+            
+            const data = await this.httpRequest(url);
+            
+            container.innerHTML = '';
+            
+            if (!data.events || data.events.length === 0) {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>ไม่พบรายการนัดหมายในช่วงเวลาที่เลือก
+                    </div>
+                `;
+                return;
+            }
+            
+            // เก็บข้อมูล events ไว้ใน state สำหรับใช้งานภายหลัง
+            this.state.currentEvents = data.events;
+            
+            // จัดกลุ่มตามวันที่
+            const eventsByDate = {};
+            data.events.forEach(event => {
+                const startDate = event.start_dt.split('T')[0];
+                if (!eventsByDate[startDate]) {
+                    eventsByDate[startDate] = [];
+                }
+                eventsByDate[startDate].push(event);
+            });
+            
+            // แสดงผลแยกตามวันที่
+            Object.keys(eventsByDate).sort().forEach(date => {
+                const dateObj = new Date(date);
+                const formattedDate = this.formatDate(date);
+                
+                container.innerHTML += `
+                    <h4 class="mt-4 mb-3">
+                        <i class="far fa-calendar-alt me-2"></i>${formattedDate}
+                    </h4>
+                    <div class="mb-2">
+                        <span class="badge bg-primary">${eventsByDate[date].length} รายการ</span>
+                    </div>
+                `;
+                
+                eventsByDate[date].forEach(event => {
+                    container.appendChild(this.createEventCard(event));
+                });
+            });
+            
+            // ผูกเหตุการณ์ใหม่สำหรับปุ่มดูรายละเอียดที่เพิ่งสร้าง
+            this.setupEventHandlers();
+            
+            this.log('info', `Loaded ${data.events.length} appointments`);
+            
+        } catch (error) {
+            this.log('error', 'Error loading appointments:', error);
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>เกิดข้อผิดพลาดในการโหลดรายการนัดหมาย: ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * แสดงรายละเอียดนัดหมายใน modal
+     */
+    async showEventDetails(eventId) {
+        this.log('debug', "แสดงรายละเอียดสำหรับ event_id:", eventId);
+        
+        try {
+            // แสดง loading spinner
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'กำลังโหลด...',
+                    text: 'กำลังโหลดข้อมูลนัดหมาย',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+            }
+            
+            // ดึงข้อมูลโดยตรงจาก API สำหรับกิจกรรมนี้เท่านั้น
+            const data = await this.httpRequest(`/get_events?event_id=${eventId}`);
+            
+            // **เพิ่ม debug log เพื่อดูข้อมูลที่ได้**
+            console.log('Event data received:', data);
+            if (data.events && data.events.length > 0) {
+                console.log('Event object:', data.events[0]);
+                console.log('Available subcalendar fields:', Object.keys(data.events[0]).filter(key => key.includes('subcal') || key.includes('calendar')));
+            }
+            
+            if (typeof Swal !== 'undefined') {
+                Swal.close(); // ปิด loading spinner
+            }
+            
+            if (!data.events || data.events.length === 0) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'ไม่พบข้อมูล',
+                        text: 'ไม่พบข้อมูลนัดหมายสำหรับ ID นี้'
+                    });
+                } else {
+                    this.showNotification('ไม่พบข้อมูลนัดหมายสำหรับ ID นี้', 'warning');
+                }
+                return;
+            }
+            
+            // ดึงข้อมูลนัดหมายจาก API response
+            const event = data.events[0]; // ควรมีเพียงกิจกรรมเดียว
+            
+            // **ปรับปรุงการหาชื่อปฏิทิน - ลองหลายๆ field**
+            let subcalendarDisplay = 'ไม่ระบุปฏิทิน';
+            
+            // ลองหา field ต่างๆ ที่อาจมีชื่อปฏิทิน
+            if (event.subcalendar_display) {
+                subcalendarDisplay = event.subcalendar_display;
+            } else if (event.subcalendar_name) {
+                subcalendarDisplay = event.subcalendar_name;
+            } else if (event.calendar_name) {
+                subcalendarDisplay = event.calendar_name;
+            } else if (event.subcalendar_id) {
+                // ถ้ามีแค่ ID ให้ใช้ ID แทน
+                subcalendarDisplay = `Calendar ${event.subcalendar_id}`;
+            } else if (event.subcalendar_ids && event.subcalendar_ids.length > 0) {
+                // ถ้ามี subcalendar_ids array
+                subcalendarDisplay = `Calendar ${event.subcalendar_ids[0]}`;
+            }
+            
+            console.log('Final subcalendar display name:', subcalendarDisplay);
+            
+            // **ปรับปรุงการแสดงผล notes - แปลง HTML เป็นข้อความธรรมดา**
+            let notesDisplay = '';
+            if (event.notes) {
+                // สร้าง temporary div element เพื่อแปลง HTML เป็นข้อความ
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = event.notes;
+                notesDisplay = tempDiv.textContent || tempDiv.innerText || '';
+                
+                // ถ้าข้อความว่างเปล่า ให้ใช้ HTML เดิม
+                if (!notesDisplay.trim()) {
+                    notesDisplay = event.notes;
+                }
+            }
+            
+            // สร้าง modal แสดงรายละเอียด
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'รายละเอียดนัดหมาย',
+                    html: `
+                        <div class="text-start">
+                            <h5>${this.escapeHtml(event.title)}</h5>
+                            <div class="mb-3">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-calendar me-1"></i>${this.escapeHtml(subcalendarDisplay)}
+                                </span>
+                            </div>
+                            <p><strong>วันที่:</strong> ${this.formatDate(event.start_dt.split('T')[0])}</p>
+                            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                            <p><strong>สถานที่:</strong> ${this.escapeHtml(event.location || 'ไม่ระบุ')}</p>
+                            <p><strong>ผู้ดูแล:</strong> ${this.escapeHtml(event.who || 'ไม่ระบุ')}</p>
+                            ${notesDisplay ? `
+                            <div class="mt-3">
+                                <h6>บันทึกเพิ่มเติม:</h6>
+                                <div class="border p-2 rounded bg-light">
+                                    <span style="white-space: pre-wrap;">${this.escapeHtml(notesDisplay)}</span>
+                                </div>
+                            </div>
+                            ` : ''}
+                            <div class="mt-3">
+                                <h6>Event ID:</h6>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" value="${this.escapeHtml(event.id)}" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    width: '600px',
+                    showCloseButton: true,
+                    showCancelButton: true,
+                    focusConfirm: false,
+                    confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
+                    cancelButtonText: 'ปิด'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // กดปุ่มอัปเดตสถานะ
+                        window.location.href = `/update_status?event_id=${event.id}`;
+                    }
+                });
+            } else {
+                // Fallback สำหรับกรณีที่ไม่มี SweetAlert2
+                const details = `
+                    ${event.title}
+                    ปฏิทิน: ${subcalendarDisplay}
+                    วันที่: ${this.formatDate(event.start_dt.split('T')[0])}
+                    เวลา: ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}
+                    สถานที่: ${event.location || 'ไม่ระบุ'}
+                    ผู้ดูแล: ${event.who || 'ไม่ระบุ'}
+                    Event ID: ${event.id}
+                    ${notesDisplay ? `\nบันทึก: ${notesDisplay}` : ''}
+                `;
+                
+                if (confirm(details + '\n\nต้องการอัปเดตสถานะหรือไม่?')) {
+                    window.location.href = `/update_status?event_id=${event.id}`;
+                }
+            }
+            
+        } catch (error) {
+            this.log('error', 'Error fetching event details:', error);
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message
+                });
+            } else {
+                this.showNotification('ไม่สามารถโหลดข้อมูลนัดหมายได้: ' + error.message, 'error');
+            }
+        }
+    }
+
+    /**
+     * สร้าง event card element
+     */
+    createEventCard(event) {
+        const card = document.createElement('div');
+        
+        let statusClass = '';
+        if (event.title.includes('(มาตามนัด)')) {
+            statusClass = 'status-completed';
+        } else if (event.title.includes('(ยกเลิก)')) {
+            statusClass = 'status-cancelled';
+        } else if (event.title.includes('(ไม่มา)')) {
+            statusClass = 'status-missed';
+        }
+        
+        const startTime = event.start_dt.split('T')[1].substring(0, 5);
+        const endTime = event.end_dt.split('T')[1].substring(0, 5);
+        
+        // **ปรับปรุงการหาชื่อปฏิทิน - เหมือนกับ showEventDetails**
+        let subcalendarDisplay = 'ไม่ระบุปฏิทิน';
+        
+        if (event.subcalendar_display) {
+            subcalendarDisplay = event.subcalendar_display;
+        } else if (event.subcalendar_name) {
+            subcalendarDisplay = event.subcalendar_name;
+        } else if (event.calendar_name) {
+            subcalendarDisplay = event.calendar_name;
+        } else if (event.subcalendar_id) {
+            subcalendarDisplay = `Calendar ${event.subcalendar_id}`;
+        } else if (event.subcalendar_ids && event.subcalendar_ids.length > 0) {
+            subcalendarDisplay = `Calendar ${event.subcalendar_ids[0]}`;
+        }
+        
+        card.className = `card appointment-card ${statusClass}`;
+        card.dataset.eventId = event.id;
+        card.innerHTML = `
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="flex-grow-1">
+                        <h5 class="card-title mb-1">${this.escapeHtml(event.title)}</h5>
+                        <div class="mb-2">
+                            <span class="badge bg-secondary me-2">
+                                <i class="fas fa-calendar me-1"></i>${this.escapeHtml(subcalendarDisplay)}
+                            </span>
+                            <span class="badge bg-primary">
+                                <i class="fas fa-clock me-1"></i>${startTime} - ${endTime}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="card-text mb-1">
+                            <i class="fas fa-map-marker-alt me-2 text-muted"></i>
+                            <small>${this.escapeHtml(event.location || 'ไม่ระบุตำแหน่ง')}</small>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="card-text mb-1">
+                            <i class="fas fa-user-md me-2 text-muted"></i>
+                            <small>${this.escapeHtml(event.who || 'ไม่ระบุผู้ดูแล')}</small>
+                        </p>
+                    </div>
+                </div>
+                <div class="text-end mt-2">
+                    <a href="/update_status?event_id=${event.id}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit me-1"></i>อัปเดตสถานะ
+                    </a>
+                    <button class="btn btn-sm btn-outline-secondary view-details" data-event-id="${event.id}">
+                        <i class="fas fa-info-circle me-1"></i>รายละเอียด
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return card;
+    }
+
+    /**
+     * ตั้งค่า event handlers สำหรับปุ่มต่างๆ ในหน้ารายการนัดหมาย
+     */
+    setupEventHandlers() {
+        // จัดการการคลิกที่ปุ่มดูรายละเอียด
+        document.querySelectorAll('.view-details').forEach(button => {
+            // ลบ event listener เก่าก่อน (ถ้ามี)
+            button.removeEventListener('click', this.handleViewDetailsClick);
+            
+            // เพิ่ม event listener ใหม่
+            button.addEventListener('click', this.handleViewDetailsClick.bind(this));
+        });
+        
+        // จัดการการคลิกที่ปุ่มอัปเดตสถานะ
+        document.querySelectorAll('.update-status').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const eventId = this.getAttribute('data-event-id');
+                window.location.href = `/update_status?event_id=${eventId}`;
+            });
+        });
+    }
+
+    /**
+     * Handler สำหรับปุ่มดูรายละเอียด
+     */
+    handleViewDetailsClick(event) {
+        event.preventDefault();
+        const eventId = event.currentTarget.getAttribute('data-event-id');
+        if (eventId) {
+            this.showEventDetails(eventId);
+        }
+    }
+
+    /**
+     * แปลงรูปแบบวันที่เป็นภาษาไทย
+     */
+    formatDate(dateString) {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('th-TH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'long'
+            });
+        } catch (error) {
+            this.log('warn', 'Error formatting date:', error);
+            return dateString;
+        }
+    }
+
+    /**
+     * รีเฟรช events (สำหรับเรียกใช้หลังจากสร้างนัดหมายใหม่)
+     */
+    refreshEvents() {
+        this.loadAppointments();
+    }
+
+    /**
+     * รีเฟรช calendar (สำหรับ compatibility)
+     */
+    refreshCalendar() {
+        this.loadAppointments();
+    }
+
     // === Cleanup ===
     destroy() {
         if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
