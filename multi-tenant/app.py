@@ -670,24 +670,41 @@ def update_status():
     return render_template('update_status.html', event_data=event_data)
 
 @app.route('/subcalendars')
-@login_required
+@login_required  
 def subcalendars():
     """หน้าแสดงรายการปฏิทินย่อย"""
     if not current_user.organization:
         app.logger.error(f"Error: Authenticated user {current_user.get_id()} has no associated organization trying to access subcalendars.")
         flash('ข้อมูลองค์กรไม่สมบูรณ์ กรุณาติดต่อผู้ดูแลระบบ', 'danger')
-        return redirect(url_for('index')) # Use 'index' as it's directly on app
+        return redirect(url_for('index'))
     try:
         teamup_api = get_teamup_api(
             organization_id=current_user.user.organization_id,
             user_id=current_user.user.id
         )
         
-        subcals = teamup_api.get_subcalendars()
-        return render_template('subcalendars.html', subcalendars=subcals.get('subcalendars', []))
+        subcals_data = teamup_api.get_subcalendars()
+        subcals_list = subcals_data.get('subcalendars', [])
+        
+        # **เพิ่ม Debug ที่ละเอียดขึ้น**
+        print(f"DEBUG: subcals_data type: {type(subcals_data)}")
+        print(f"DEBUG: subcals_data content: {subcals_data}")
+        print(f"DEBUG: subcals_list type: {type(subcals_list)}")
+        print(f"DEBUG: subcals_list length: {len(subcals_list)}")
+        
+        if subcals_list:
+            print(f"DEBUG: First item type: {type(subcals_list[0])}")
+            print(f"DEBUG: First item content: {subcals_list[0]}")
+            if hasattr(subcals_list[0], '__dict__'):
+                print(f"DEBUG: First item __dict__: {subcals_list[0].__dict__}")
+        
+        return render_template('subcalendars.html', subcalendars=subcals_list)
         
     except Exception as e:
         app.logger.error(f'Error fetching subcalendars: {str(e)}', exc_info=True)
+        print(f"DEBUG: Exception in subcalendars route: {e}")
+        import traceback
+        traceback.print_exc()
         flash(f'เกิดข้อผิดพลาดในการดึงข้อมูลปฏิทินย่อย: {e}', 'danger')
         return render_template('subcalendars.html', subcalendars=[])
 

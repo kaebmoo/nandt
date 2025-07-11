@@ -851,38 +851,101 @@ class HybridTeamUpAPI:
             ).all()
         return self._subcalendars
     
+    # method get_subcalendars ของ class HybridTeamUpAPI
     def get_subcalendars(self):
-        """ดึงรายการ subcalendars ทั้งหมดของ organization (จาก DB)"""
+        """ดึงรายการ subcalendars ทั้งหมดของ organization (จาก TeamUp API + DB)"""
         subcal_list = []
         
-        # NOTE: This method currently retrieves subcalendars from YOUR DATABASE, not directly from TeamUp API.
-        # If you need real-time data, you'd need to fetch from TeamUp API, but for listing, DB is faster.
-        # If fetching from TeamUp for listing, ensure calendar_id (ks-key) is used.
-        # Example if fetching from TeamUp:
-        # headers_with_auth = self.manager._get_headers_with_auth()
-        # for calendar in self.calendars: # Iterate through each master calendar
-        #     response = requests.get(
-        #         f"{self.manager.base_url}/{calendar.calendar_id}/subcalendars",
-        #         headers=headers_with_auth, timeout=10
-        #     )
-        #     if response.status_code == 200:
-        #         for subcal_info in response.json().get('subcalendars', []):
-        #             subcal_list.append({
-        #                 'id': subcal_info['id'],
-        #                 'name': subcal_info['name'],
-        #                 'calendar_id': calendar.calendar_id, # The ks-key of the master calendar
-        #                 'is_active': subcal_info.get('active', True)
-        #             })
-        #     else:
-        #         print(f"Warning: Failed to get subcalendars from TeamUp for {calendar.calendar_id}: {response.text}")
+        try:
+            headers_with_auth = self.manager._get_headers_with_auth()
+            
+            # ดึงข้อมูลจากทุก Master Calendar ขององค์กร
+            for calendar in self.calendars:
+                try:
+                    print(f"Fetching subcalendars from calendar: {calendar.calendar_id}")
+                    
+                    response = requests.get(
+                        f"{self.manager.base_url}/{calendar.calendar_id}/subcalendars",
+                        headers=headers_with_auth,
+                        timeout=10
+                    )
+                    
+                    if response.status_code == 200:
+                        teamup_data = response.json()
+                        
+                        for subcal_info in teamup_data.get('subcalendars', []):
+                            # รวมข้อมูลจาก TeamUp API + Database
+                            enhanced_subcal = {
+                                'id': subcal_info['id'],
+                                'name': subcal_info['name'],
+                                'calendar_id': calendar.calendar_id,
+                                'is_active': subcal_info.get('active', True),
+                                
+                                # ข้อมูลเพิ่มเติมจาก TeamUp API
+                                'color': subcal_info.get('color', 5),
+                                'readonly': subcal_info.get('readonly', False),
+                                'creation_dt': subcal_info.get('creation_dt', ''),
+                                'overlap': subcal_info.get('overlap', True),
+                                
+                                # ข้อมูลจาก database
+                                'calendar_name': calendar.calendar_name,
+                                'is_primary': calendar.is_primary,
+                                
+                                # ข้อมูลสำหรับ template
+                                'active': subcal_info.get('active', True),  # alias สำหรับ is_active
+                            }
+                            
+                            subcal_list.append(enhanced_subcal)
+                            
+                    else:
+                        print(f"Warning: Failed to get subcalendars from TeamUp for {calendar.calendar_id}: {response.status_code} - {response.text}")
+                        
+                        # Fallback: ใช้ข้อมูลจาก database
+                        db_subcals = self.subcalendars
+                        for subcal_obj in db_subcals:
+                            if subcal_obj.calendar_id == calendar.calendar_id:
+                                fallback_subcal = {
+                                    'id': subcal_obj.subcalendar_id,
+                                    'name': subcal_obj.subcalendar_name,
+                                    'calendar_id': subcal_obj.calendar_id,
+                                    'is_active': subcal_obj.is_active,
+                                    'color': 5,  # default color
+                                    'readonly': False,  # default
+                                    'creation_dt': '',
+                                    'overlap': True,
+                                    'calendar_name': calendar.calendar_name,
+                                    'is_primary': calendar.is_primary,
+                                    'active': subcal_obj.is_active,
+                                }
+                                subcal_list.append(fallback_subcal)
+                                
+                except Exception as e:
+                    print(f"Error fetching subcalendars from calendar {calendar.calendar_id}: {str(e)}")
+                    continue
         
-        for subcal_obj in self.subcalendars:
-            subcal_list.append({
-                'id': subcal_obj.subcalendar_id,
-                'name': subcal_obj.subcalendar_name,
-                'calendar_id': subcal_obj.calendar_id, # This is the stored ks-key
-                'is_active': subcal_obj.is_active
-            })
+        except Exception as e:
+            print(f"Error in get_subcalendars: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            # Ultimate fallback: ข้อมูลจาก database เท่านั้น
+            for subcal_obj in self.subcalendars:
+                fallback_subcal = {
+                    'id': subcal_obj.subcalendar_id,
+                    'name': subcal_obj.subcalendar_name,
+                    'calendar_id': subcal_obj.calendar_id,
+                    'is_active': subcal_obj.is_active,
+                    'color': 5,
+                    'readonly': False,
+                    'creation_dt': '',
+                    'overlap': True,
+                    'active': subcal_obj.is_active,
+                }
+                subcal_list.append(fallback_subcal)
+        
+        print(f"Final subcalendars list: {len(subcal_list)} items")
+        if subcal_list:
+            print(f"Sample subcalendar: {subcal_list[0]}")
         
         return {'subcalendars': subcal_list}
     
