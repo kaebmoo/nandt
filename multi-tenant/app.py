@@ -360,6 +360,8 @@ def appointments():
         flash('เกิดข้อผิดพลาดในการโหลดหน้านัดหมาย กรุณาลองใหม่อีกครั้ง', 'danger')
         return redirect(url_for('index'))
 
+# แก้ไขฟังก์ชัน get_events ใน app.py (บรรทัดประมาณ 395-480)
+
 @app.route('/get_events')
 @login_required
 def get_events():
@@ -376,8 +378,10 @@ def get_events():
         
         start_date_str = request.args.get('start_date', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
         end_date_str = request.args.get('end_date', (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
-        subcalendar_id_param = request.args.get('subcalendar_id', '') # Renamed to avoid confusion with filter list
+        subcalendar_id_param = request.args.get('subcalendar_id', '')
         event_id = request.args.get('event_id', '')
+        
+        app.logger.info(f"get_events called with params: start_date={start_date_str}, end_date={end_date_str}, subcalendar_id={subcalendar_id_param}, event_id={event_id}")
         
         try:
             start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
@@ -390,6 +394,7 @@ def get_events():
             app.logger.warning(f'Invalid date format in get_events: {start_date_str}, {end_date_str} - {str(e)}')
             return jsonify({'error': 'Invalid date format', 'events': []}), 400
             
+        # จัดการกรณีที่ต้องการ event เฉพาะ
         if event_id:
             events = teamup_api.get_events(event_id=event_id, start_date=start_dt, end_date=end_dt)
             
@@ -398,32 +403,68 @@ def get_events():
                 target_event = events['events'][0]
             
             if target_event:
+                app.logger.info(f"Found specific event {event_id}: {target_event.get('title', 'No title')}")
                 return jsonify({'events': [target_event]})
             else:
+                app.logger.warning(f"Event {event_id} not found")
                 return jsonify({'error': 'Event not found', 'events': []}), 404
                 
-        # **แก้ไขตรงนี้: ปรับ subcalendar_filter ให้เป็น list เสมอ**
-        subcalendar_filter = [] 
-        if subcalendar_id_param: # ใช้ชื่อตัวแปรใหม่
+        # **แก้ไขสำคัญ: จัดการ subcalendar_filter อย่างเหมาะสม**
+        subcalendar_filter = None  # เริ่มต้นด้วย None
+        
+        if subcalendar_id_param and subcalendar_id_param.strip():
             try:
-                subcalendar_filter.append(int(subcalendar_id_param)) 
+                # แปลงเป็น integer และใส่ใน list
+                subcalendar_filter = [int(subcalendar_id_param.strip())]
+                app.logger.info(f"Using subcalendar filter: {subcalendar_filter}")
             except ValueError:
                 app.logger.warning(f'Invalid subcalendar_id format: {subcalendar_id_param}. Ignoring filter.')
+                subcalendar_filter = None
         
         try:
+            # เรียก TeamUp API พร้อมพารามิเตอร์ที่ถูกต้อง
             events = teamup_api.get_events(
                 start_date=start_dt,
                 end_date=end_dt,
-                subcalendar_id=subcalendar_filter if subcalendar_filter else None # Pass None if empty list, Teamup API might prefer it
+                subcalendar_id=subcalendar_filter  # ส่งเป็น list หรือ None
             )
             
+            # ตรวจสอบและปรับปรุงข้อมูล events ก่อนส่งกลับ
+            if events.get('events'):
+                for event in events['events']:
+                    # ตรวจสอบว่ามี id หรือไม่
+                    if 'id' not in event or not event['id']:
+                        app.logger.warning(f"Event missing ID: {event}")
+                        continue
+                    
+                    # เพิ่มข้อมูลเสริมสำหรับการแสดงผล
+                    if not event.get('location'):
+                        event['location'] = ''
+                    if not event.get('who'):
+                        event['who'] = ''
+                    if not event.get('notes'):
+                        event['notes'] = ''
+                    
+                    # แก้ไขการแสดงชื่อปฏิทินย่อย
+                    if not event.get('subcalendar_display') and not event.get('subcalendar_name'):
+                        if event.get('subcalendar_id'):
+                            event['subcalendar_display'] = f"ปฏิทิน {event['subcalendar_id']}"
+                        elif event.get('subcalendar_ids') and len(event['subcalendar_ids']) > 0:
+                            event['subcalendar_display'] = f"ปฏิทิน {event['subcalendar_ids'][0]}"
+                        else:
+                            event['subcalendar_display'] = 'ไม่ระบุปฏิทิน'
+            
             event_count = len(events.get('events', []))
-            app.logger.info(f'Events fetched: {event_count} events - User: {current_user.user.id}')
+            app.logger.info(f'Events fetched successfully: {event_count} events - User: {current_user.user.id} - Filter: {subcalendar_filter}')
+            
+            # Log สำหรับ debug เมื่อมีปัญหา
+            if subcalendar_filter and event_count == 0:
+                app.logger.warning(f'No events found for subcalendar filter {subcalendar_filter}. Check if subcalendar exists.')
             
             return jsonify(events)
             
         except Exception as e:
-            app.logger.error(f'Error fetching events: {str(e)}', exc_info=True)
+            app.logger.error(f'Error fetching events from TeamUp API: {str(e)}', exc_info=True)
             raise TeamUpAPIError(f'Failed to fetch events: {str(e)}')
             
     except TeamUpAPIError as e:

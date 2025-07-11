@@ -1079,6 +1079,7 @@ class NudDeeSaaSApp {
     /**
      * แสดงรายละเอียดนัดหมายใน modal
      */
+
     async showEventDetails(eventId) {
         this.log('debug', "แสดงรายละเอียดสำหรับ event_id:", eventId);
         
@@ -1098,11 +1099,14 @@ class NudDeeSaaSApp {
             // ดึงข้อมูลโดยตรงจาก API สำหรับกิจกรรมนี้เท่านั้น
             const data = await this.httpRequest(`/get_events?event_id=${eventId}`);
             
-            // **เพิ่ม debug log เพื่อดูข้อมูลที่ได้**
+            // Debug logs
             console.log('Event data received:', data);
             if (data.events && data.events.length > 0) {
                 console.log('Event object:', data.events[0]);
-                console.log('Available subcalendar fields:', Object.keys(data.events[0]).filter(key => key.includes('subcal') || key.includes('calendar')));
+                console.log('Event ID:', data.events[0].id);
+                console.log('Available subcalendar fields:', Object.keys(data.events[0]).filter(key => 
+                    key.includes('subcal') || key.includes('calendar')
+                ));
             }
             
             if (typeof Swal !== 'undefined') {
@@ -1123,12 +1127,11 @@ class NudDeeSaaSApp {
             }
             
             // ดึงข้อมูลนัดหมายจาก API response
-            const event = data.events[0]; // ควรมีเพียงกิจกรรมเดียว
+            const event = data.events[0];
             
             // **ปรับปรุงการหาชื่อปฏิทิน - ลองหลายๆ field**
             let subcalendarDisplay = 'ไม่ระบุปฏิทิน';
             
-            // ลองหา field ต่างๆ ที่อาจมีชื่อปฏิทิน
             if (event.subcalendar_display) {
                 subcalendarDisplay = event.subcalendar_display;
             } else if (event.subcalendar_name) {
@@ -1136,45 +1139,74 @@ class NudDeeSaaSApp {
             } else if (event.calendar_name) {
                 subcalendarDisplay = event.calendar_name;
             } else if (event.subcalendar_id) {
-                // ถ้ามีแค่ ID ให้ใช้ ID แทน
-                subcalendarDisplay = `Calendar ${event.subcalendar_id}`;
+                subcalendarDisplay = `ปฏิทิน ${event.subcalendar_id}`;
             } else if (event.subcalendar_ids && event.subcalendar_ids.length > 0) {
-                // ถ้ามี subcalendar_ids array
-                subcalendarDisplay = `Calendar ${event.subcalendar_ids[0]}`;
+                subcalendarDisplay = `ปฏิทิน ${event.subcalendar_ids[0]}`;
             }
             
             console.log('Final subcalendar display name:', subcalendarDisplay);
             
-            // **ปรับปรุงการแสดงผล notes - แปลง HTML เป็นข้อความธรรมดา**
+            // **ปรับปรุงการแสดงผล notes**
             let notesDisplay = '';
             if (event.notes) {
-                // สร้าง temporary div element เพื่อแปลง HTML เป็นข้อความ
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = event.notes;
                 notesDisplay = tempDiv.textContent || tempDiv.innerText || '';
                 
-                // ถ้าข้อความว่างเปล่า ให้ใช้ HTML เดิม
                 if (!notesDisplay.trim()) {
                     notesDisplay = event.notes;
                 }
             }
             
-            // สร้าง modal แสดงรายละเอียด
+            // ตรวจสอบว่ามี event.id หรือไม่
+            const appointmentId = event.id || 'ไม่ระบุ';
+            
+            // สร้าง modal แสดงรายละเอียด (เน้นการแสดงหมายเลขนัด)
             if (typeof Swal !== 'undefined') {
                 Swal.fire({
                     title: 'รายละเอียดนัดหมาย',
                     html: `
                         <div class="text-start">
                             <h5>${this.escapeHtml(event.title)}</h5>
+                            
+                            <!-- แสดงหมายเลขนัดอย่างเด่นชัด -->
+                            <div class="alert alert-info d-flex align-items-center mb-3">
+                                <i class="fas fa-id-card me-2"></i>
+                                <div class="flex-grow-1">
+                                    <strong>หมายเลขนัด:</strong> 
+                                    <span class="text-primary fw-bold">${this.escapeHtml(appointmentId)}</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        onclick="copyToClipboard('${this.escapeHtml(appointmentId)}')" 
+                                        title="คัดลอกหมายเลขนัด">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            
                             <div class="mb-3">
                                 <span class="badge bg-secondary">
                                     <i class="fas fa-calendar me-1"></i>${this.escapeHtml(subcalendarDisplay)}
                                 </span>
                             </div>
-                            <p><strong>วันที่:</strong> ${this.formatDate(event.start_dt.split('T')[0])}</p>
-                            <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
-                            <p><strong>สถานที่:</strong> ${this.escapeHtml(event.location || 'ไม่ระบุ')}</p>
-                            <p><strong>ผู้ดูแล:</strong> ${this.escapeHtml(event.who || 'ไม่ระบุ')}</p>
+                            
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <p><strong>วันที่:</strong> ${this.formatDate(event.start_dt.split('T')[0])}</p>
+                                </div>
+                                <div class="col-6">
+                                    <p><strong>เวลา:</strong> ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <p><strong>สถานที่:</strong> ${this.escapeHtml(event.location || 'ไม่ระบุ')}</p>
+                                </div>
+                                <div class="col-6">
+                                    <p><strong>ผู้ดูแล:</strong> ${this.escapeHtml(event.who || 'ไม่ระบุ')}</p>
+                                </div>
+                            </div>
+                            
                             ${notesDisplay ? `
                             <div class="mt-3">
                                 <h6>บันทึกเพิ่มเติม:</h6>
@@ -1183,11 +1215,19 @@ class NudDeeSaaSApp {
                                 </div>
                             </div>
                             ` : ''}
+                            
+                            <!-- ข้อมูลเทคนิค -->
                             <div class="mt-3">
-                                <h6>Event ID:</h6>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" value="${this.escapeHtml(event.id)}" readonly>
-                                </div>
+                                <details class="border rounded p-2">
+                                    <summary class="text-muted small" style="cursor: pointer;">ข้อมูลเทคนิค</summary>
+                                    <div class="mt-2 small text-muted">
+                                        <div><strong>Event ID:</strong> ${this.escapeHtml(appointmentId)}</div>
+                                        <div><strong>Start DateTime:</strong> ${event.start_dt}</div>
+                                        <div><strong>End DateTime:</strong> ${event.end_dt}</div>
+                                        ${event.subcalendar_id ? `<div><strong>Subcalendar ID:</strong> ${event.subcalendar_id}</div>` : ''}
+                                        ${event.subcalendar_ids ? `<div><strong>Subcalendar IDs:</strong> ${JSON.stringify(event.subcalendar_ids)}</div>` : ''}
+                                    </div>
+                                </details>
                             </div>
                         </div>
                     `,
@@ -1200,24 +1240,24 @@ class NudDeeSaaSApp {
                 }).then((result) => {
                     if (result.isConfirmed) {
                         // กดปุ่มอัปเดตสถานะ
-                        window.location.href = `/update_status?event_id=${event.id}`;
+                        window.location.href = `/update_status?event_id=${appointmentId}`;
                     }
                 });
             } else {
                 // Fallback สำหรับกรณีที่ไม่มี SweetAlert2
                 const details = `
-                    ${event.title}
-                    ปฏิทิน: ${subcalendarDisplay}
-                    วันที่: ${this.formatDate(event.start_dt.split('T')[0])}
-                    เวลา: ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}
-                    สถานที่: ${event.location || 'ไม่ระบุ'}
-                    ผู้ดูแล: ${event.who || 'ไม่ระบุ'}
-                    Event ID: ${event.id}
-                    ${notesDisplay ? `\nบันทึก: ${notesDisplay}` : ''}
+    ${event.title}
+    หมายเลขนัด: ${appointmentId}
+    ปฏิทิน: ${subcalendarDisplay}
+    วันที่: ${this.formatDate(event.start_dt.split('T')[0])}
+    เวลา: ${event.start_dt.split('T')[1].substring(0, 5)} - ${event.end_dt.split('T')[1].substring(0, 5)}
+    สถานที่: ${event.location || 'ไม่ระบุ'}
+    ผู้ดูแล: ${event.who || 'ไม่ระบุ'}
+    ${notesDisplay ? `\nบันทึก: ${notesDisplay}` : ''}
                 `;
                 
                 if (confirm(details + '\n\nต้องการอัปเดตสถานะหรือไม่?')) {
-                    window.location.href = `/update_status?event_id=${event.id}`;
+                    window.location.href = `/update_status?event_id=${appointmentId}`;
                 }
             }
             
@@ -1281,6 +1321,9 @@ class NudDeeSaaSApp {
                             </span>
                             <span class="badge bg-primary">
                                 <i class="fas fa-clock me-1"></i>${startTime} - ${endTime}
+                            </span>
+                            <span class="badge bg-info ms-2">
+                                <i class="fas fa-hashtag me-1"></i>หมายเลขนัด: ${event.id}
                             </span>
                         </div>
                     </div>

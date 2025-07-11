@@ -48,7 +48,7 @@
                             </p>
                             <p class="mb-2">
                                 <i class="fas fa-hashtag me-2 text-primary"></i>
-                                <strong>Event ID:</strong> 
+                                <strong>หมายเลขนัด:</strong> 
                                 <code class="bg-light px-2 py-1 rounded">{{ event_data.id }}</code>
                             </p>
                         </div>
@@ -68,7 +68,7 @@
                     
                     <div class="mt-3">
                         <button type="button" class="btn btn-sm btn-outline-primary" id="copy-event-id-btn">
-                            <i class="fas fa-copy me-1"></i>คัดลอก Event ID
+                            <i class="fas fa-copy me-1"></i>คัดลอกหมายเลขนัด
                         </button>
                     </div>
                 </div>
@@ -78,16 +78,16 @@
                 <form method="POST">
                     <div class="mb-3">
                         <label for="event_id_form" class="form-label">
-                            <i class="fas fa-hashtag me-2"></i>Event ID:
+                            <i class="fas fa-hashtag me-2"></i>หมายเลขนัด:
                         </label>
                         <input type="text" 
                                class="form-control" 
                                id="event_id_form" 
                                name="event_id" 
                                value="{{ event_id }}"
-                               placeholder="กรุณากรอก Event ID ของนัดหมายที่ต้องการอัปเดต"
+                               placeholder="กรุณากรอกหมายเลขนัดที่ต้องการอัปเดต"
                                required>
-                        <div class="form-text">Event ID ที่ได้จากรายการนัดหมายหรือจาก TeamUp Calendar</div>
+                        <div class="form-text">หมายเลขนัดที่ได้จากรายการนัดหมายหรือข้างชื่อผู้ป่วย</div>
                     </div>
                     
                     <div class="mb-4">
@@ -145,10 +145,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (navigator.clipboard) {
                     navigator.clipboard.writeText(eventId).then(() => {
                         if (window.app && typeof window.app.showNotification === 'function') {
-                            window.app.showNotification('คัดลอก Event ID สำเร็จ!', 'success');
+                            window.app.showNotification('คัดลอกหมายเลขนัดสำเร็จ!', 'success');
                         } else {
                             // Fallback if app.js not loaded
-                            Toast.fire({ icon: 'success', title: 'คัดลอก Event ID สำเร็จ!' });
+                            Toast.fire({ icon: 'success', title: 'คัดลอกหมายเลขนัดสำเร็จ!' });
                         }
                     }).catch(err => {
                         console.error('Failed to copy text using clipboard API: ', err);
@@ -169,9 +169,9 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             document.execCommand('copy');
             if (window.app && typeof window.app.showNotification === 'function') {
-                window.app.showNotification('คัดลอก Event ID สำเร็จ! (วิธีเก่า)', 'success');
+                window.app.showNotification('คัดลอกหมายเลขนัดสำเร็จ! (วิธีเก่า)', 'success');
             } else {
-                Toast.fire({ icon: 'success', title: 'คัดลอก Event ID สำเร็จ! (วิธีเก่า)' });
+                Toast.fire({ icon: 'success', title: 'คัดลอกหมายเลขนัดสำเร็จ! (วิธีเก่า)' });
             }
         } catch (err) {
             console.error('Failed to copy text using document.execCommand: ', err);
