@@ -651,23 +651,25 @@ def update_status():
         
         if not post_event_id or not status:
             flash('ข้อมูลไม่ครบถ้วน', 'danger')
-            return render_template('update_status.html', event_data=event_data)
+            return render_template('update_status.html', event_data=event_data, event_id=event_id)
         
         try:
             # เรียกฟังก์ชันที่แก้ไขแล้วใน strategy ซึ่งจัดการความซับซ้อนทั้งหมด
             success, result = teamup_api.update_appointment_status(post_event_id, status)
             
             if success:
-                flash('อัปเดตสถานะสำเร็จ', 'success')
+                app.logger.info(f'Status updated successfully for event {post_event_id} to {status} by user {current_user.user.id}')
+                flash(f'อัปเดตสถานะเป็น "{status}" สำเร็จ', 'success')
                 return redirect(url_for('appointments'))
             else:
+                app.logger.warning(f'Failed to update status for event {post_event_id}: {result}')
                 flash(f'การอัปเดตสถานะล้มเหลว: {result}', 'danger')
                 
         except Exception as e:
             app.logger.error(f'Error updating appointment status: {str(e)}', exc_info=True)
             flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
 
-    return render_template('update_status.html', event_data=event_data)
+    return render_template('update_status.html', event_data=event_data, event_id=event_id)
 
 @app.route('/subcalendars')
 @login_required  

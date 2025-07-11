@@ -48,9 +48,9 @@ class AppointmentForm(FlaskForm):
         Length(max=100, message='สถานที่ต้องไม่เกิน 100 ตัวอักษร')
     ])
     
-    who = StringField('ผู้ดูแล', validators=[
+    who = StringField('เจ้าหน้าที่/ผู้ดูแล', validators=[
         Optional(),
-        Length(max=100, message='ชื่อผู้ดูแลต้องไม่เกิน 100 ตัวอักษร')
+        Length(max=100, message='ชื่อเจ้าหน้าที่ต้องไม่เกิน 100 ตัวอักษร')
     ])
     
     description = TextAreaField('รายละเอียด', validators=[

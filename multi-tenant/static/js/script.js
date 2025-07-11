@@ -349,7 +349,18 @@ class NudDeeSaaSApp {
 
             if (!form.dataset.initializedAsync) {
                 form.addEventListener('submit', (event) => {
-                    if (event.submitter && form.dataset.async !== 'false') {
+                    // **แก้ไข: เพิ่มการตรวจสอบหน้า update_status**
+                    const isUpdateStatusPage = window.location.pathname.includes('/update_status');
+                    const hasAsyncFalse = form.dataset.async === 'false';
+                    
+                    // หากเป็นหน้า update_status หรือมี data-async="false" ให้ใช้ normal form submission
+                    if (isUpdateStatusPage || hasAsyncFalse) {
+                        this.log('debug', 'Using normal form submission for:', form.action || window.location.pathname);
+                        return; // ให้ browser จัดการตามปกติ
+                    }
+                    
+                    // สำหรับหน้าอื่นๆ ใช้ async
+                    if (event.submitter) {
                         this.handleAsyncForm(event);
                     }
                 });
