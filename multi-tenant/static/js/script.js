@@ -1487,7 +1487,7 @@ class NudDeeSaaSApp {
             // สร้าง unique ID สำหรับปุ่ม copy
             const copyButtonId = `copy-btn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             
-            // สร้าง modal แสดงรายละเอียดแบบใหม่ (ไม่มีปุ่ม copy)
+            // สร้าง modal แสดงรายละเอียด - ลองวิธีที่ 2 (ปิด pointer events ชั่วคราว)
             if (typeof Swal !== 'undefined') {
                 const result = await Swal.fire({
                     title: 'รายละเอียดนัดหมาย',
@@ -1495,18 +1495,19 @@ class NudDeeSaaSApp {
                         <div class="text-start">
                             <h5>${this.escapeHtml(event.title)}</h5>
                             
-                            <!-- แสดงหมายเลขนัดโดยสามารถเลือกได้ -->
+                            <!-- แสดงหมายเลขนัดพร้อมปุ่ม copy -->
                             <div class="alert alert-info d-flex align-items-center mb-3">
                                 <i class="fas fa-id-card me-2"></i>
                                 <div class="flex-grow-1">
                                     <strong>หมายเลขนัด:</strong> 
-                                    <span class="text-primary fw-bold user-select-all" 
-                                          style="font-family: 'Courier New', monospace; cursor: text;"
-                                          title="คลิกเพื่อเลือกและคัดลอก">${this.escapeHtml(appointmentId)}</span>
+                                    <span class="text-primary fw-bold">${this.escapeHtml(appointmentId)}</span>
                                 </div>
-                                <small class="text-muted">
-                                    <i class="fas fa-mouse-pointer me-1"></i>คลิกเพื่อเลือก
-                                </small>
+                                <button type="button" class="btn btn-sm btn-outline-primary copy-appointment-btn" 
+                                        id="${copyButtonId}" 
+                                        data-appointment-id="${this.escapeHtml(appointmentId)}"
+                                        title="คัดลอกหมายเลขนัด">
+                                    <i class="fas fa-copy"></i>
+                                </button>
                             </div>
                             
                             <div class="mb-3">
@@ -1541,14 +1542,6 @@ class NudDeeSaaSApp {
                                 </div>
                             </div>
                             ` : ''}
-                            
-                            <!-- คำแนะนำวิธีคัดลอก -->
-                            <div class="mt-3 p-2 bg-light rounded">
-                                <small class="text-muted">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    <strong>วิธีคัดลอกหมายเลขนัด:</strong> คลิกที่หมายเลขข้างบน แล้วกด Ctrl+C (Windows) หรือ Cmd+C (Mac) เพื่อคัดลอก
-                                </small>
-                            </div>
                         </div>
                     `,
                     width: '600px',
@@ -1557,34 +1550,87 @@ class NudDeeSaaSApp {
                     focusConfirm: false,
                     confirmButtonText: '<i class="fas fa-edit"></i> อัปเดตสถานะ',
                     cancelButtonText: 'ปิด',
-                    // เพิ่ม CSS เพื่อให้หมายเลขนัดเลือกได้ง่าย
+                    allowOutsideClick: true,  // อนุญาตให้คลิกข้างนอกได้
+                    allowEscapeKey: true,     // อนุญาตให้กด ESC ได้
+                    // วิธีที่ 2: ปิด pointer events ชั่วคราว
                     didOpen: () => {
-                        const appointmentIdSpan = document.querySelector('.user-select-all');
-                        if (appointmentIdSpan) {
-                            // เพิ่ม event listener สำหรับการคลิกเพื่อเลือกหมายเลขนัด
-                            appointmentIdSpan.addEventListener('click', function() {
-                                // เลือกข้อความทั้งหมด
-                                const range = document.createRange();
-                                range.selectNodeContents(this);
-                                const selection = window.getSelection();
-                                selection.removeAllRanges();
-                                selection.addRange(range);
+                        const copyButton = document.getElementById(copyButtonId);
+                        if (copyButton) {
+                            copyButton.addEventListener('click', async (e) => {
+                                // ขั้นตอนที่ 1: ป้องกัน default events
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
                                 
-                                // แสดง feedback ชั่วคราว
-                                const originalBg = this.style.backgroundColor;
-                                this.style.backgroundColor = '#cce5ff';
+                                // ขั้นตอนที่ 2: ปิด SweetAlert2 events ชั่วคราว
+                                const swalContainer = document.querySelector('.swal2-container');
+                                const swalPopup = document.querySelector('.swal2-popup');
+                                
+                                if (swalContainer) {
+                                    swalContainer.style.pointerEvents = 'none';
+                                }
+                                if (swalPopup) {
+                                    swalPopup.style.pointerEvents = 'none';
+                                }
+                                
+                                console.log('🔒 ปิด SweetAlert2 events ชั่วคราว...');
+                                
+                                try {
+                                    // ขั้นตอนที่ 3: คัดลอกข้อมูล
+                                    await navigator.clipboard.writeText(appointmentId);
+                                    
+                                    // ขั้นตอนที่ 4: แสดง visual feedback
+                                    const originalHtml = copyButton.innerHTML;
+                                    const originalClass = copyButton.className;
+                                    
+                                    copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                                    copyButton.className = copyButton.className.replace('btn-outline-primary', 'btn-success');
+                                    
+                                    console.log('✅ คัดลอกสำเร็จ:', appointmentId);
+                                    
+                                    // เปลี่ยนกลับหลัง 1 วินาที
+                                    setTimeout(() => {
+                                        copyButton.innerHTML = originalHtml;
+                                        copyButton.className = originalClass;
+                                    }, 1000);
+                                    
+                                } catch (error) {
+                                    console.error('❌ คัดลอกไม่ได้:', error);
+                                    
+                                    // Fallback method
+                                    const textArea = document.createElement('textarea');
+                                    textArea.value = appointmentId;
+                                    textArea.style.position = 'fixed';
+                                    textArea.style.left = '-999999px';
+                                    document.body.appendChild(textArea);
+                                    textArea.select();
+                                    document.execCommand('copy');
+                                    document.body.removeChild(textArea);
+                                    
+                                    console.log('✅ คัดลอกสำเร็จ (fallback):', appointmentId);
+                                }
+                                
+                                // ขั้นตอนที่ 5: เปิด SweetAlert2 events กลับมา
                                 setTimeout(() => {
-                                    this.style.backgroundColor = originalBg;
-                                }, 500);
+                                    if (swalContainer) {
+                                        swalContainer.style.pointerEvents = 'auto';
+                                    }
+                                    if (swalPopup) {
+                                        swalPopup.style.pointerEvents = 'auto';
+                                    }
+                                    console.log('🔓 เปิด SweetAlert2 events กลับมา');
+                                }, 200); // รอ 200ms เพื่อให้คัดลอกเสร็จก่อน
                                 
-                                console.log('✅ เลือกหมายเลขนัด:', appointmentId);
+                                return false;
                             });
                             
-                            // เพิ่ม CSS เพื่อให้ดูคลิกได้
-                            appointmentIdSpan.style.padding = '4px 8px';
-                            appointmentIdSpan.style.borderRadius = '4px';
-                            appointmentIdSpan.style.border = '1px dashed #007bff';
-                            appointmentIdSpan.style.background = '#f8f9fa';
+                            // เพิ่ม event listeners อื่นๆ เพื่อป้องกัน modal ปิด
+                            ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(eventType => {
+                                copyButton.addEventListener(eventType, (e) => {
+                                    e.stopPropagation();
+                                    e.stopImmediatePropagation();
+                                });
+                            });
                         }
                     }
                 });
