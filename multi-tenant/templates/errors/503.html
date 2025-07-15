@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}503 - ระบบไม่พร้อมใช้งาน{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+        <div class="error-page">
+            <h1 class="display-1 text-warning">503</h1>
+            <h2 class="mb-3">ระบบไม่พร้อมใช้งานชั่วคราว</h2>
+            <p class="lead">ขออภัย ขณะนี้ระบบไม่สามารถให้บริการได้ตามปกติ อาจเนื่องมาจากการบำรุงรักษาหรือเกิดปัญหาการเชื่อมต่อ</p>
+            
+            <div class="alert alert-info mt-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>ทีมงานของเราได้รับทราบถึงปัญหานี้แล้ว</strong>
+                <br><small>และกำลังดำเนินการแก้ไขอย่างเร่งด่วน กรุณาลองอีกครั้งในภายหลัง</small>
+            </div>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="fas fa-home me-2"></i>กลับหน้าแรก
+                </a>
+                <button onclick="location.reload()" class="btn btn-outline-secondary">
+                    <i class="fas fa-sync-alt me-2"></i>ลองใหม่อีกครั้ง
+                </button>
+            </div>
+            
+            <div class="mt-5">
+                <h5>ระหว่างนี้คุณสามารถ:</h5>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check text-success me-2"></i>รอสักครู่แล้วกด "ลองใหม่อีกครั้ง"</li>
+                    <li><i class="fas fa-check text-success me-2"></i>กลับมาใช้งานในภายหลังเมื่อระบบกลับมาเป็นปกติ</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 60px 0;
+}
+.display-1 {
+    font-size: 8rem;
+    font-weight: 300;
+}
+</style>
+{% endblock %}

@@ -4,7 +4,7 @@ import logging
 import traceback
 import json
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g, abort
 from flask_login import login_required, current_user, logout_user
 from werkzeug.utils import secure_filename
 import os
@@ -24,10 +24,56 @@ from config import Config
 from api import api_bp # Ensure api_bp is imported
 
 from flask_migrate import Migrate
+from flask_session import Session
+
+import redis
+
 # from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# สำหรับ Flask-Session
+if app.config.get('SESSION_TYPE') == 'redis':
+    app.config['SESSION_KEY_PREFIX'] = 'nuddee:'
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+
+try:
+    print("Attempting to connect to Redis...")
+    # 1. สร้าง Redis client instance จาก URL ใน config
+    redis_client = redis.from_url(app.config['REDIS_URL'], socket_connect_timeout=1)
+    
+    # 2. ทดสอบการเชื่อมต่อ
+    redis_client.ping()
+    
+    # 3. หากสำเร็จ ให้ส่ง "อ็อบเจกต์" client นี้ไปให้ Flask-Session
+    app.config['SESSION_REDIS'] = redis_client
+    print("Redis connection successful. Using 'redis' for sessions.")
+
+except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+    print("WARNING: Redis connection failed. Falling back to 'filesystem' sessions for development.")
+    print("This is NOT suitable for production. Please ensure Redis is running.")
+    
+    # กำหนดค่าสำรองเมื่อเชื่อมต่อ Redis ไม่ได้
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['CACHE_TYPE'] = 'SimpleCache'
+    
+    # สร้าง Directory สำหรับเก็บไฟล์ session ถ้ายังไม่มี
+    session_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'flask_session')
+    os.makedirs(session_dir, exist_ok=True)
+    app.config['SESSION_FILE_DIR'] = session_dir
+
+# Place it after the app.config.from_object(Config) line
+Session(app)
+
+# Session configuration
+app.config['SESSION_COOKIE_NAME'] = 'nuddee_session'
+app.config['SESSION_COOKIE_SECURE'] = False  # True สำหรับ HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=4)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True
 
 # Initialize extensions
 db.init_app(app)
@@ -111,6 +157,10 @@ def internal_error(error):
     
     flash('เกิดข้อผิดพลาดของระบบ กรุณาลองอีกครั้งหรือติดต่อผู้ดูแลระบบ', 'danger')
     return render_template('errors/500.html'), 500
+@app.errorhandler(503)
+def service_unavailable_error(error):
+    """Handle 503 Service Unavailable errors"""
+    return render_template('errors/503.html'), 503
 
 @app.errorhandler(AppointmentError)
 def handle_appointment_error(error):
@@ -145,12 +195,27 @@ def handle_teamup_error(error):
     flash('เกิดข้อผิดพลาดกับระบบปฏิทิน กรุณาลองอีกครั้งในภายหลัง', 'warning')
     return redirect(url_for('index')) # Use 'index' as it's directly on app
 
-# Request logging middleware
 @app.before_request
-def log_request_info():
-    """Log request information and set start time for duration calculation"""
+def before_request_handler():
+    # --- ส่วนที่ 1: ตั้งค่า g object ---
     g.start_time = datetime.now(timezone.utc)
-    
+
+    # --- ส่วนที่ 2: Health Check (เฉพาะเมื่อใช้ Redis) ---
+    # ตรวจสอบเฉพาะ request ที่ไม่ใช่ไฟล์ static หรือหน้า debugger
+    endpoint = request.endpoint
+    if endpoint and ('static' not in endpoint and '__debugger__' not in endpoint):
+        # Health Check นี้จำเป็นก็ต่อเมื่อเรากำหนดค่าให้ใช้ Redis เท่านั้น
+        if app.config.get('SESSION_TYPE') == 'redis':
+            try:
+                # ดึง Redis client จาก Flask-Session extension
+                redis_client = app.session_interface.client
+                redis_client.ping()
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+                # หากเชื่อมต่อ Redis ไม่ได้ ให้หยุดการทำงานและส่งหน้า 503
+                app.logger.critical(f"Redis connection failed while app was running: {e}")
+                abort(503)
+
+    # --- ส่วนที่ 3: บันทึก Log ---
     # Log API requests
     if request.path.startswith('/api/'):
         app.logger.info(f'API Request: {request.method} {request.path} - IP: {request.remote_addr}')
@@ -160,6 +225,15 @@ def log_request_info():
     if any(request.path.startswith(path) for path in sensitive_paths):
         user_id = current_user.get_id() if current_user.is_authenticated else 'Anonymous'
         app.logger.info(f'Sensitive endpoint access: {request.path} - User: {user_id} - IP: {request.remote_addr}')
+    
+    # เพิ่มการตรวจสอบ session validity
+    if current_user.is_authenticated:
+        # ตรวจสอบว่า user ยังมีอยู่ในระบบหรือไม่
+        if hasattr(current_user, 'user') and not current_user.user:
+            logout_user()
+            session.clear()
+            flash('Session expired. Please login again.', 'info')
+            return redirect(url_for('auth.login'))
 
 @app.after_request
 def log_response_info(response):

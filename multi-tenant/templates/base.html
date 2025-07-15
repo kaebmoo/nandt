@@ -121,10 +121,15 @@
                                 <i class="bi bi-shield-lock"></i> ความปลอดภัย
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
-                                <i class="bi bi-box-arrow-right"></i> ออกจากระบบ
-                            </a></li>
-                        </ul>
+
+                            <li>
+                                <form action="{{ url_for('auth.logout') }}" method="post" style="display: inline;">
+                                    <button type="submit" class="dropdown-item" style="border: none; background: none; width: 100%; text-align: left;">
+                                        <i class="bi bi-box-arrow-right"></i> ออกจากระบบ
+                                    </button>
+                                </form>
+                            </li>
+                            </ul>
                     </li>
                 </ul>
                 {% else %}
@@ -213,7 +218,23 @@
     
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     <script src="{{ url_for('static', filename='js/appointment-helper.js') }}"></script>
+
+
     
-    {% block scripts %}{% endblock %}
+    {% block scripts %}
+    <script>
+        // Clear any client-side storage when logout
+        document.addEventListener('DOMContentLoaded', function() {
+            // ตรวจสอบว่าอยู่ในหน้า login และมี flash message ว่า logout สำเร็จ
+            if (window.location.pathname.includes('/login')) {
+                // Clear all client storage
+                if (typeof(Storage) !== "undefined") {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                }
+            }
+        });
+    </script>
+    {% endblock %}
 </body>
 </html>

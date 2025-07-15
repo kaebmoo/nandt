@@ -1,6 +1,6 @@
 # auth.py - Security Improvements
 
-from flask import Blueprint, request, jsonify, session, redirect, url_for, flash, render_template
+from flask import Blueprint, request, jsonify, session, redirect, url_for, flash, render_template, current_app, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 from werkzeug.security import generate_password_hash
 import secrets
@@ -547,13 +547,56 @@ def login():
     return render_template('auth/login.html')
 
 # Logout Route
-@auth_bp.route('/logout')
+from flask import make_response
+
+@auth_bp.route('/logout', methods=['GET', 'POST'])
 @login_required
 def logout():
+    """ทำการ Logout ผู้ใช้ - รองรับทั้ง AJAX และ Normal request"""
+    user_id = current_user.get_id()
+    
+    # ทำการ logout
     logout_user()
+    
+    # Clear session ทั้งหมด
     session.clear()
-    flash('ออกจากระบบสำเร็จ', 'success')
-    return redirect(url_for('auth.login'))
+    
+    # ตรวจสอบว่าเป็น AJAX request หรือไม่
+    is_json_request = (
+        request.is_json or 
+        request.headers.get('Content-Type') == 'application/json' or
+        'application/json' in request.headers.get('Accept', '')
+    )
+    
+    if is_json_request:
+        # AJAX request - ส่ง JSON
+        response = jsonify({
+            'success': True,
+            'message': 'Logged out successfully.',
+            'redirect_url': url_for('auth.login')
+        })
+    else:
+        # Normal request - redirect โดยตรง
+        flash('ออกจากระบบสำเร็จ', 'success')
+        response = make_response(redirect(url_for('auth.login')))
+    
+    # เพิ่ม Headers ป้องกันการ Cache
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, private, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    # ลบ cookies
+    response.set_cookie('session', '', expires=0, path='/', domain=None)
+    response.set_cookie('remember_token', '', expires=0, path='/', domain=None)
+    
+    # Flask-Session cookies
+    if 'SESSION_COOKIE_NAME' in current_app.config:
+        cookie_name = current_app.config['SESSION_COOKIE_NAME']
+        response.set_cookie(cookie_name, '', expires=0, path='/', domain=None)
+    
+    current_app.logger.info(f'User {user_id} logged out successfully.')
+    
+    return response
 
 # 2FA Setup
 @auth_bp.route('/setup-2fa', methods=['GET', 'POST'])
