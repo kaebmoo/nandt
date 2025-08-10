@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ui top attached menu">
+    <div class="item"><strong>Clinic Scheduler</strong></div>
+    <div class="right menu">
+        <a class="item" id="logout-btn"><i class="sign out alternate icon"></i>Logout</a>
+    </div>
+</div>
+<div class="ui grid">
+    <div class="four wide column">
+        <div class="ui vertical fluid menu">
+            <a class="active item" data-tab="bookings">Bookings</a>
+            <a class="item" data-tab="settings">Settings</a>
+        </div>
+    </div>
+    <div class="twelve wide stretched column">
+        <div class="ui tab segment active" data-tab="bookings">
+            <h3 class="ui header">My Bookings</h3>
+            <button class="ui primary button" id="new-booking-btn">New Booking</button>
+            <div class="ui divided items" id="booking-list">
+                </div>
+        </div>
+        <div class="ui tab segment" data-tab="settings">
+            <h3 class="ui header">Settings</h3>
+            <form class="ui form" id="settings-form">
+                <div class="field">
+                    <label>Cal.com API Key</label>
+                    <input type="password" name="api_key" id="api-key-input" placeholder="Your Cal.com API Key">
+                </div>
+                <button class="ui button" type="submit">Save API Key</button>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="ui modal" id="new-booking-modal">
+    <i class="close icon"></i>
+    <div class="header">Create a New Booking</div>
+    <div class="content">
+        <form class="ui form" id="new-booking-form">
+            <div class="field">
+                <label>Title (Patient Name)</label>
+                <input type="text" name="title" required>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label>Start Time</label>
+                    <input type="datetime-local" name="start" required>
+                </div>
+                <div class="field">
+                    <label>End Time</label>
+                    <input type="datetime-local" name="end" required>
+                </div>
+            </div>
+            <div class="field">
+                <label>Event Type</label>
+                <select class="ui dropdown" name="eventTypeId" id="event-type-dropdown" required>
+                    </select>
+            </div>
+             <div class="field">
+                <label>Description</label>
+                <textarea rows="2" name="description"></textarea>
+            </div>
+        </form>
+    </div>
+    <div class="actions">
+        <div class="ui black deny button">Cancel</div>
+        <button class="ui positive button" type="submit" form="new-booking-form">Create</button>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/app.js"></script>
+{% endblock %}

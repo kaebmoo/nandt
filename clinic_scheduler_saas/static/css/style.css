@@ -1,0 +1,10 @@
+/* static/css/style.css */
+
+body {
+    background-color: #f7f7f7;
+}
+
+.ui.modal .header {
+    background-color: #00b5ad; /* Teal color from Semantic UI */
+    color: white;
+}

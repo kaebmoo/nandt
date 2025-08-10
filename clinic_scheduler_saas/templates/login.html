@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="ui middle aligned center aligned grid" style="height: 100vh;">
+    <div class="column" style="max-width: 450px;">
+        <h2 class="ui teal image header">
+            <i class="fas fa-clinic-medical icon"></i>
+            <div class="content">
+                Log-in to your Account
+            </div>
+        </h2>
+        
+        <form class="ui large form" id="login-form">
+            <div class="ui stacked segment">
+                <div class="field">
+                    <div class="ui left icon input">
+                        <i class="user icon"></i>
+                        <input type="email" name="username" placeholder="E-mail address" required>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="ui left icon input">
+                        <i class="lock icon"></i>
+                        <input type="password" name="password" placeholder="Password" required>
+                    </div>
+                </div>
+                <button class="ui fluid large teal submit button" type="submit">Login</button>
+            </div>
+            <div class="ui error message"></div>
+        </form>
+        <div class="ui message">
+            New to us? <a href="#" id="show-register">Sign Up</a>
+        </div>
+    </div>
+</div>
+
+<div class="ui small modal" id="register-modal">
+    <div class="header">Sign Up for a New Account</div>
+    <div class="content">
+        <form class="ui form" id="register-form">
+            <div class="field">
+                <label>Clinic / Organization Name</label>
+                <input type="text" name="organization_name" placeholder="e.g., Happy Kidney Clinic" required>
+            </div>
+            <div class="field">
+                <label>Email Address</label>
+                <input type="email" name="email" placeholder="e.g., admin@happykidney.com" required>
+            </div>
+            <div class="field">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="Password" required>
+            </div>
+        </form>
+    </div>
+    <div class="actions">
+        <div class="ui black deny button">Cancel</div>
+        <button class="ui positive right labeled icon button" type="submit" form="register-form">
+            Register
+            <i class="checkmark icon"></i>
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/app.js"></script>
+{% endblock %}

@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "clinic-scheduler-saas"
+version = "0.1.0"
+description = "SaaS for clinic appointment scheduling using Cal.com"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+packages = [
+    { include = "api" },
+    { include = "core" },
+    { include = "models" },
+    { include = "schemas" },
+    { include = "services" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.29.0"}
+sqlalchemy = "^2.0.30"
+psycopg2-binary = "^2.9.9"
+alembic = "^1.13.1"
+pydantic-settings = "^2.2.1"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+stripe = "^9.2.0"
+httpx = "^0.27.0"
+jinja2 = "^3.1.4"
+bcrypt = "<4.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

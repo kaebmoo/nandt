@@ -1,0 +1,447 @@
+<!-- hospital-booking/flask_app/app/templates/landing.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBooking - ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .plan-card {
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .plan-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .plan-card.popular {
+            border-color: #667eea;
+            position: relative;
+        }
+        .loading {
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-8 h-8 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                    </svg>
+                    <span class="text-xl font-bold text-gray-800">MedBooking</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="#features" class="text-gray-600 hover:text-purple-600">คุณสมบัติ</a>
+                    <a href="#pricing" class="text-gray-600 hover:text-purple-600">ราคา</a>
+                    <a href="#demo" class="text-gray-600 hover:text-purple-600">ทดลองใช้</a>
+                    <button onclick="showLoginModal()" class="text-purple-600 font-semibold">เข้าสู่ระบบ</button>
+                    <button onclick="showSignupModal()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700">
+                        เริ่มต้นใช้งาน
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="gradient-bg text-white py-20">
+        <div class="container mx-auto px-4 text-center">
+            <h1 class="text-5xl font-bold mb-6">ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</h1>
+            <p class="text-xl mb-8 opacity-90">จัดการนัดหมายผู้ป่วย ลดเวลารอ เพิ่มประสิทธิภาพ</p>
+            <div class="flex justify-center space-x-4">
+                <button onclick="showSignupModal()" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100">
+                    ทดลองใช้ฟรี 14 วัน
+                </button>
+                <button onclick="requestDemo()" class="border-2 border-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600">
+                    ขอสาธิตการใช้งาน
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center mb-12">เลือกแพ็คเกจที่เหมาะกับโรงพยาบาลของคุณ</h2>
+            
+            <div class="grid md:grid-cols-4 gap-8 max-w-6xl mx-auto">
+                <!-- Free Plan -->
+                <div class="plan-card bg-white rounded-xl p-6 shadow-lg">
+                    <h3 class="text-xl font-bold mb-2">ทดลองใช้</h3>
+                    <div class="text-3xl font-bold mb-4">ฟรี</div>
+                    <p class="text-gray-600 mb-6">14 วัน</p>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            หมอ 5 คน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            นัดหมาย 100 ครั้ง/เดือน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Email แจ้งเตือน
+                        </li>
+                    </ul>
+                    <button onclick="selectPlan('free')" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">
+                        เริ่มทดลองใช้
+                    </button>
+                </div>
+
+                <!-- Basic Plan -->
+                <div class="plan-card bg-white rounded-xl p-6 shadow-lg">
+                    <h3 class="text-xl font-bold mb-2">Basic</h3>
+                    <div class="text-3xl font-bold mb-4">฿1,990<span class="text-lg font-normal">/เดือน</span></div>
+                    <p class="text-gray-600 mb-6">คลินิกขนาดเล็ก</p>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            หมอ 20 คน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            นัดหมาย 1,000 ครั้ง/เดือน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            SMS แจ้งเตือน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            รายงานพื้นฐาน
+                        </li>
+                    </ul>
+                    <button onclick="selectPlan('basic')" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                        เลือกแพ็คเกจนี้
+                    </button>
+                </div>
+
+                <!-- Professional Plan (Popular) -->
+                <div class="plan-card popular bg-white rounded-xl p-6 shadow-xl">
+                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                        <span class="bg-purple-600 text-white px-4 py-1 rounded-full text-sm">ยอดนิยม</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Professional</h3>
+                    <div class="text-3xl font-bold mb-4">฿4,990<span class="text-lg font-normal">/เดือน</span></div>
+                    <p class="text-gray-600 mb-6">โรงพยาบาลขนาดกลาง</p>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            หมอ 100 คน
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            นัดหมายไม่จำกัด
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Custom Domain
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            API Access
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            รายงานขั้นสูง
+                        </li>
+                    </ul>
+                    <button onclick="selectPlan('professional')" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                        เลือกแพ็คเกจนี้
+                    </button>
+                </div>
+
+                <!-- Enterprise Plan -->
+                <div class="plan-card bg-white rounded-xl p-6 shadow-lg">
+                    <h3 class="text-xl font-bold mb-2">Enterprise</h3>
+                    <div class="text-3xl font-bold mb-4">ติดต่อเรา</div>
+                    <p class="text-gray-600 mb-6">โรงพยาบาลขนาดใหญ่</p>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            ไม่จำกัดทุกอย่าง
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            On-premise deployment
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            SLA 99.9%
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            24/7 Support
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Custom Integration
+                        </li>
+                    </ul>
+                    <button onclick="contactSales()" class="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900">
+                        ติดต่อฝ่ายขาย
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Signup Modal -->
+    <div id="signupModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4 relative">
+            <h2 class="text-2xl font-bold mb-6">สมัครใช้งาน MedBooking</h2>
+            
+            <form id="signupForm" onsubmit="handleSignup(event)">
+                <!-- Step 1: Hospital Info -->
+                <div id="step1" class="step">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">ชื่อโรงพยาบาล/คลินิก</label>
+                            <input type="text" name="hospitalName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="โรงพยาบาลกรุงเทพ">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-1">ชื่อย่อ (URL)</label>
+                            <div class="flex">
+                                <input type="text" name="subdomain" required pattern="[a-z0-9-]+" class="flex-1 px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="bangkok-hospital">
+                                <span class="bg-gray-100 px-3 py-2 border border-l-0 rounded-r-lg">.nuddee.com</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">ใช้ตัวอักษรภาษาอังกฤษตัวเล็ก, ตัวเลข และ - เท่านั้น</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-1">ประเภท</label>
+                            <select name="type" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                <option value="">เลือกประเภท</option>
+                                <option value="hospital">โรงพยาบาล</option>
+                                <option value="clinic">คลินิก</option>
+                                <option value="dental">ทันตกรรม</option>
+                                <option value="specialty">ศูนย์เฉพาะทาง</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button type="button" onclick="nextStep()" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 mt-6">
+                        ถัดไป
+                    </button>
+                </div>
+                
+                <!-- Step 2: Admin Account -->
+                <div id="step2" class="step hidden">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">ชื่อผู้ดูแลระบบ</label>
+                            <input type="text" name="adminName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="นายแพทย์ สมชาย ใจดี">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-1">อีเมล</label>
+                            <input type="email" name="adminEmail" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="admin@hospital.com">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-1">เบอร์โทรศัพท์</label>
+                            <input type="tel" name="adminPhone" required pattern="[0-9]{10}" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="0812345678">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-1">รหัสผ่าน</label>
+                            <input type="password" name="password" required minlength="8" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <p class="text-xs text-gray-500 mt-1">อย่างน้อย 8 ตัวอักษร</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-3 mt-6">
+                        <button type="button" onclick="prevStep()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300">
+                            ย้อนกลับ
+                        </button>
+                        <button type="button" onclick="nextStep()" class="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                            ถัดไป
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Step 3: Plan Selection -->
+                <div id="step3" class="step hidden">
+                    <div class="space-y-3">
+                        <label class="block">
+                            <input type="radio" name="plan" value="free" checked class="mr-2">
+                            <span class="font-medium">ทดลองใช้ฟรี 14 วัน</span>
+                            <p class="text-sm text-gray-500 ml-6">ทดสอบระบบก่อนตัดสินใจ</p>
+                        </label>
+                        
+                        <label class="block">
+                            <input type="radio" name="plan" value="basic" class="mr-2">
+                            <span class="font-medium">Basic - ฿1,990/เดือน</span>
+                            <p class="text-sm text-gray-500 ml-6">สำหรับคลินิกขนาดเล็ก</p>
+                        </label>
+                        
+                        <label class="block">
+                            <input type="radio" name="plan" value="professional" class="mr-2">
+                            <span class="font-medium">Professional - ฿4,990/เดือน</span>
+                            <p class="text-sm text-gray-500 ml-6">สำหรับโรงพยาบาลขนาดกลาง</p>
+                        </label>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg mt-4">
+                        <label class="flex items-start">
+                            <input type="checkbox" required class="mt-1 mr-2">
+                            <span class="text-sm">ยอมรับ <a href="#" class="text-purple-600 underline">เงื่อนไขการใช้งาน</a> และ <a href="#" class="text-purple-600 underline">นโยบายความเป็นส่วนตัว</a></span>
+                        </label>
+                    </div>
+                    
+                    <div class="flex space-x-3 mt-6">
+                        <button type="button" onclick="prevStep()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300">
+                            ย้อนกลับ
+                        </button>
+                        <button type="submit" class="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                            สร้างบัญชี
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Loading State -->
+                <div id="loading" class="loading text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                    <p class="mt-4 text-gray-600">กำลังสร้างบัญชีของคุณ...</p>
+                </div>
+            </form>
+            
+            <!-- Close button -->
+            <button onclick="closeSignupModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        
+        function showSignupModal() {
+            document.getElementById('signupModal').classList.remove('hidden');
+            currentStep = 1;
+            showStep(1);
+        }
+        
+        function closeSignupModal() {
+            document.getElementById('signupModal').classList.add('hidden');
+        }
+        
+        function showLoginModal() {
+            alert('เข้าสู่ระบบที่: https://app.nuddee.com/login');
+        }
+        
+        function showStep(step) {
+            document.querySelectorAll('.step').forEach(s => s.classList.add('hidden'));
+            document.getElementById('step' + step).classList.remove('hidden');
+        }
+        
+        function nextStep() {
+            if (currentStep < 3) {
+                currentStep++;
+                showStep(currentStep);
+            }
+        }
+        
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                showStep(currentStep);
+            }
+        }
+        
+        function selectPlan(plan) {
+            showSignupModal();
+            // Pre-select the plan
+            setTimeout(() => {
+                document.querySelector(`input[name="plan"][value="${plan}"]`).checked = true;
+            }, 100);
+        }
+        
+        function requestDemo() {
+            alert('ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง');
+        }
+        
+        function contactSales() {
+            alert('โทร: 02-123-4567 หรือ Email: sales@nuddee.com');
+        }
+        
+        async function handleSignup(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Show loading
+            document.getElementById('step3').classList.add('hidden');
+            document.getElementById('loading').classList.add('show');
+            
+            // Simulate API call
+            setTimeout(() => {
+                console.log('Signup data:', data);
+                alert(`สร้างบัญชีสำเร็จ!\n\nURL: https://${data.subdomain}.nuddee.com\nEmail: ${data.adminEmail}\n\nระบบจะส่ง email ยืนยันไปยัง ${data.adminEmail}`);
+                closeSignupModal();
+            }, 2000);
+        }
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                const modal = document.getElementById('signupModal');
+                // เช็คว่า popup กำลังแสดงอยู่หรือไม่
+                if (!modal.classList.contains('hidden')) {
+                    closeSignupModal();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
