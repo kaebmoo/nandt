@@ -1,4 +1,4 @@
-<!-- hospital-booking/flask_app/app/templates/landing.html -->
+<!-- flask_app/app/templates/landing.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -43,39 +43,153 @@
                     </svg>
                     <span class="text-xl font-bold text-gray-800">MedBooking</span>
                 </div>
+                
+                <!-- Navigation Menu -->
                 <div class="flex items-center space-x-6">
-                    <a href="#features" class="text-gray-600 hover:text-purple-600">คุณสมบัติ</a>
-                    <a href="#pricing" class="text-gray-600 hover:text-purple-600">ราคา</a>
-                    <a href="#demo" class="text-gray-600 hover:text-purple-600">ทดลองใช้</a>
-                    <button onclick="showLoginModal()" class="text-purple-600 font-semibold">เข้าสู่ระบบ</button>
-                    <button onclick="showSignupModal()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700">
-                        เริ่มต้นใช้งาน
-                    </button>
+                    {% if current_user %}
+                        <!-- Logged in user menu -->
+                        <a href="#features" class="text-gray-600 hover:text-purple-600">คุณสมบัติ</a>
+                        <a href="#pricing" class="text-gray-600 hover:text-purple-600">ราคา</a>
+                        
+                        <!-- User dropdown -->
+                        <div class="relative group">
+                            <button class="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
+                                <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                    <span class="text-sm font-medium text-purple-600">
+                                        {{ current_user.name[0] if current_user.name else 'U' }}
+                                    </span>
+                                </div>
+                                <span class="text-sm font-medium">{{ current_user.name if current_user.name else 'ผู้ใช้' }}</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            
+                            <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                                <a href="/dashboard?subdomain={{ current_user.hospital.subdomain if current_user.hospital else 'unknown' }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    🏥 Dashboard
+                                </a>
+                                <a href="{{ url_for('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    👤 โปรไฟล์
+                                </a>
+                                <div class="border-t">
+                                    <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                        🚪 ออกจากระบบ
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <!-- Guest menu -->
+                        <a href="#features" class="text-gray-600 hover:text-purple-600">คุณสมบัติ</a>
+                        <a href="#pricing" class="text-gray-600 hover:text-purple-600">ราคา</a>
+                        <a href="{{ url_for('auth.login') }}" class="text-purple-600 font-semibold hover:text-purple-700">เข้าสู่ระบบ</a>
+                        <button onclick="showSignupModal()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                            เริ่มต้นใช้งาน
+                        </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </nav>
 
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mx-auto px-4 pt-4">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} {% if category == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif category == 'info' %}bg-blue-100 border border-blue-400 text-blue-700{% else %}bg-green-100 border border-green-400 text-green-700{% endif %} px-4 py-3 rounded relative mb-4">
+                        {{ message }}
+                        <button onclick="this.parentElement.style.display='none'" class="absolute top-0 bottom-0 right-0 px-4 py-3">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
     <!-- Hero Section -->
     <section class="gradient-bg text-white py-20">
         <div class="container mx-auto px-4 text-center">
-            <h1 class="text-5xl font-bold mb-6">ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</h1>
-            <p class="text-xl mb-8 opacity-90">จัดการนัดหมายผู้ป่วย ลดเวลารอ เพิ่มประสิทธิภาพ</p>
-            <div class="flex justify-center space-x-4">
-                <button onclick="showSignupModal()" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100">
-                    ทดลองใช้ฟรี 14 วัน
-                </button>
-                <button onclick="requestDemo()" class="border-2 border-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600">
-                    ขอสาธิตการใช้งาน
-                </button>
-            </div>
+            {% if current_user %}
+                <h1 class="text-5xl font-bold mb-6">ยินดีต้อนรับกลับ, {{ current_user.name.split()[0] if current_user.name else 'ผู้ใช้' }}!</h1>
+                <p class="text-xl mb-8 opacity-90">พร้อมที่จะจัดการนัดหมายของ {{ current_user.hospital.name if current_user.hospital else 'โรงพยาบาล' }} แล้วหรือยัง?</p>
+                <div class="flex justify-center space-x-4">
+                    <a href="/dashboard?subdomain={{ current_user.hospital.subdomain if current_user.hospital else 'unknown' }}" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+                        🏥 เข้าสู่ Dashboard
+                    </a>
+                    <button onclick="requestDemo()" class="border-2 border-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition-colors">
+                        📞 ขอความช่วยเหลือ
+                    </button>
+                </div>
+            {% else %}
+                <h1 class="text-5xl font-bold mb-6">ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</h1>
+                <p class="text-xl mb-8 opacity-90">จัดการนัดหมายผู้ป่วย ลดเวลารอ เพิ่มประสิทธิภาพ</p>
+                <div class="flex justify-center space-x-4">
+                    <button onclick="showSignupModal()" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+                        ทดลองใช้ฟรี 14 วัน
+                    </button>
+                    <button onclick="requestDemo()" class="border-2 border-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-purple-600 transition-colors">
+                        ขอสาธิตการใช้งาน
+                    </button>
+                </div>
+            {% endif %}
         </div>
     </section>
 
-    <!-- Pricing Section -->
-    <section id="pricing" class="py-20">
+    <!-- Features Section (Show only for non-logged in users) -->
+    {% if not current_user %}
+    <section id="features" class="py-20 bg-white">
         <div class="container mx-auto px-4">
-            <h2 class="text-3xl font-bold text-center mb-12">เลือกแพ็คเกจที่เหมาะกับโรงพยาบาลของคุณ</h2>
+            <h2 class="text-3xl font-bold text-center mb-12">คุณสมบัติเด่น</h2>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">จัดการนัดหมาย</h3>
+                    <p class="text-gray-600">ระบบนัดหมายอัจฉริยะที่ช่วยจัดตารางและลดการรอคอย</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">แจ้งเตือนอัตโนมัติ</h3>
+                    <p class="text-gray-600">ส่ง SMS และ Email แจ้งเตือนผู้ป่วยก่อนถึงนัด</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">รายงานและสถิติ</h3>
+                    <p class="text-gray-600">ติดตามผลการดำเนินงานด้วยรายงานที่ละเอียดและชัดเจน</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 {% if current_user %}bg-white{% else %}bg-gray-50{% endif %}">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center mb-12">
+                {% if current_user %}
+                    เปลี่ยนแพ็คเกจ หรือ อัปเกรด
+                {% else %}
+                    เลือกแพ็คเกจที่เหมาะกับโรงพยาบาลของคุณ
+                {% endif %}
+            </h2>
             
             <div class="grid md:grid-cols-4 gap-8 max-w-6xl mx-auto">
                 <!-- Free Plan -->
@@ -103,9 +217,15 @@
                             Email แจ้งเตือน
                         </li>
                     </ul>
-                    <button onclick="selectPlan('free')" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">
-                        เริ่มทดลองใช้
-                    </button>
+                    {% if current_user %}
+                        <button class="w-full bg-gray-100 text-gray-500 py-2 rounded-lg cursor-not-allowed">
+                            ใช้งานอยู่
+                        </button>
+                    {% else %}
+                        <button onclick="selectPlan('free')" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">
+                            เริ่มทดลองใช้
+                        </button>
+                    {% endif %}
                 </div>
 
                 <!-- Basic Plan -->
@@ -140,7 +260,7 @@
                         </li>
                     </ul>
                     <button onclick="selectPlan('basic')" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
-                        เลือกแพ็คเกจนี้
+                        {% if current_user %}อัปเกรดเป็น Basic{% else %}เลือกแพ็คเกจนี้{% endif %}
                     </button>
                 </div>
 
@@ -185,7 +305,7 @@
                         </li>
                     </ul>
                     <button onclick="selectPlan('professional')" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
-                        เลือกแพ็คเกจนี้
+                        {% if current_user %}อัปเกรดเป็น Pro{% else %}เลือกแพ็คเกจนี้{% endif %}
                     </button>
                 </div>
 
@@ -234,10 +354,17 @@
         </div>
     </section>
 
-    <!-- Signup Modal -->
+    <!-- Signup Modal (Show only for non-logged in users) -->
+    {% if not current_user %}
     <div id="signupModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
         <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4 relative">
             <h2 class="text-2xl font-bold mb-6">สมัครใช้งาน MedBooking</h2>
+
+            <!-- เพิ่มส่วนแสดง Error -->
+            <div id="signupError" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <strong class="font-bold">เกิดข้อผิดพลาด!</strong>
+                <span class="block sm:inline" id="errorMessage"></span>
+            </div>
             
             <form id="signupForm" onsubmit="handleSignup(event)">
                 <!-- Step 1: Hospital Info -->
@@ -252,7 +379,7 @@
                             <label class="block text-sm font-medium mb-1">ชื่อย่อ (URL)</label>
                             <div class="flex">
                                 <input type="text" name="subdomain" required pattern="[a-z0-9-]+" class="flex-1 px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="bangkok-hospital">
-                                <span class="bg-gray-100 px-3 py-2 border border-l-0 rounded-r-lg">.nuddee.com</span>
+                                <span class="bg-gray-100 px-3 py-2 border border-l-0 rounded-r-lg">.medbook.com</span>
                             </div>
                             <p class="text-xs text-gray-500 mt-1">ใช้ตัวอักษรภาษาอังกฤษตัวเล็ก, ตัวเลข และ - เท่านั้น</p>
                         </div>
@@ -363,9 +490,61 @@
             </button>
         </div>
     </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid md:grid-cols-4 gap-8">
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <svg class="w-8 h-8 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                        </svg>
+                        <span class="text-xl font-bold">MedBooking</span>
+                    </div>
+                    <p class="text-gray-400">ระบบนัดหมายออนไลน์ที่ทันสมัยสำหรับโรงพยาบาลและคลินิก</p>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">ผลิตภัณฑ์</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">ระบบนัดหมาย</a></li>
+                        <li><a href="#" class="hover:text-white">จัดการผู้ป่วย</a></li>
+                        <li><a href="#" class="hover:text-white">รายงานและสถิติ</a></li>
+                        <li><a href="#" class="hover:text-white">API</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">สนับสนุน</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">คู่มือการใช้งาน</a></li>
+                        <li><a href="#" class="hover:text-white">FAQ</a></li>
+                        <li><a href="#" class="hover:text-white">ติดต่อเรา</a></li>
+                        <li><a href="#" class="hover:text-white">สถานะระบบ</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">ติดต่อ</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li>📧 support@medbook.com</li>
+                        <li>📞 02-123-4567</li>
+                        <li>📍 กรุงเทพมหานคร</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
+                <p>&copy; 2024 MedBooking. สงวนลิขสิทธิ์.</p>
+            </div>
+        </div>
+    </footer>
 
     <script>
         let currentStep = 1;
+        const API_BASE_URL = '{{ fastapi_base_url }}';
         
         function showSignupModal() {
             document.getElementById('signupModal').classList.remove('hidden');
@@ -375,10 +554,6 @@
         
         function closeSignupModal() {
             document.getElementById('signupModal').classList.add('hidden');
-        }
-        
-        function showLoginModal() {
-            alert('เข้าสู่ระบบที่: https://app.nuddee.com/login');
         }
         
         function showStep(step) {
@@ -401,47 +576,91 @@
         }
         
         function selectPlan(plan) {
-            showSignupModal();
-            // Pre-select the plan
-            setTimeout(() => {
-                document.querySelector(`input[name="plan"][value="${plan}"]`).checked = true;
-            }, 100);
+            {% if current_user %}
+                // ถ้า login แล้วให้ redirect ไป billing/upgrade page
+                alert('ฟีเจอร์อัปเกรดแพ็คเกจจะมาในเร็วๆ นี้!');
+                return;
+            {% else %}
+                showSignupModal();
+                // Pre-select the plan
+                setTimeout(() => {
+                    const planRadio = document.querySelector(`input[name="plan"][value="${plan}"]`);
+                    if (planRadio) {
+                        planRadio.checked = true;
+                    }
+                }, 100);
+            {% endif %}
         }
         
         function requestDemo() {
-            alert('ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง');
+            {% if current_user %}
+                alert('📞 สำหรับความช่วยเหลือ กรุณาติดต่อ: support@medbook.com หรือ 02-123-4567');
+            {% else %}
+                alert('📞 ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง กรุณาโทร 02-123-4567 หรือ email: sales@medbook.com');
+            {% endif %}
         }
         
         function contactSales() {
-            alert('โทร: 02-123-4567 หรือ Email: sales@nuddee.com');
+            alert('📞 ติดต่อฝ่ายขาย: 02-123-4567 หรือ Email: sales@medbook.com');
         }
         
+        {% if not current_user %}
         async function handleSignup(event) {
             event.preventDefault();
+            const errorDiv = document.getElementById('signupError');
+            const errorMessageSpan = document.getElementById('errorMessage');
+            errorDiv.classList.add('hidden'); // ซ่อน error เก่า
             
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData.entries());
             
             // Show loading
-            document.getElementById('step3').classList.add('hidden');
+            document.querySelectorAll('.step').forEach(s => s.classList.add('hidden'));
             document.getElementById('loading').classList.add('show');
             
-            // Simulate API call
-            setTimeout(() => {
-                console.log('Signup data:', data);
-                alert(`สร้างบัญชีสำเร็จ!\n\nURL: https://${data.subdomain}.nuddee.com\nEmail: ${data.adminEmail}\n\nระบบจะส่ง email ยืนยันไปยัง ${data.adminEmail}`);
-                closeSignupModal();
-            }, 2000);
+            try {
+                const apiUrl = `${API_BASE_URL}/api/register`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || 'เกิดข้อผิดพลาดบางอย่าง');
+                }
+
+                if (result.checkout_url) {
+                    // สำหรับแพลนจ่ายเงิน: ไปที่หน้าจ่ายเงินของ Stripe
+                    window.location.href = result.checkout_url;
+                } else if (result.success && result.url) {
+                    // สำหรับแพลนฟรี: ไปที่หน้า Dashboard
+                    alert('🎉 สร้างบัญชีทดลองใช้สำเร็จ! ระบบจะนำคุณไปยัง Dashboard');
+                    window.location.href = result.url;
+                }
+
+            } catch (error) {
+                // แสดงข้อความ Error ที่ได้รับจาก Backend
+                errorMessageSpan.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+
+                // ซ่อน loading แล้วกลับไป step 3
+                document.getElementById('loading').classList.remove('show');
+                showStep(3);
+            }
         }
+        
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 const modal = document.getElementById('signupModal');
-                // เช็คว่า popup กำลังแสดงอยู่หรือไม่
-                if (!modal.classList.contains('hidden')) {
+                if (modal && !modal.classList.contains('hidden')) {
                     closeSignupModal();
                 }
             }
         });
+        {% endif %}
     </script>
 </body>
 </html>

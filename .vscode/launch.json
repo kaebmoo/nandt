@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug FastAPI",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "fastapi_app.app.main:app",
+                "--reload"
+            ],
+            "cwd": "${workspaceFolder}/hospital-booking",
+            "envFile": "${workspaceFolder}/hospital-booking/.env",
+            "jinja": true,
+            "justMyCode": true
+        }
+    ]
+}
