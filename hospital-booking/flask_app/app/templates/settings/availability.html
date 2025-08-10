@@ -1,0 +1,935 @@
+<!-- hospital-booking/flask_app/settings/availability.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตั้งค่าเวลาทำการ - MedBooking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .cal-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3e%3cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd' /%3e%3c/svg%3e");
+            background-position: right 8px center;
+            background-repeat: no-repeat;
+            background-size: 16px;
+            padding-right: 32px;
+        }
+        .time-slot-row {
+            transition: all 0.2s ease;
+        }
+        .time-slot-row:hover {
+            background-color: #f9fafb;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <button onclick="history.back()" class="text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <h1 class="text-xl font-semibold text-gray-900">ตั้งค่าเวลาทำการ</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="saveSettings()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                        บันทึก
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div class="space-y-8">
+            <!-- Working Hours -->
+            <div class="bg-white rounded-xl shadow-sm border p-8">
+                <!-- Template Name and Description -->
+                <div class="mb-8 p-6 bg-gray-50 rounded-lg">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">ข้อมูลเทมเพลต</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="templateName" class="block text-sm font-medium text-gray-700 mb-2">ชื่อเทมเพลต *</label>
+                            <input type="text" id="templateName" placeholder="เช่น จันทร์-ศุกร์ (08:30-16:30)" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                   required>
+                        </div>
+                        <div>
+                            <label for="templateDescription" class="block text-sm font-medium text-gray-700 mb-2">คำอธิบาย</label>
+                            <input type="text" id="templateDescription" placeholder="เช่น เวลาทำการปกติวันธรรมดา"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">เลือกวันและเวลาทำการ</h3>
+                        <p class="text-sm text-gray-600 mt-1">กำหนดวันและเวลาที่ให้บริการสำหรับเทมเพลตนี้</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-600">Timezone:</span>
+                        <select id="timezoneSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                            <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <!-- Sunday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Sunday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="sunday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('sunday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="sunday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="sunday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Monday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="monday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('monday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="monday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="monday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tuesday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Tuesday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="tuesday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('tuesday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="tuesday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="tuesday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Wednesday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Wednesday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="wednesday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('wednesday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="wednesday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="wednesday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Thursday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Thursday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="thursday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('thursday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="thursday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="thursday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Friday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Friday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="friday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('friday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="friday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="friday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Saturday -->
+                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                        <div class="w-24">
+                            <label class="text-sm font-medium text-gray-900">Saturday</label>
+                        </div>
+                        <div class="flex-1 flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="saturday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('saturday')">
+                            </div>
+                            <div class="flex-1">
+                                <div id="saturday-slots" class="space-y-2">
+                                    <!-- Time slots will be added here -->
+                                </div>
+                                <div id="saturday-unavailable" class="text-sm text-gray-400 hidden">
+                                    Unavailable
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 p-6 bg-gray-50 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-900 mb-3">Quick actions</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <button onclick="copyMondayToWeekdays()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            Copy Monday to weekdays
+                        </button>
+                        <button onclick="setWorkingHours('09:00', '17:00')" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            Set 9-5 schedule
+                        </button>
+                        <button onclick="clearAllSchedules()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-red-600 hover:text-red-700 transition-colors">
+                            Clear all
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Select days when you're available, then set your time ranges. You can add multiple time slots per day.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Date Overrides -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-medium text-gray-900">วันที่มีการเปลี่ยนแปลง</h2>
+                    <button onclick="addDateOverride()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
+                        เพิ่มวันพิเศษ
+                    </button>
+                </div>
+
+                <div id="dateOverrides" class="space-y-4">
+                    <!-- Date overrides will be added here -->
+                </div>
+
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>ใช้สำหรับกำหนดวันหยุดพิเศษ หรือเปลี่ยนเวลาทำการในวันใดวันหนึ่ง</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="flex justify-end space-x-4">
+                <button onclick="previewSchedule()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                    ดูตัวอย่าง
+                </button>
+                <button onclick="saveSettings()" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                    บันทึกการตั้งค่า
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">ตัวอย่างตารางเวลา</h2>
+                <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div id="previewContent" class="space-y-4">
+                <!-- Preview content will be generated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        // Auto-detect subdomain from current URL
+        function getSubdomain() {
+            const hostname = window.location.hostname;
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Check if subdomain is in URL parameter first
+            if (urlParams.has('subdomain')) {
+                return urlParams.get('subdomain');
+            }
+            
+            // Check if we're on a subdomain like humnoi.localhost
+            if (hostname !== 'localhost' && hostname.includes('.')) {
+                const parts = hostname.split('.');
+                if (parts.length > 1 && parts[1] === 'localhost') {
+                    return parts[0]; // Return subdomain part
+                }
+            }
+            
+            // Default fallback
+            return 'humnoi';
+        }
+        
+        const SUBDOMAIN = getSubdomain();
+        console.log('Using subdomain:', SUBDOMAIN);
+        
+        let timeSlotCounters = {
+            sunday: 0, monday: 0, tuesday: 0, wednesday: 0, 
+            thursday: 0, friday: 0, saturday: 0
+        };
+
+        // Toggle day enabled/disabled
+        function toggleDay(day) {
+            const checkbox = document.getElementById(`${day}-enabled`);
+            const slotsContainer = document.getElementById(`${day}-slots`);
+            const unavailableDiv = document.getElementById(`${day}-unavailable`);
+            
+            if (checkbox.checked) {
+                // Show time slots, hide unavailable text
+                slotsContainer.classList.remove('hidden');
+                unavailableDiv.classList.add('hidden');
+                
+                // Add first time slot if none exist
+                if (timeSlotCounters[day] === 0) {
+                    addTimeSlot(day);
+                }
+            } else {
+                // Hide time slots, show unavailable text
+                slotsContainer.classList.add('hidden');
+                unavailableDiv.classList.remove('hidden');
+                
+                // Clear all time slots
+                slotsContainer.innerHTML = '';
+                timeSlotCounters[day] = 0;
+            }
+        }
+
+        function addTimeSlot(day) {
+            timeSlotCounters[day]++;
+            const slotsContainer = document.getElementById(`${day}-slots`);
+            
+            const newSlot = document.createElement('div');
+            newSlot.className = 'flex items-center space-x-2 py-1';
+            newSlot.id = `${day}-slot-${timeSlotCounters[day]}`;
+            
+            const showRemoveButton = timeSlotCounters[day] > 1 || slotsContainer.children.length > 0;
+            
+            newSlot.innerHTML = `
+                <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                    ${generateTimeOptions('08:30')}
+                </select>
+                <span class="text-gray-400">—</span>
+                <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                    ${generateTimeOptions('17:00')}
+                </select>
+                <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                </button>
+                ${showRemoveButton ? `
+                <button onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>` : ''}
+            `;
+            
+            slotsContainer.appendChild(newSlot);
+        }
+        
+        function generateTimeOptions(selectedTime = '09:00') {
+            const times = [];
+            for (let hour = 0; hour < 24; hour++) {
+                for (let minute = 0; minute < 60; minute += 15) {
+                    const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                    const selected = timeStr === selectedTime ? 'selected' : '';
+                    times.push(`<option value="${timeStr}" ${selected}>${timeStr}</option>`);
+                }
+            }
+            return times.join('');
+        }
+
+        function removeTimeSlot(day, slotNumber) {
+            const slot = document.getElementById(`${day}-slot-${slotNumber}`);
+            if (slot) {
+                slot.remove();
+            }
+        }
+        
+        // Quick action functions
+        function copyMondayToWeekdays() {
+            const mondayCheckbox = document.getElementById('monday-enabled');
+            const weekdays = ['tuesday', 'wednesday', 'thursday', 'friday'];
+            
+            if (!mondayCheckbox.checked) {
+                alert('Please set Monday schedule first');
+                return;
+            }
+            
+            // Get Monday's time slots
+            const mondaySlots = [];
+            let slotNum = 1;
+            while (document.getElementById(`monday-start-${slotNum}`)) {
+                const startSelect = document.getElementById(`monday-start-${slotNum}`);
+                const endSelect = document.getElementById(`monday-end-${slotNum}`);
+                
+                if (startSelect && endSelect) {
+                    mondaySlots.push({
+                        start: startSelect.value,
+                        end: endSelect.value
+                    });
+                }
+                slotNum++;
+            }
+            
+            // Apply to other weekdays
+            weekdays.forEach(day => {
+                const checkbox = document.getElementById(`${day}-enabled`);
+                const slotsContainer = document.getElementById(`${day}-slots`);
+                
+                // Clear existing slots
+                slotsContainer.innerHTML = '';
+                timeSlotCounters[day] = 0;
+                
+                // Enable the day
+                checkbox.checked = true;
+                
+                // Show slots container and hide unavailable text
+                slotsContainer.classList.remove('hidden');
+                document.getElementById(`${day}-unavailable`).classList.add('hidden');
+                
+                // Add Monday's time slots
+                mondaySlots.forEach(slot => {
+                    timeSlotCounters[day]++;
+                    const newSlot = document.createElement('div');
+                    newSlot.className = 'flex items-center space-x-2 py-1';
+                    newSlot.id = `${day}-slot-${timeSlotCounters[day]}`;
+                    
+                    const showRemoveButton = timeSlotCounters[day] > 1;
+                    
+                    newSlot.innerHTML = `
+                        <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                            ${generateTimeOptions(slot.start)}
+                        </select>
+                        <span class="text-gray-400">—</span>
+                        <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                            ${generateTimeOptions(slot.end)}
+                        </select>
+                        <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </button>
+                        ${showRemoveButton ? `
+                        <button onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>` : ''}
+                    `;
+                    
+                    slotsContainer.appendChild(newSlot);
+                });
+            });
+        }
+        
+        function setWorkingHours(startTime, endTime) {
+            const workingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+            
+            // Also set template name if empty
+            const templateNameInput = document.getElementById('templateName');
+            if (!templateNameInput.value.trim()) {
+                templateNameInput.value = `จันทร์-ศุกร์ (${startTime}-${endTime})`;
+            }
+            
+            const templateDescInput = document.getElementById('templateDescription');
+            if (!templateDescInput.value.trim()) {
+                templateDescInput.value = 'เวลาทำการปกติวันธรรมดา';
+            }
+            
+            workingDays.forEach(day => {
+                const checkbox = document.getElementById(`${day}-enabled`);
+                const slotsContainer = document.getElementById(`${day}-slots`);
+                
+                // Clear existing
+                slotsContainer.innerHTML = '';
+                timeSlotCounters[day] = 0;
+                
+                // Enable day
+                checkbox.checked = true;
+                slotsContainer.classList.remove('hidden');
+                document.getElementById(`${day}-unavailable`).classList.add('hidden');
+                
+                // Add single time slot
+                timeSlotCounters[day] = 1;
+                const newSlot = document.createElement('div');
+                newSlot.className = 'flex items-center space-x-2 py-1';
+                newSlot.id = `${day}-slot-1`;
+                
+                newSlot.innerHTML = `
+                    <select id="${day}-start-1" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                        ${generateTimeOptions(startTime)}
+                    </select>
+                    <span class="text-gray-400">—</span>
+                    <select id="${day}-end-1" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
+                        ${generateTimeOptions(endTime)}
+                    </select>
+                    <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                    </button>
+                `;
+                
+                slotsContainer.appendChild(newSlot);
+            });
+        }
+        
+        function clearAllSchedules() {
+            if (!confirm('Are you sure you want to clear all schedules?')) return;
+            
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            
+            days.forEach(day => {
+                const checkbox = document.getElementById(`${day}-enabled`);
+                const slotsContainer = document.getElementById(`${day}-slots`);
+                
+                checkbox.checked = false;
+                slotsContainer.innerHTML = '';
+                timeSlotCounters[day] = 0;
+                
+                slotsContainer.classList.add('hidden');
+                document.getElementById(`${day}-unavailable`).classList.remove('hidden');
+            });
+        }
+
+        function addDateOverride() {
+            const container = document.getElementById('dateOverrides');
+            const overrideId = Date.now();
+            
+            const override = document.createElement('div');
+            override.className = 'border rounded-lg p-4 bg-yellow-50';
+            override.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3">
+                        <input type="date" class="px-3 py-2 border border-gray-300 rounded-md">
+                        <span class="text-sm font-medium text-gray-700">เลือกวันที่</span>
+                    </div>
+                    <button onclick="removeOverride(this)" class="text-red-600 hover:text-red-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="flex items-center space-x-2 mb-2">
+                            <input type="radio" name="override-type-${overrideId}" value="unavailable" class="text-purple-600">
+                            <span class="text-sm">วันหยุด</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="override-type-${overrideId}" value="custom" checked class="text-purple-600">
+                            <span class="text-sm">เวลาพิเศษ</span>
+                        </label>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <input type="time" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                            <span class="text-gray-500">-</span>
+                            <input type="time" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                        </div>
+                        <input type="text" placeholder="เหตุผล (ไม่บังคับ)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(override);
+        }
+
+        function removeOverride(button) {
+            button.closest('.border').remove();
+        }
+
+        function previewSchedule() {
+            const modal = document.getElementById('previewModal');
+            const content = document.getElementById('previewContent');
+            
+            // Generate preview content
+            content.innerHTML = generatePreviewHTML();
+            modal.classList.remove('hidden');
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').classList.add('hidden');
+        }
+
+        function generatePreviewHTML() {
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+            
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+            
+            days.forEach((day, index) => {
+                const enabled = document.getElementById(`${day}-enabled`).checked;
+                const dayName = dayNames[index];
+                
+                html += `<div class="border rounded-lg p-4 ${enabled ? 'bg-green-50' : 'bg-gray-50'}">`;
+                html += `<h3 class="font-medium text-gray-900 mb-2">${dayName}</h3>`;
+                
+                if (enabled) {
+                    const slots = [];
+                    let slotNum = 1;
+                    while (document.getElementById(`${day}-start-${slotNum}`)) {
+                        const startSelect = document.getElementById(`${day}-start-${slotNum}`);
+                        const endSelect = document.getElementById(`${day}-end-${slotNum}`);
+                        
+                        if (startSelect && endSelect) {
+                            const start = startSelect.value;
+                            const end = endSelect.value;
+                            slots.push(`${start} - ${end}`);
+                        }
+                        slotNum++;
+                    }
+                    
+                    html += `<div class="space-y-1">`;
+                    slots.forEach(slot => {
+                        html += `<div class="text-sm text-green-700">${slot}</div>`;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `<div class="text-sm text-gray-500">ปิด</div>`;
+                }
+                
+                html += `</div>`;
+            });
+            
+            html += '</div>';
+            
+            // Add date overrides section
+            const overrides = document.querySelectorAll('#dateOverrides > div');
+            if (overrides.length > 0) {
+                html += '<div class="mt-6 border-t pt-6">';
+                html += '<h3 class="font-medium text-gray-900 mb-4">วันที่มีการเปลี่ยนแปลง</h3>';
+                html += '<div class="space-y-2">';
+                
+                overrides.forEach(override => {
+                    const date = override.querySelector('input[type="date"]').value;
+                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
+                    
+                    if (date) {
+                        if (isUnavailable) {
+                            html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-red-600">วันหยุด</span></div>`;
+                        } else {
+                            const times = override.querySelectorAll('input[type="time"]');
+                            const start = times[0].value;
+                            const end = times[1].value;
+                            const reason = override.querySelector('input[type="text"]').value;
+                            
+                            html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-blue-600">${start} - ${end}</span>`;
+                            if (reason) html += ` <span class="text-gray-500">(${reason})</span>`;
+                            html += `</div>`;
+                        }
+                    }
+                });
+                
+                html += '</div></div>';
+            }
+            
+            return html;
+        }
+
+        async function saveSettings() {
+            try {
+                // Get template name and description
+                const templateName = document.getElementById('templateName').value.trim();
+                const templateDescription = document.getElementById('templateDescription').value.trim();
+                
+                if (!templateName) {
+                    alert('กรุณาใส่ชื่อเทมเพลต');
+                    return;
+                }
+                
+                // Collect weekly schedule data
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                const schedule = {};
+                let hasAnySchedule = false;
+                
+                for (let index = 0; index < days.length; index++) {
+                    const day = days[index];
+                    const enabled = document.getElementById(`${day}-enabled`).checked;
+                    
+                    if (enabled) {
+                        schedule[index] = []; // day_of_week as key, slots as array
+                        
+                        let slotNum = 1;
+                        while (document.getElementById(`${day}-start-${slotNum}`)) {
+                            const startSelect = document.getElementById(`${day}-start-${slotNum}`);
+                            const endSelect = document.getElementById(`${day}-end-${slotNum}`);
+                            
+                            if (startSelect && endSelect) {
+                                const start = startSelect.value;
+                                const end = endSelect.value;
+                                
+                                // Add time slot to this day
+                                schedule[index].push([start, end]);
+                                hasAnySchedule = true;
+                            }
+                            
+                            slotNum++;
+                        }
+                    }
+                }
+                
+                if (!hasAnySchedule) {
+                    alert('กรุณาเลือกอย่างน้อยหนึ่งวันและกำหนดเวลา');
+                    return;
+                }
+                
+                // Create WeeklySchedule payload
+                const weeklySchedule = {
+                    name: templateName,
+                    description: templateDescription || `เวลาทำการ ${templateName}`,
+                    timezone: document.getElementById('timezoneSelect').value,
+                    schedule: schedule
+                };
+                
+                // Send single POST request to new endpoint
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(weeklySchedule)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to save availability template');
+                }
+                
+                const data = await response.json();
+                console.log('Saved weekly schedule:', data);
+                
+                // Save date overrides (no provider_id needed)
+                const overrides = document.querySelectorAll('#dateOverrides > div');
+                for (const override of overrides) {
+                    const date = override.querySelector('input[type="date"]').value;
+                    if (!date) continue;
+                    
+                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
+                    const reason = override.querySelector('input[type="text"]').value;
+                    
+                    const overrideData = {
+                        date: date,
+                        is_unavailable: isUnavailable,
+                        reason: reason
+                    };
+                    
+                    if (!isUnavailable) {
+                        const times = override.querySelectorAll('input[type="time"]');
+                        overrideData.custom_start_time = times[0].value;
+                        overrideData.custom_end_time = times[1].value;
+                    }
+                    
+                    const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/date-overrides`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(overrideData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to save date override');
+                    }
+                }
+                
+                alert(`บันทึกเทมเพลต "${templateName}" เรียบร้อยแล้ว! สร้าง ${data.ids.length} รายการ`);
+                
+                // Clear form
+                document.getElementById('templateName').value = '';
+                document.getElementById('templateDescription').value = '';
+                
+                // Uncheck all days and clear time slots
+                days.forEach(day => {
+                    const checkbox = document.getElementById(`${day}-enabled`);
+                    const slotsContainer = document.getElementById(`${day}-slots`);
+                    const unavailableDiv = document.getElementById(`${day}-unavailable`);
+                    
+                    checkbox.checked = false;
+                    slotsContainer.innerHTML = '';
+                    slotsContainer.classList.add('hidden');
+                    unavailableDiv.classList.remove('hidden');
+                });
+                
+                // Reset counters
+                timeSlotCounters = {
+                    sunday: 0, monday: 0, tuesday: 0, wednesday: 0, 
+                    thursday: 0, friday: 0, saturday: 0
+                };
+                
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize all days as unavailable
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            days.forEach(day => {
+                document.getElementById(`${day}-unavailable`).classList.remove('hidden');
+            });
+            
+            // Load and display existing templates
+            loadExistingTemplates();
+        });
+        
+        // Load existing templates for display/editing
+        async function loadExistingTemplates() {
+            try {
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates`);
+                const data = await response.json();
+                displayExistingTemplates(data.templates || []);
+            } catch (error) {
+                console.error('Error loading existing templates:', error);
+            }
+        }
+        
+        // Display existing templates list
+        function displayExistingTemplates(templates) {
+            if (templates.length === 0) return;
+            
+            // Create templates display section
+            const container = document.querySelector('.max-w-5xl > .space-y-8');
+            const templatesSection = document.createElement('div');
+            templatesSection.className = 'bg-white rounded-xl shadow-sm border p-8';
+            templatesSection.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-medium text-gray-900">เทมเพลตที่มีอยู่</h2>
+                    <span class="text-sm text-gray-500">${templates.length} เทมเพลต</span>
+                </div>
+                <div id="existingTemplates" class="space-y-4">
+                    ${templates.map(template => `
+                        <div class="border rounded-lg p-4 bg-gray-50">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-medium text-gray-900">${template.name}</h3>
+                                    ${template.description ? `<p class="text-sm text-gray-600 mt-1">${template.description}</p>` : ''}
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <span class="text-sm text-gray-500">วัน: ${template.days.map(d => ['อา','จ','อ','พ','พฤ','ศ','ส'][d]).join(', ')}</span>
+                                        <span class="text-sm text-gray-500">เขตเวลา: ${template.timezone}</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="editTemplate(${template.id})" class="text-blue-600 hover:text-blue-700 text-sm">แก้ไข</button>
+                                    <button onclick="deleteTemplate(${template.id})" class="text-red-600 hover:text-red-700 text-sm">ลบ</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            // Insert before the main form
+            container.insertBefore(templatesSection, container.firstElementChild);
+        }
+        
+        // Edit template function
+        async function editTemplate(templateId) {
+            alert('การแก้ไข template จะมาในอนาคต (ตอนนี้ใช้การลบแล้วสร้างใหม่)');
+        }
+        
+        // Delete template function  
+        async function deleteTemplate(templateId) {
+            if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตทั้งหมดที่ใช้ชื่อนี้?')) return;
+            
+            try {
+                // First get all availability records for this template name
+                const templatesResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates`);
+                const templatesData = await templatesResponse.json();
+                const targetTemplate = templatesData.templates.find(t => t.id === templateId);
+                
+                if (!targetTemplate) {
+                    throw new Error('Template not found');
+                }
+                
+                // Get all availability records to find ones with same name
+                const availResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`);
+                const availData = await availResponse.json();
+                const recordsToDelete = availData.availabilities.filter(a => a.name === targetTemplate.name);
+                
+                // Delete all records with this template name
+                let deleteCount = 0;
+                for (const record of recordsToDelete) {
+                    const deleteResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/${record.id}`, {
+                        method: 'DELETE'
+                    });
+                    if (deleteResponse.ok) {
+                        deleteCount++;
+                    }
+                }
+                
+                alert(`ลบเทมเพลต "${targetTemplate.name}" เรียบร้อยแล้ว (${deleteCount} รายการ)`);
+                location.reload(); // Reload page to refresh templates list
+                
+            } catch (error) {
+                console.error('Error deleting template:', error);
+                alert('เกิดข้อผิดพลาดในการลบ: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

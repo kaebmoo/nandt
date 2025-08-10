@@ -299,19 +299,41 @@ def admin_check_database():
 @bp.route('/settings/working-hours')
 @login_required
 def working_hours():
-    """หน้าตั้งค่าเวลาทำการ"""
+    """หน้าตั้งค่าเวลาทำการ (เก่า - redirect ไปใหม่)"""
+    return redirect(url_for('main.availability_settings'))
+
+@bp.route('/settings/availability')
+@login_required
+def availability_settings():
+    """หน้าตั้งค่าเวลาทำการ (Availability)"""
     current_user = get_current_user()
     if not current_user:
         flash('กรุณาเข้าสู่ระบบ', 'error')
         return redirect(url_for('auth.login'))
     
-    # ใช้ข้อมูลจาก current_user แทน get_tenant_info()
     hospital = current_user.hospital
     if not hospital:
         flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
         return redirect(url_for('main.index'))
     
-    return render_template('settings/working_hours.html', 
+    return render_template('settings/availability.html', 
+                         current_user=current_user)
+
+@bp.route('/settings/event-types')
+@login_required
+def event_types_settings():
+    """หน้าตั้งค่าประเภทการนัดหมาย (Event Types)"""
+    current_user = get_current_user()
+    if not current_user:
+        flash('กรุณาเข้าสู่ระบบ', 'error')
+        return redirect(url_for('auth.login'))
+    
+    hospital = current_user.hospital
+    if not hospital:
+        flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
+        return redirect(url_for('main.index'))
+    
+    return render_template('settings/event-types.html', 
                          current_user=current_user)
 
 @bp.route('/book/<provider_url>')

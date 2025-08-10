@@ -1,21 +1,23 @@
-# fastapi_app/app/availability.py - Availability Management API
+# fastapi_app/app/availability_api.py - Availability API endpoints
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import datetime, date, time, timedelta
-import calendar
-
-# Import models
+from sqlalchemy import text
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Tuple
 import sys
+import datetime
+from datetime import time
+import uuid
+
+# Import database and models
+from .database import SessionLocal
 sys.path.append('flask_app/app')
 import models
 
-from .database import SessionLocal
+router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["availability"])
 
-router = APIRouter(prefix="/api/v1", tags=["availability"])
-
+# --- Dependency ---
 def get_db():
     db = SessionLocal()
     try:
@@ -23,344 +25,430 @@ def get_db():
     finally:
         db.close()
 
-# Pydantic Models
+def get_tenant_db(subdomain: str, db: Session):
+    """Set database search path to tenant schema"""
+    schema_name = f"tenant_{subdomain}"
+    try:
+        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        return db
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
+
+# --- Pydantic Models ---
 class AvailabilityCreate(BaseModel):
-    provider_id: int
-    event_type_id: int
+    name: str  # "จันทร์-ศุกร์ (08:30-16:30)"
+    description: Optional[str] = None
     day_of_week: int  # 0=Sunday, 1=Monday, etc.
-    start_time: str   # "09:00"
-    end_time: str     # "17:00"
+    start_time: str  # "08:30"
+    end_time: str    # "17:00"
     timezone: str = "Asia/Bangkok"
 
 class AvailabilityResponse(BaseModel):
     id: int
-    provider_id: int
-    event_type_id: int
+    name: str
+    description: Optional[str]
     day_of_week: int
     start_time: str
     end_time: str
     timezone: str
     is_active: bool
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
 
 class DateOverrideCreate(BaseModel):
-    provider_id: int
-    date: str  # "2025-08-14"
+    date: str  # "2025-08-19"
     is_unavailable: bool = False
     custom_start_time: Optional[str] = None  # "09:00"
-    custom_end_time: Optional[str] = None    # "12:00"
+    custom_end_time: Optional[str] = None    # "17:00"
     reason: Optional[str] = None
 
-class EventTypeCreate(BaseModel):
+class DateOverrideResponse(BaseModel):
+    id: int
+    date: datetime.datetime
+    is_unavailable: bool
+    custom_start_time: Optional[str]
+    custom_end_time: Optional[str]
+    reason: Optional[str]
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# New WeeklySchedule model
+class WeeklySchedule(BaseModel):
     name: str
-    slug: str
     description: Optional[str] = None
-    duration_minutes: int = 15
-    color: str = "#6366f1"
-    buffer_before_minutes: int = 0
-    buffer_after_minutes: int = 0
-    max_bookings_per_day: Optional[int] = None
-    min_notice_hours: int = 4
-    max_advance_days: int = 60
+    timezone: str = "Asia/Bangkok"
+    # A dictionary mapping day of week (int) to a list of time slots
+    schedule: Dict[int, List[Tuple[str, str]]]
 
-class ProviderCreate(BaseModel):
+class AvailabilityTemplate(BaseModel):
+    id: int
     name: str
-    title: Optional[str] = None
-    department: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    public_booking_url: Optional[str] = None
-    bio: Optional[str] = None
+    description: Optional[str]
+    days: List[int]
+    
+    class Config:
+        from_attributes = True
 
-class TimeSlot(BaseModel):
-    start_time: str
-    end_time: str
-    available: bool
-    booking_url: Optional[str] = None
+def parse_time(time_str: str) -> time:
+    """Convert time string to time object"""
+    try:
+        hour, minute = map(int, time_str.split(':'))
+        return time(hour, minute)
+    except:
+        raise ValueError(f"Invalid time format: {time_str}")
 
-class AvailableDay(BaseModel):
-    date: str
-    day_name: str
-    slots: List[TimeSlot]
-
-# Helper Functions
-def get_tenant_db(db: Session, subdomain: str):
-    """Switch to tenant schema"""
-    schema_name = f"tenant_{subdomain}"
-    db.execute(f'SET search_path TO "{schema_name}", public')
-    return db
-
-def time_to_str(t: time) -> str:
+def format_time(time_obj: time) -> str:
     """Convert time object to string"""
-    return t.strftime("%H:%M")
+    return time_obj.strftime("%H:%M")
 
-def str_to_time(s: str) -> time:
-    """Convert string to time object"""
-    return datetime.strptime(s, "%H:%M").time()
+# --- API Endpoints ---
 
-def generate_time_slots(start_time: time, end_time: time, duration_minutes: int) -> List[dict]:
-    """Generate available time slots"""
-    slots = []
-    current = datetime.combine(date.today(), start_time)
-    end = datetime.combine(date.today(), end_time)
-    
-    while current + timedelta(minutes=duration_minutes) <= end:
-        slot_end = current + timedelta(minutes=duration_minutes)
-        slots.append({
-            "start_time": current.strftime("%H:%M"),
-            "end_time": slot_end.strftime("%H:%M"),
-            "available": True
-        })
-        current = slot_end
-    
-    return slots
-
-# API Endpoints
-
-@router.post("/tenants/{subdomain}/providers")
-def create_provider(
+@router.get("/availability", response_model=dict)
+async def get_availability(
     subdomain: str,
-    provider: ProviderCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้างผู้ให้บริการใหม่"""
+    """Get availability schedules for a tenant"""
     try:
-        get_tenant_db(db, subdomain)
+        get_tenant_db(subdomain, db)
         
-        # Check if public_booking_url is unique
-        if provider.public_booking_url:
-            existing = db.query(models.Provider).filter_by(
-                public_booking_url=provider.public_booking_url
-            ).first()
-            if existing:
-                raise HTTPException(status_code=409, detail="Booking URL already exists")
-        
-        new_provider = models.Provider(**provider.dict())
-        db.add(new_provider)
-        db.commit()
-        db.refresh(new_provider)
-        
-        return {"message": "Provider created successfully", "provider_id": new_provider.id}
-    
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/tenants/{subdomain}/event-types")
-def create_event_type(
-    subdomain: str,
-    event_type: EventTypeCreate,
-    db: Session = Depends(get_db)
-):
-    """สร้างประเภทการนัดหมายใหม่"""
-    try:
-        get_tenant_db(db, subdomain)
-        
-        new_event_type = models.EventType(**event_type.dict())
-        db.add(new_event_type)
-        db.commit()
-        db.refresh(new_event_type)
-        
-        return {"message": "Event type created successfully", "event_type_id": new_event_type.id}
-    
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/tenants/{subdomain}/availability")
-def create_availability(
-    subdomain: str,
-    availability: AvailabilityCreate,
-    db: Session = Depends(get_db)
-):
-    """ตั้งค่าความพร้อมให้บริการ"""
-    try:
-        get_tenant_db(db, subdomain)
-        
-        new_availability = models.Availability(
-            provider_id=availability.provider_id,
-            event_type_id=availability.event_type_id,
-            day_of_week=models.DayOfWeek(availability.day_of_week),
-            start_time=str_to_time(availability.start_time),
-            end_time=str_to_time(availability.end_time),
-            timezone=availability.timezone
-        )
-        
-        db.add(new_availability)
-        db.commit()
-        db.refresh(new_availability)
-        
-        return {"message": "Availability created successfully", "availability_id": new_availability.id}
-    
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/tenants/{subdomain}/providers/{provider_id}/availability")
-def get_provider_availability(
-    subdomain: str,
-    provider_id: int,
-    db: Session = Depends(get_db)
-):
-    """ดูตารางความพร้อมของผู้ให้บริการ"""
-    try:
-        get_tenant_db(db, subdomain)
-        
-        availabilities = db.query(models.Availability).filter_by(
-            provider_id=provider_id,
-            is_active=True
+        availabilities = db.query(models.Availability).order_by(
+            models.Availability.day_of_week, 
+            models.Availability.start_time
         ).all()
         
+        # Convert to response format
         result = []
         for avail in availabilities:
             result.append({
                 "id": avail.id,
-                "day_of_week": avail.day_of_week.value,
-                "day_name": avail.day_of_week.name.capitalize(),
-                "start_time": time_to_str(avail.start_time),
-                "end_time": time_to_str(avail.end_time),
-                "event_type_id": avail.event_type_id,
-                "timezone": avail.timezone
+                "name": avail.name,
+                "description": avail.description,
+                "day_of_week": avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week,
+                "start_time": format_time(avail.start_time),
+                "end_time": format_time(avail.end_time),
+                "timezone": avail.timezone,
+                "is_active": avail.is_active,
+                "created_at": avail.created_at
             })
         
-        return {"availabilities": result}
-    
+        return {
+            "availabilities": result
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/tenants/{subdomain}/date-overrides")
-def create_date_override(
+# Keep old single-day endpoint for backward compatibility
+@router.post("/availability/single", response_model=dict)
+async def create_single_availability(
     subdomain: str,
-    override: DateOverrideCreate,
+    availability_data: AvailabilityCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้างการปรับเปลี่ยนตารางในวันเฉพาะ"""
+    """Create single availability slot (backward compatibility)"""
     try:
-        get_tenant_db(db, subdomain)
+        get_tenant_db(subdomain, db)
         
-        override_date = datetime.strptime(override.date, "%Y-%m-%d").date()
+        # Convert time strings to time objects
+        start_time = parse_time(availability_data.start_time)
+        end_time = parse_time(availability_data.end_time)
         
-        new_override = models.DateOverride(
-            provider_id=override.provider_id,
-            date=override_date,
-            is_unavailable=override.is_unavailable,
-            custom_start_time=str_to_time(override.custom_start_time) if override.custom_start_time else None,
-            custom_end_time=str_to_time(override.custom_end_time) if override.custom_end_time else None,
-            reason=override.reason
+        # Validate time range
+        if start_time >= end_time:
+            raise HTTPException(status_code=400, detail="Start time must be before end time")
+        
+        # Create availability
+        availability = models.Availability(
+            name=availability_data.name,
+            description=availability_data.description,
+            day_of_week=models.DayOfWeek(availability_data.day_of_week),
+            start_time=start_time,
+            end_time=end_time,
+            timezone=availability_data.timezone,
+            is_active=True
         )
         
-        db.add(new_override)
+        db.add(availability)
         db.commit()
-        db.refresh(new_override)
+        db.refresh(availability)
         
-        return {"message": "Date override created successfully", "override_id": new_override.id}
-    
+        return {
+            "message": "Availability created successfully",
+            "availability": {
+                "id": availability.id,
+                "name": availability.name,
+                "description": availability.description,
+                "day_of_week": availability.day_of_week.value,
+                "start_time": format_time(availability.start_time),
+                "end_time": format_time(availability.end_time),
+                "timezone": availability.timezone,
+                "is_active": availability.is_active,
+                "created_at": availability.created_at
+            }
+        }
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tenants/{subdomain}/available-slots")
-def get_available_slots(
+# New weekly schedule endpoint
+@router.post("/availability", response_model=dict)
+async def create_availability(
     subdomain: str,
-    provider_id: int,
-    event_type_id: int,
-    start_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
-    days: int = Query(30, description="Number of days to fetch"),
+    schedule_data: WeeklySchedule,
     db: Session = Depends(get_db)
 ):
-    """ดูช่วงเวลาที่ว่างสำหรับการจอง"""
+    """Create availability template with weekly schedule"""
     try:
-        get_tenant_db(db, subdomain)
+        get_tenant_db(subdomain, db)
         
-        # Get provider and event type
-        provider = db.query(models.Provider).filter_by(id=provider_id).first()
-        event_type = db.query(models.EventType).filter_by(id=event_type_id).first()
+        created_ids = []
         
-        if not provider or not event_type:
-            raise HTTPException(status_code=404, detail="Provider or event type not found")
+        # Begin transaction
+        for day_of_week, slots in schedule_data.schedule.items():
+            # Validate day of week
+            if not 0 <= day_of_week <= 6:
+                raise HTTPException(status_code=400, detail=f"Invalid day of week: {day_of_week}")
+                
+            for start_time_str, end_time_str in slots:
+                # Convert time strings to time objects
+                start_time = parse_time(start_time_str)
+                end_time = parse_time(end_time_str)
+                
+                # Validate time range
+                if start_time >= end_time:
+                    raise HTTPException(status_code=400, detail=f"Start time must be before end time for day {day_of_week}")
+                
+                # Create availability record
+                availability = models.Availability(
+                    name=schedule_data.name,
+                    description=schedule_data.description,
+                    day_of_week=models.DayOfWeek(day_of_week),
+                    start_time=start_time,
+                    end_time=end_time,
+                    timezone=schedule_data.timezone,
+                    is_active=True
+                )
+                
+                db.add(availability)
+                db.flush()  # Get ID without committing
+                created_ids.append(availability.id)
+                
+        db.commit()
+        return {"message": "Availability template created successfully", "ids": created_ids}
         
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        available_days = []
+    except ValueError as ve:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/availability/templates", response_model=dict)
+async def get_availability_templates(
+    subdomain: str,
+    db: Session = Depends(get_db)
+):
+    """Get availability templates grouped by name"""
+    try:
+        get_tenant_db(subdomain, db)
         
-        for i in range(days):
-            current_date = start + timedelta(days=i)
-            day_of_week = current_date.weekday()  # 0=Monday
-            day_of_week_sunday = (day_of_week + 1) % 7  # Convert to 0=Sunday
-            
-            # Get regular availability for this day
-            availability = db.query(models.Availability).filter_by(
-                provider_id=provider_id,
-                event_type_id=event_type_id,
-                day_of_week=models.DayOfWeek(day_of_week_sunday),
-                is_active=True
-            ).first()
-            
-            if not availability:
-                continue
-            
-            # Check for date overrides
-            date_override = db.query(models.DateOverride).filter_by(
-                provider_id=provider_id,
-                date=current_date
-            ).first()
-            
-            # Skip if unavailable
-            if date_override and date_override.is_unavailable:
-                continue
-            
-            # Use override times if available
-            if date_override and date_override.custom_start_time:
-                start_time = date_override.custom_start_time
-                end_time = date_override.custom_end_time
-            else:
-                start_time = availability.start_time
-                end_time = availability.end_time
-            
-            # Generate time slots
-            slots = generate_time_slots(start_time, end_time, event_type.duration_minutes)
-            
-            # Check existing appointments to mark slots as unavailable
-            existing_appointments = db.query(models.Appointment).filter(
-                models.Appointment.provider_id == provider_id,
-                models.Appointment.start_time >= datetime.combine(current_date, time.min),
-                models.Appointment.start_time < datetime.combine(current_date + timedelta(days=1), time.min),
-                models.Appointment.status.in_(['confirmed', 'rescheduled'])
-            ).all()
-            
-            booked_times = {appt.start_time.strftime("%H:%M") for appt in existing_appointments}
-            
-            for slot in slots:
-                if slot["start_time"] in booked_times:
-                    slot["available"] = False
-                else:
-                    # Generate booking URL
-                    slot["booking_url"] = f"/book/{provider.public_booking_url}/{event_type.slug}?date={current_date}&time={slot['start_time']}"
-            
-            available_days.append({
-                "date": current_date.strftime("%Y-%m-%d"),
-                "day_name": calendar.day_name[current_date.weekday()],
-                "slots": slots
-            })
+        availabilities = db.query(models.Availability).filter(
+            models.Availability.is_active == True
+        ).order_by(models.Availability.name, models.Availability.day_of_week).all()
         
-        return {"available_days": available_days}
-    
+        templates = {}
+        for avail in availabilities:
+            template_name = avail.name or f"Template {avail.id}"
+            
+            if template_name not in templates:
+                templates[template_name] = {
+                    "id": avail.id,  # Store the first ID found for the group
+                    "name": template_name,
+                    "description": avail.description,
+                    "days": [],
+                    "timezone": avail.timezone
+                }
+            
+            day_value = avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week
+            if day_value not in templates[template_name]["days"]:
+                templates[template_name]["days"].append(day_value)
+            
+        return {"templates": list(templates.values())}
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tenants/{subdomain}/providers")
-def list_providers(
+@router.delete("/availability/{availability_id}")
+async def delete_availability(
     subdomain: str,
-    active_only: bool = True,
+    availability_id: int,
     db: Session = Depends(get_db)
 ):
-    """รายการผู้ให้บริการ"""
+    """Delete availability slot"""
     try:
-        get_tenant_db(db, subdomain)
+        get_tenant_db(subdomain, db)
         
-        query = db.query(models.Provider)
-        if active_only:
-            query = query.filter_by(is_active=True)
+        availability = db.query(models.Availability).filter(
+            models.Availability.id == availability_id
+        ).first()
         
-        providers = query.all()
+        if not availability:
+            raise HTTPException(status_code=404, detail="Availability not found")
+        
+        db.delete(availability)
+        db.commit()
+        
+        return {"message": "Availability deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Date Overrides ---
+
+@router.get("/date-overrides", response_model=dict)
+async def get_date_overrides(
+    subdomain: str,
+    db: Session = Depends(get_db)
+):
+    """Get date overrides for a tenant"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        overrides = db.query(models.DateOverride).order_by(models.DateOverride.date).all()
+        
+        # Convert to response format
+        result = []
+        for override in overrides:
+            result.append({
+                "id": override.id,
+                "date": override.date.strftime("%Y-%m-%d"),
+                "is_unavailable": override.is_unavailable,
+                "custom_start_time": format_time(override.custom_start_time) if override.custom_start_time else None,
+                "custom_end_time": format_time(override.custom_end_time) if override.custom_end_time else None,
+                "reason": override.reason,
+                "created_at": override.created_at
+            })
+        
+        return {
+            "date_overrides": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/date-overrides", response_model=dict)
+async def create_date_override(
+    subdomain: str,
+    override_data: DateOverrideCreate,
+    db: Session = Depends(get_db)
+):
+    """Create date override"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        # Parse date
+        try:
+            override_date = datetime.datetime.strptime(override_data.date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        
+        # Parse times if provided
+        custom_start_time = None
+        custom_end_time = None
+        
+        if override_data.custom_start_time:
+            custom_start_time = parse_time(override_data.custom_start_time)
+        
+        if override_data.custom_end_time:
+            custom_end_time = parse_time(override_data.custom_end_time)
+        
+        # Validate time range if both provided
+        if custom_start_time and custom_end_time and custom_start_time >= custom_end_time:
+            raise HTTPException(status_code=400, detail="Start time must be before end time")
+        
+        # Create date override
+        override = models.DateOverride(
+            date=override_date,
+            is_unavailable=override_data.is_unavailable,
+            custom_start_time=custom_start_time,
+            custom_end_time=custom_end_time,
+            reason=override_data.reason
+        )
+        
+        db.add(override)
+        db.commit()
+        db.refresh(override)
+        
+        return {
+            "message": "Date override created successfully",
+            "date_override": {
+                "id": override.id,
+                "date": override.date.strftime("%Y-%m-%d"),
+                "is_unavailable": override.is_unavailable,
+                "custom_start_time": format_time(override.custom_start_time) if override.custom_start_time else None,
+                "custom_end_time": format_time(override.custom_end_time) if override.custom_end_time else None,
+                "reason": override.reason,
+                "created_at": override.created_at
+            }
+        }
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/date-overrides/{override_id}")
+async def delete_date_override(
+    subdomain: str,
+    override_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete date override"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        override = db.query(models.DateOverride).filter(
+            models.DateOverride.id == override_id
+        ).first()
+        
+        if not override:
+            raise HTTPException(status_code=404, detail="Date override not found")
+        
+        db.delete(override)
+        db.commit()
+        
+        return {"message": "Date override deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Providers (for dropdown) ---
+
+@router.get("/providers", response_model=dict)
+async def get_providers(
+    subdomain: str,
+    db: Session = Depends(get_db)
+):
+    """Get providers for dropdown"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        providers = db.query(models.Provider).filter(
+            models.Provider.is_active == True
+        ).order_by(models.Provider.name).all()
         
         result = []
         for provider in providers:
@@ -368,46 +456,11 @@ def list_providers(
                 "id": provider.id,
                 "name": provider.name,
                 "title": provider.title,
-                "department": provider.department,
-                "public_booking_url": provider.public_booking_url,
-                "bio": provider.bio,
-                "is_active": provider.is_active
+                "department": provider.department
             })
         
-        return {"providers": result}
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/tenants/{subdomain}/event-types")
-def list_event_types(
-    subdomain: str,
-    active_only: bool = True,
-    db: Session = Depends(get_db)
-):
-    """รายการประเภทการนัดหมาย"""
-    try:
-        get_tenant_db(db, subdomain)
-        
-        query = db.query(models.EventType)
-        if active_only:
-            query = query.filter_by(is_active=True)
-        
-        event_types = query.all()
-        
-        result = []
-        for et in event_types:
-            result.append({
-                "id": et.id,
-                "name": et.name,
-                "slug": et.slug,
-                "description": et.description,
-                "duration_minutes": et.duration_minutes,
-                "color": et.color,
-                "is_active": et.is_active
-            })
-        
-        return {"event_types": result}
-    
+        return {
+            "providers": result
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

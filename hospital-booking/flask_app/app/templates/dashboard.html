@@ -54,11 +54,14 @@
                             <a href="{{ url_for('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 👤 โปรไฟล์
                             </a>
-                            <a href="{{ url_for('main.working_hours') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <a href="{{ url_for('main.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 🕐 ตั้งค่าเวลาทำการ
                             </a>
+                            <a href="{{ url_for('main.event_types_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                📅 ประเภทการนัดหมาย
+                            </a>
                             <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                ⚙️ ตั้งค่า
+                                ⚙️ ตั้งค่าอื่นๆ
                             </a>
                             <div class="border-t">
                                 <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
@@ -196,7 +199,7 @@
                 <span class="font-medium">ผู้ป่วยใหม่</span>
             </button>
             
-            <a href="{{ url_for('main.working_hours') }}" class="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg flex items-center space-x-3 transition-colors">
+            <a href="{{ url_for('main.availability_settings') }}" class="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg flex items-center space-x-3 transition-colors">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>

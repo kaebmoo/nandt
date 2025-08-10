@@ -85,16 +85,19 @@ class Patient(TenantBase):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 class EventType(TenantBase):
-    """ประเภทการนัดหมาย เช่น 15min meeting, 30min consultation"""
+    """ประเภทการนัดหมาย เช่น ฉีดวัคซีน, Health Screening"""
     __tablename__ = 'event_types'
     
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)  # "15 Min Meeting"
-    slug = Column(String(50), nullable=False, unique=True)  # "15min"
+    name = Column(String(100), nullable=False)  # "ฉีดวัคซีน"
+    slug = Column(String(50), nullable=False, unique=True)  # "vaccination"
     description = Column(Text)
-    duration_minutes = Column(Integer, nullable=False, default=15)
+    duration_minutes = Column(Integer, nullable=False, default=30)
     color = Column(String(7), default="#6366f1")  # hex color
     is_active = Column(Boolean, default=True)
+    
+    # เลือกรูปแบบเวลาจาก availability
+    availability_id = Column(Integer, ForeignKey('availabilities.id'), nullable=True)
     
     # Buffer times
     buffer_before_minutes = Column(Integer, default=0)
@@ -108,7 +111,7 @@ class EventType(TenantBase):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     # Relationships
-    availabilities = relationship("Availability", back_populates="event_type")
+    availability = relationship("Availability", back_populates="event_types")
     appointments = relationship("Appointment", back_populates="event_type")
 
 class ServiceType(TenantBase):
@@ -140,17 +143,16 @@ class Provider(TenantBase):
     bio = Column(Text)
     profile_image_url = Column(String(255))
     
-    # Relationships
-    availabilities = relationship("Availability", back_populates="provider")
+    # Relationships  
     appointments = relationship("Appointment", back_populates="provider")
 
 class Availability(TenantBase):
-    """ตารางความพร้อมให้บริการ"""
+    """ตารางรูปแบบเวลาทำงาน (Schedule Template)"""
     __tablename__ = 'availabilities'
     
     id = Column(Integer, primary_key=True)
-    provider_id = Column(Integer, ForeignKey('providers.id'), nullable=False)
-    event_type_id = Column(Integer, ForeignKey('event_types.id'), nullable=False)
+    name = Column(String(100), nullable=False)  # "จันทร์-ศุกร์ (08:30-16:30)"
+    description = Column(Text)  # คำอธิบายรูปแบบเวลา
     
     # Weekly recurring schedule
     day_of_week = Column(SQLEnum(DayOfWeek), nullable=False)
@@ -163,17 +165,14 @@ class Availability(TenantBase):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
-    # Relationships
-    provider = relationship("Provider", back_populates="availabilities")
-    event_type = relationship("EventType", back_populates="availabilities")
+    # Relationships - event types ที่ใช้ availability นี้
+    event_types = relationship("EventType", back_populates="availability")
 
 class DateOverride(TenantBase):
-    """การปรับเปลี่ยนตารางในวันเฉพาะ"""
+    """การปรับเปลี่ยนตารางในวันเฉพาะ (วันหยุดพิเศษ, เปลี่ยนเวลาทำการ)"""
     __tablename__ = 'date_overrides'
     
     id = Column(Integer, primary_key=True)
-    provider_id = Column(Integer, ForeignKey('providers.id'), nullable=False)
-    
     date = Column(DateTime, nullable=False)  # วันที่เฉพาะ
     
     # Override types
@@ -184,9 +183,6 @@ class DateOverride(TenantBase):
     reason = Column(String(255))  # เหตุผล เช่น "วันหยุดนักขัตฤกษ์"
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Relationships
-    provider = relationship("Provider")
 
 class Holiday(TenantBase):
     """วันหยุดนักขัตฤกษ์"""
