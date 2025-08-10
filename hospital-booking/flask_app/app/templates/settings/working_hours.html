@@ -1,0 +1,648 @@
+<!-- hospital-booking/flask_app/settings/working_hours.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตั้งค่าเวลาทำการ - MedBooking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .time-input {
+            background: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3ccircle cx='12' cy='12' r='10'%3e%3c/circle%3e%3cpolyline points='12,6 12,12 16,14'%3e%3c/polyline%3e%3c/svg%3e") no-repeat right 8px center;
+            background-size: 16px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <button onclick="history.back()" class="text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <h1 class="text-xl font-semibold text-gray-900">ตั้งค่าเวลาทำการ</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="saveSettings()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                        บันทึก
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div class="space-y-8">
+            <!-- Provider Selection -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">เลือกผู้ให้บริการ</h2>
+                <select id="providerSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="">เลือกหมอ/เจ้าหน้าที่...</option>
+                </select>
+            </div>
+
+            <!-- Event Type Selection -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">ประเภทการนัดหมาย</h2>
+                <select id="eventTypeSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="">เลือกประเภทการนัดหมาย...</option>
+                </select>
+            </div>
+
+            <!-- Working Hours -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-medium text-gray-900">เวลาทำการประจำ</h2>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm text-gray-600">เขตเวลา:</span>
+                        <select id="timezoneSelect" class="px-3 py-1 border border-gray-300 rounded-md text-sm">
+                            <option value="Asia/Bangkok">Asia/Bangkok</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Sunday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="sunday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="sunday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันอาทิตย์</label>
+                        </div>
+                        <div class="flex-1 grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <div class="flex items-center space-x-2">
+                                    <input type="time" id="sunday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                    <span class="text-gray-500">-</span>
+                                    <input type="time" id="sunday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                    <button onclick="addTimeSlot('sunday')" class="text-purple-600 hover:text-purple-800">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="monday-enabled" checked class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="monday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันจันทร์</label>
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="monday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="monday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('monday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="monday-start-2" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="monday-end-2" value="17:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="removeTimeSlot('monday', 2)" class="text-red-600 hover:text-red-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tuesday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="tuesday-enabled" checked class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="tuesday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันอังคาร</label>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="tuesday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="tuesday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('tuesday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Wednesday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="wednesday-enabled" checked class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="wednesday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันพุธ</label>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="wednesday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="wednesday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('wednesday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Thursday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="thursday-enabled" checked class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="thursday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันพฤหัสบดี</label>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="thursday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="thursday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('thursday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Friday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="friday-enabled" checked class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="friday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันศุกร์</label>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="friday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="friday-end-1" value="16:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('friday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Saturday -->
+                    <div class="flex items-center space-x-4 p-4 border rounded-lg">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="saturday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded">
+                            <label for="saturday-enabled" class="ml-2 text-sm font-medium text-gray-700 w-20">วันเสาร์</label>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <input type="time" id="saturday-start-1" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-gray-500">-</span>
+                                <input type="time" id="saturday-end-1" value="12:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                <button onclick="addTimeSlot('saturday')" class="text-purple-600 hover:text-purple-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m-6 0h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>สามารถตั้งช่วงเวลาได้หลายช่วงต่อวัน เช่น เช้า 08:30-16:30 และ เย็น 16:30-17:30</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Date Overrides -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-medium text-gray-900">วันที่มีการเปลี่ยนแปลง</h2>
+                    <button onclick="addDateOverride()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
+                        เพิ่มวันพิเศษ
+                    </button>
+                </div>
+
+                <div id="dateOverrides" class="space-y-4">
+                    <!-- Example override -->
+                    <div class="border rounded-lg p-4 bg-yellow-50">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center space-x-3">
+                                <input type="date" value="2025-08-19" class="px-3 py-2 border border-gray-300 rounded-md">
+                                <span class="text-sm font-medium text-gray-700">วันอังคารที่ 19 ส.ค. 2568</span>
+                            </div>
+                            <button onclick="removeOverride(this)" class="text-red-600 hover:text-red-800">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="flex items-center space-x-2 mb-2">
+                                    <input type="radio" name="override-type-1" value="unavailable" class="text-purple-600">
+                                    <span class="text-sm">วันหยุด</span>
+                                </label>
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="override-type-1" value="custom" checked class="text-purple-600">
+                                    <span class="text-sm">เวลาพิเศษ</span>
+                                </label>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center space-x-2">
+                                    <input type="time" value="08:30" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                    <span class="text-gray-500">-</span>
+                                    <input type="time" value="12:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                                </div>
+                                <input type="text" placeholder="เหตุผล (ไม่บังคับ)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" value="ปิดครึ่งวัน">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>ใช้สำหรับกำหนดวันหยุดพิเศษ หรือเปลี่ยนเวลาทำการในวันใดวันหนึ่ง</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="flex justify-end space-x-4">
+                <button onclick="previewSchedule()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                    ดูตัวอย่าง
+                </button>
+                <button onclick="saveSettings()" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                    บันทึกการตั้งค่า
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">ตัวอย่างตารางเวลา</h2>
+                <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div id="previewContent" class="space-y-4">
+                <!-- Preview content will be generated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        const SUBDOMAIN = 'demo'; // Get from URL or session
+        
+        let timeSlotCounters = {
+            sunday: 1, monday: 2, tuesday: 1, wednesday: 1, 
+            thursday: 1, friday: 1, saturday: 1
+        };
+
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProviders();
+            loadEventTypes();
+        });
+
+        async function loadProviders() {
+            try {
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/providers`);
+                const data = await response.json();
+                
+                const select = document.getElementById('providerSelect');
+                select.innerHTML = '<option value="">เลือกหมอ/เจ้าหน้าที่...</option>';
+                
+                data.providers.forEach(provider => {
+                    select.innerHTML += `<option value="${provider.id}">${provider.title || ''} ${provider.name}</option>`;
+                });
+            } catch (error) {
+                console.error('Error loading providers:', error);
+            }
+        }
+
+        async function loadEventTypes() {
+            try {
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/event-types`);
+                const data = await response.json();
+                
+                const select = document.getElementById('eventTypeSelect');
+                select.innerHTML = '<option value="">เลือกประเภทการนัดหมาย...</option>';
+                
+                data.event_types.forEach(type => {
+                    select.innerHTML += `<option value="${type.id}">${type.name} (${type.duration_minutes} นาที)</option>`;
+                });
+            } catch (error) {
+                console.error('Error loading event types:', error);
+            }
+        }
+
+        function addTimeSlot(day) {
+            timeSlotCounters[day]++;
+            const container = document.querySelector(`#${day}-enabled`).closest('.flex').querySelector('.flex-1');
+            
+            const newSlot = document.createElement('div');
+            newSlot.className = 'flex items-center space-x-2 mt-2';
+            newSlot.innerHTML = `
+                <input type="time" id="${day}-start-${timeSlotCounters[day]}" value="17:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                <span class="text-gray-500">-</span>
+                <input type="time" id="${day}-end-${timeSlotCounters[day]}" value="18:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                <button onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="text-red-600 hover:text-red-800">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            `;
+            
+            container.appendChild(newSlot);
+        }
+
+        function removeTimeSlot(day, slotNumber) {
+            const slot = document.querySelector(`#${day}-start-${slotNumber}`).closest('.flex');
+            slot.remove();
+        }
+
+        function addDateOverride() {
+            const container = document.getElementById('dateOverrides');
+            const overrideId = Date.now();
+            
+            const override = document.createElement('div');
+            override.className = 'border rounded-lg p-4 bg-yellow-50';
+            override.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3">
+                        <input type="date" class="px-3 py-2 border border-gray-300 rounded-md">
+                        <span class="text-sm font-medium text-gray-700">เลือกวันที่</span>
+                    </div>
+                    <button onclick="removeOverride(this)" class="text-red-600 hover:text-red-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="flex items-center space-x-2 mb-2">
+                            <input type="radio" name="override-type-${overrideId}" value="unavailable" class="text-purple-600">
+                            <span class="text-sm">วันหยุด</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="override-type-${overrideId}" value="custom" checked class="text-purple-600">
+                            <span class="text-sm">เวลาพิเศษ</span>
+                        </label>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <input type="time" value="09:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                            <span class="text-gray-500">-</span>
+                            <input type="time" value="17:00" class="time-input px-3 py-2 border border-gray-300 rounded-md">
+                        </div>
+                        <input type="text" placeholder="เหตุผล (ไม่บังคับ)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(override);
+        }
+
+        function removeOverride(button) {
+            button.closest('.border').remove();
+        }
+
+        function previewSchedule() {
+            const modal = document.getElementById('previewModal');
+            const content = document.getElementById('previewContent');
+            
+            // Generate preview content
+            content.innerHTML = generatePreviewHTML();
+            modal.classList.remove('hidden');
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').classList.add('hidden');
+        }
+
+        function generatePreviewHTML() {
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+            
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+            
+            days.forEach((day, index) => {
+                const enabled = document.getElementById(`${day}-enabled`).checked;
+                const dayName = dayNames[index];
+                
+                html += `<div class="border rounded-lg p-4 ${enabled ? 'bg-green-50' : 'bg-gray-50'}">`;
+                html += `<h3 class="font-medium text-gray-900 mb-2">${dayName}</h3>`;
+                
+                if (enabled) {
+                    // Find all time slots for this day
+                    const slots = [];
+                    let slotNum = 1;
+                    while (document.getElementById(`${day}-start-${slotNum}`)) {
+                        const start = document.getElementById(`${day}-start-${slotNum}`).value;
+                        const end = document.getElementById(`${day}-end-${slotNum}`).value;
+                        slots.push(`${start} - ${end}`);
+                        slotNum++;
+                    }
+                    
+                    html += `<div class="space-y-1">`;
+                    slots.forEach(slot => {
+                        html += `<div class="text-sm text-green-700">${slot}</div>`;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `<div class="text-sm text-gray-500">ปิด</div>`;
+                }
+                
+                html += `</div>`;
+            });
+            
+            html += '</div>';
+            
+            // Add date overrides section
+            const overrides = document.querySelectorAll('#dateOverrides > div');
+            if (overrides.length > 0) {
+                html += '<div class="mt-6 border-t pt-6">';
+                html += '<h3 class="font-medium text-gray-900 mb-4">วันที่มีการเปลี่ยนแปลง</h3>';
+                html += '<div class="space-y-2">';
+                
+                overrides.forEach(override => {
+                    const date = override.querySelector('input[type="date"]').value;
+                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
+                    
+                    if (isUnavailable) {
+                        html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-red-600">วันหยุด</span></div>`;
+                    } else {
+                        const times = override.querySelectorAll('input[type="time"]');
+                        const start = times[0].value;
+                        const end = times[1].value;
+                        const reason = override.querySelector('input[type="text"]').value;
+                        
+                        html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-blue-600">${start} - ${end}</span>`;
+                        if (reason) html += ` <span class="text-gray-500">(${reason})</span>`;
+                        html += `</div>`;
+                    }
+                });
+                
+                html += '</div></div>';
+            }
+            
+            return html;
+        }
+
+        async function saveSettings() {
+            const providerId = document.getElementById('providerSelect').value;
+            const eventTypeId = document.getElementById('eventTypeSelect').value;
+            
+            if (!providerId || !eventTypeId) {
+                alert('กรุณาเลือกผู้ให้บริการและประเภทการนัดหมาย');
+                return;
+            }
+            
+            try {
+                // Save working hours
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                const availabilities = [];
+                
+                days.forEach((day, index) => {
+                    const enabled = document.getElementById(`${day}-enabled`).checked;
+                    
+                    if (enabled) {
+                        let slotNum = 1;
+                        while (document.getElementById(`${day}-start-${slotNum}`)) {
+                            const start = document.getElementById(`${day}-start-${slotNum}`).value;
+                            const end = document.getElementById(`${day}-end-${slotNum}`).value;
+                            
+                            availabilities.push({
+                                provider_id: parseInt(providerId),
+                                event_type_id: parseInt(eventTypeId),
+                                day_of_week: index, // 0=Sunday
+                                start_time: start,
+                                end_time: end,
+                                timezone: document.getElementById('timezoneSelect').value
+                            });
+                            
+                            slotNum++;
+                        }
+                    }
+                });
+                
+                // Save each availability
+                for (const availability of availabilities) {
+                    const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(availability)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to save availability');
+                    }
+                }
+                
+                // Save date overrides
+                const overrides = document.querySelectorAll('#dateOverrides > div');
+                for (const override of overrides) {
+                    const date = override.querySelector('input[type="date"]').value;
+                    if (!date) continue;
+                    
+                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
+                    const reason = override.querySelector('input[type="text"]').value;
+                    
+                    const overrideData = {
+                        provider_id: parseInt(providerId),
+                        date: date,
+                        is_unavailable: isUnavailable,
+                        reason: reason
+                    };
+                    
+                    if (!isUnavailable) {
+                        const times = override.querySelectorAll('input[type="time"]');
+                        overrideData.custom_start_time = times[0].value;
+                        overrideData.custom_end_time = times[1].value;
+                    }
+                    
+                    const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/date-overrides`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(overrideData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to save date override');
+                    }
+                }
+                
+                alert('บันทึกการตั้งค่าเรียบร้อยแล้ว!');
+                
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+            }
+        }
+
+        // Load existing availability when provider/event type changes
+        document.getElementById('providerSelect').addEventListener('change', loadExistingAvailability);
+        document.getElementById('eventTypeSelect').addEventListener('change', loadExistingAvailability);
+
+        async function loadExistingAvailability() {
+            const providerId = document.getElementById('providerSelect').value;
+            const eventTypeId = document.getElementById('eventTypeSelect').value;
+            
+            if (!providerId || !eventTypeId) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/providers/${providerId}/availability`);
+                const data = await response.json();
+                
+                // Clear current settings
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                days.forEach(day => {
+                    document.getElementById(`${day}-enabled`).checked = false;
+                });
+                
+                // Apply existing availability
+                data.availabilities.forEach(avail => {
+                    if (avail.event_type_id == eventTypeId) {
+                        const dayName = days[avail.day_of_week];
+                        document.getElementById(`${dayName}-enabled`).checked = true;
+                        document.getElementById(`${dayName}-start-1`).value = avail.start_time;
+                        document.getElementById(`${dayName}-end-1`).value = avail.end_time;
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading existing availability:', error);
+            }
+        }
+    </script>
+</body>
+</html>

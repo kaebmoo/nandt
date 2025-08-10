@@ -98,9 +98,21 @@ def create_app() -> Flask:
     def teardown_tenant_session(exception):
         db = g.pop('db', None)
         if db is not None:
-            # FIX: Wrap this SQL string in text() as well
-            db.execute(text('SET search_path TO public'))
-            db.close()
+            try:
+                if exception:
+                    db.rollback()  # Rollback ถ้ามี error
+                db.execute(text('SET search_path TO public'))
+            except Exception as e:
+                print(f"Error in teardown: {e}")
+                # ถ้า transaction abort แล้ว ให้ปิดแล้วเปิดใหม่
+                try:
+                    db.close()
+                    db = SessionLocal()
+                    db.execute(text('SET search_path TO public'))
+                except:
+                    pass
+            finally:
+                db.close()
 
     # --- ลงทะเบียนส่วนต่างๆ ---
     # 1. ลงทะเบียน Routes หลัก

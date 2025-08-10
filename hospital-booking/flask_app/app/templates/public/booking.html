@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จองนัดหมาย - นพ.สมชาย ใจดี</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .date-button {
+            transition: all 0.2s ease;
+        }
+        .date-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .time-slot {
+            transition: all 0.2s ease;
+        }
+        .time-slot:hover {
+            background-color: #6366f1;
+            color: white;
+        }
+        .time-slot.selected {
+            background-color: #6366f1;
+            color: white;
+        }
+        .booking-step {
+            display: none;
+        }
+        .booking-step.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-7xl mx-auto">
+        <div class="grid lg:grid-cols-3 min-h-screen">
+            <!-- Left Panel - Provider Info -->
+            <div class="lg:col-span-1 bg-white border-r border-gray-200 p-8">
+                <div class="sticky top-8">
+                    <!-- Provider Avatar & Info -->
+                    <div class="text-center mb-8">
+                        <div class="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span class="text-2xl font-bold text-purple-600">นส</span>
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-900 mb-2">นพ.สมชาย ใจดี</h1>
+                        <p class="text-gray-600 mb-4">แพทย์เวชศาสตร์ครอบครัว</p>
+                        <div class="flex items-center justify-center text-sm text-gray-500 space-x-4">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span id="selectedDuration">15 นาที</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                <span>Cal Video</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Event Type Selection -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">เลือกประเภทการนัดหมาย</h3>
+                        <div class="space-y-3">
+                            <button onclick="selectEventType(1, '15 Min Meeting', 15)" class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors event-type-btn selected">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <h4 class="font-medium text-gray-900">15 Min Meeting</h4>
+                                        <p class="text-sm text-gray-500">หารือเรื่องทั่วไป</p>
+                                    </div>
+                                    <span class="text-sm text-gray-500">15m</span>
+                                </div>
+                            </button>
+                            
+                            <button onclick="selectEventType(2, '30 Min Consultation', 30)" class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors event-type-btn">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <h4 class="font-medium text-gray-900">30 Min Consultation</h4>
+                                        <p class="text-sm text-gray-500">ปรึกษาปัญหาสุขภาพ</p>
+                                    </div>
+                                    <span class="text-sm text-gray-500">30m</span>
+                                </div>
+                            </button>
+                            
+                            <button onclick="selectEventType(3, 'Health Screening', 60)" class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors event-type-btn">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <h4 class="font-medium text-gray-900">Health Screening</h4>
+                                        <p class="text-sm text-gray-500">ตรวจสุขภาพทั่วไป</p>
+                                    </div>
+                                    <span class="text-sm text-gray-500">1h</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selected Date & Time -->
+                    <div id="selectedInfo" class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="font-medium text-gray-900 mb-2">การนัดหมายของคุณ</h4>
+                        <div id="selectedDetails" class="text-sm text-gray-600 space-y-1">
+                            <div>📅 เลือกวันที่</div>
+                            <div>🕐 เลือกเวลา</div>
+                            <div>📋 15 Min Meeting</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Booking Steps -->
+            <div class="lg:col-span-2 bg-white">
+                <!-- Step 1: Date Selection -->
+                <div id="step1" class="booking-step active p-8">
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">เลือกวันที่</h2>
+                        <p class="text-gray-600">เลือกวันที่ที่คุณต้องการนัดหมาย</p>
+                    </div>
+
+                    <!-- Month Navigation -->
+                    <div class="flex items-center justify-between mb-6">
+                        <button onclick="previousMonth()" class="p-2 rounded-lg hover:bg-gray-100">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                        </button>
+                        <h3 id="currentMonth" class="text-xl font-semibold text-gray-900">สิงหาคม 2025</h3>
+                        <button onclick="nextMonth()" class="p-2 rounded-lg hover:bg-gray-100">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Calendar -->
+                    <div class="grid grid-cols-7 gap-2 mb-4">
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">อา</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">จ</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">อ</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">พ</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">พฤ</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">ศ</div>
+                        <div class="text-center text-sm font-medium text-gray-500 p-2">ส</div>
+                    </div>
+                    
+                    <div id="calendarDates" class="grid grid-cols-7 gap-2">
+                        <!-- Calendar dates will be populated by JavaScript -->
+                    </div>
+
+                    <!-- Quick Date Options -->
+                    <div class="mt-8 pt-6 border-t">
+                        <h4 class="text-sm font-medium text-gray-900 mb-3">เลือกเร็ว</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="selectQuickDate('today')" class="date-button p-3 border border-gray-200 rounded-lg text-left hover:border-purple-300">
+                                <div class="font-medium text-gray-900">วันนี้</div>
+                                <div class="text-sm text-gray-500" id="todayDate">10 ส.ค.</div>
+                            </button>
+                            <button onclick="selectQuickDate('tomorrow')" class="date-button p-3 border border-gray-200 rounded-lg text-left hover:border-purple-300">
+                                <div class="font-medium text-gray-900">พรุ่งนี้</div>
+                                <div class="text-sm text-gray-500" id="tomorrowDate">11 ส.ค.</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Time Selection -->
+                <div id="step2" class="booking-step p-8">
+                    <div class="mb-8">
+                        <button onclick="goToStep(1)" class="flex items-center text-gray-600 hover:text-gray-900 mb-4">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            กลับไปเลือกวันที่
+                        </button>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">เลือกเวลา</h2>
+                        <p class="text-gray-600">เลือกเวลาที่เหมาะสมสำหรับคุณ</p>
+                        <div class="text-sm text-gray-500 mt-2">
+                            📅 <span id="selectedDateDisplay">วันจันทร์ที่ 11 สิงหาคม 2025</span>
+                        </div>
+                    </div>
+
+                    <!-- Time Zone -->
+                    <div class="mb-6">
+                        <div class="flex items-center text-sm text-gray-600">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>เขตเวลา: เอเชีย/กรุงเทพ (UTC+7)</span>
+                        </div>
+                    </div>
+
+                    <!-- Available Time Slots -->
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">เช้า</h3>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-3" id="morningSlots">
+                                <!-- Morning time slots -->
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">บ่าย</h3>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-3" id="afternoonSlots">
+                                <!-- Afternoon time slots -->
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">เย็น</h3>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-3" id="eveningSlots">
+                                <!-- Evening time slots -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- No availability message -->
+                    <div id="noSlotsMessage" class="text-center py-12 hidden">
+                        <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">ไม่มีเวลาว่างในวันนี้</h3>
+                        <p class="text-gray-600 mb-4">กรุณาเลือกวันอื่น หรือติดต่อเจ้าหน้าที่</p>
+                        <button onclick="goToStep(1)" class="text-purple-600 hover:text-purple-700 font-medium">
+                            เลือกวันใหม่
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Booking Form -->
+                <div id="step3" class="booking-step p-8">
+                    <div class="mb-8">
+                        <button onclick="goToStep(2)" class="flex items-center text-gray-600 hover:text-gray-900 mb-4">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            กลับไปเลือกเวลา
+                        </button>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">ใส่ข้อมูลของคุณ</h2>
+                        <p class="text-gray-600">กรอกข้อมูลเพื่อยืนยันการนัดหมาย</p>
+                    </div>
+
+                    <!-- Booking Summary -->
+                    <div class="bg-blue-50 rounded-lg p-4 mb-8">
+                        <h3 class="font-medium text-blue-900 mb-2">สรุปการนัดหมาย</h3>
+                        <div class="text-sm text-blue-800 space-y-1">
+                            <div>📅 <span id="bookingSummaryDate">วันจันทร์ที่ 11 สิงหาคม 2025</span></div>
+                            <div>🕐 <span id="bookingSummaryTime">9:15 AM - 9:30 AM (เขตเวลากรุงเทพ)</span></div>
+                            <div>📋 <span id="bookingSummaryType">15 Min Meeting</span></div>
+                            <div>👨‍⚕️ นพ.สมชาย ใจดี</div>
+                            <div>📹 Cal Video</div>
+                        </div>
+                    </div>
+
+                    <!-- Booking Form -->
+                    <form id="bookingForm" class="space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label for="firstName" class="block text-sm font-medium text-gray-700 mb-2">ชื่อ *</label>
+                                <input type="text" id="firstName" name="firstName" required 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                                       placeholder="ชื่อจริง">
+                            </div>
+                            
+                            <div>
+                                <label for="lastName" class="block text-sm font-medium text-gray-700 mb-2">นามสกุล *</label>
+                                <input type="text" id="lastName" name="lastName" required 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                                       placeholder="นามสกุล">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">อีเมล *</label>
+                            <input type="email" id="email" name="email" required 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                                   placeholder="your@email.com">
+                        </div>
+
+                        <div>
+                            <label for="phone" class="block text-sm font-medium text-gray-700 mb-2">เบอร์โทรศัพท์</label>
+                            <input type="tel" id="phone" name="phone" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                                   placeholder="08X-XXX-XXXX">
+                        </div>
+
+                        <div>
+                            <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">หมายเหตุเพิ่มเติม</label>
+                            <textarea id="notes" name="notes" rows="4" 
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                                      placeholder="มีอะไรที่ต้องการแจ้งให้หมอทราบล่วงหน้าไหม?"></textarea>
+                        </div>
+
+                        <!-- Service Type Selection -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ประเภทบริการที่ต้องการ</label>
+                            <div class="space-y-2">
+                                <label class="flex items-center">
+                                    <input type="radio" name="serviceType" value="general" checked class="text-purple-600 mr-2">
+                                    <span class="text-sm">ตรวจรักษาทั่วไป</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="serviceType" value="vaccination" class="text-purple-600 mr-2">
+                                    <span class="text-sm">ฉีดวัคซีน</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="serviceType" value="screening" class="text-purple-600 mr-2">
+                                    <span class="text-sm">ตรวจสุขภาพ</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="serviceType" value="consultation" class="text-purple-600 mr-2">
+                                    <span class="text-sm">ปรึกษาปัญหาสุขภาพ</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Terms and Conditions -->
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <label class="flex items-start">
+                                <input type="checkbox" id="agreeTerms" required class="mt-1 mr-3 text-purple-600">
+                                <span class="text-sm text-gray-700">
+                                    ฉันยอมรับ <a href="#" class="text-purple-600 underline">ข้อกำหนดการใช้งาน</a> และ 
+                                    <a href="#" class="text-purple-600 underline">นโยบายความเป็นส่วนตัว</a> 
+                                    ของโรงพยาบาล
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="pt-6">
+                            <button type="submit" class="w-full bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 font-medium transition-colors">
+                                ยืนยันการนัดหมาย
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 4: Confirmation -->
+                <div id="step4" class="booking-step p-8 text-center">
+                    <div class="max-w-md mx-auto">
+                        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">การนัดหมายสำเร็จ!</h2>
+                        <p class="text-gray-600 mb-8">เราได้ส่งอีเมลยืนยันไปให้คุณแล้ว</p>
+
+                        <!-- Booking Details -->
+                        <div class="bg-gray-50 rounded-lg p-6 text-left mb-8">
+                            <h3 class="font-medium text-gray-900 mb-4">รายละเอียดการนัดหมาย</h3>
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">รหัสการจอง:</span>
+                                    <span class="font-medium" id="bookingReference">BK-A1B2C3</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">วันที่:</span>
+                                    <span class="font-medium" id="confirmDate">11 สิงหาคม 2025</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">เวลา:</span>
+                                    <span class="font-medium" id="confirmTime">9:15 - 9:30 น.</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">แพทย์:</span>
+                                    <span class="font-medium">นพ.สมชาย ใจดี</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">ประเภท:</span>
+                                    <span class="font-medium" id="confirmType">15 Min Meeting</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="space-y-4">
+                            <button onclick="addToCalendar()" class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 font-medium transition-colors">
+                                📅 เพิ่มในปฏิทิน
+                            </button>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <button onclick="rescheduleBooking()" class="py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+                                    📝 เปลี่ยนเวลา
+                                </button>
+                                <button onclick="cancelBooking()" class="py-2 px-4 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 font-medium transition-colors">
+                                    ❌ ยกเลิก
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Important Notes -->
+                        <div class="mt-8 p-4 bg-yellow-50 rounded-lg text-left">
+                            <h4 class="font-medium text-yellow-800 mb-2">ข้อมูลสำคัญ</h4>
+                            <ul class="text-sm text-yellow-700 space-y-1">
+                                <li>• กรุณามาถึงก่อนเวลานัด 15 นาที</li>
+                                <li>• นำบัตรประจำตัวประชาชนมาด้วย</li>
+                                <li>• หากต้องการยกเลิก กรุณาแจ้งล่วงหน้า 4 ชั่วโมง</li>
+                                <li>• ติดต่อสอบถาม: 02-123-4567</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentStep = 1;
+        let selectedEventType = { id: 1, name: '15 Min Meeting', duration: 15 };
+        let selectedDate = null;
+        let selectedTime = null;
+        let currentMonth = new Date(2025, 7); // August 2025
+        
+        const API_BASE = 'http://localhost:8000/api/v1';
+        const SUBDOMAIN = 'demo';
+        const PROVIDER_ID = 1;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            generateCalendar();
+            updateQuickDates();
+        });
+
+        // Event Type Selection
+        function selectEventType(id, name, duration) {
+            selectedEventType = { id, name, duration };
+            
+            // Update UI
+            document.getElementById('selectedDuration').textContent = duration + ' นาที';
+            document.querySelectorAll('.event-type-btn').forEach(btn => btn.classList.remove('selected'));
+            event.target.closest('.event-type-btn').classList.add('selected');
+            
+            updateSelectedInfo();
+        }
+
+        // Calendar Generation
+        function generateCalendar() {
+            const calendar = document.getElementById('calendarDates');
+            const monthYear = document.getElementById('currentMonth');
+            
+            const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                           'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+            
+            monthYear.textContent = months[currentMonth.getMonth()] + ' ' + currentMonth.getFullYear();
+            
+            const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+            const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+            
+            calendar.innerHTML = '';
+            
+            for (let i = 0; i < 42; i++) {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + i);
+                
+                const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
+                const isToday = date.toDateString() === new Date().toDateString();
+                const isPast = date < new Date().setHours(0, 0, 0, 0);
+                
+                const button = document.createElement('button');
+                button.className = `p-3 text-center rounded-lg transition-colors ${
+                    isCurrentMonth 
+                        ? (isPast 
+                            ? 'text-gray-400 cursor-not-allowed' 
+                            : 'text-gray-900 hover:bg-purple-100 hover:text-purple-700') 
+                        : 'text-gray-300'
+                }`;
+                
+                if (isToday) {
+                    button.className += ' bg-purple-600 text-white hover:bg-purple-700';
+                }
+                
+                button.textContent = date.getDate();
+                button.disabled = isPast || !isCurrentMonth;
+                
+                if (!button.disabled) {
+                    button.onclick = () => selectDate(date);
+                }
+                
+                calendar.appendChild(button);
+            }
+        }
+
+        function previousMonth() {
+            currentMonth.setMonth(currentMonth.getMonth() - 1);
+            generateCalendar();
+        }
+
+        function nextMonth() {
+            currentMonth.setMonth(currentMonth.getMonth() + 1);
+            generateCalendar();
+        }
+
+        function updateQuickDates() {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+                           'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            
+            document.getElementById('todayDate').textContent = 
+                today.getDate() + ' ' + months[today.getMonth()];
+            document.getElementById('tomorrowDate').textContent = 
+                tomorrow.getDate() + ' ' + months[tomorrow.getMonth()];
+        }
+
+        function selectQuickDate(type) {
+            const date = new Date();
+            if (type === 'tomorrow') {
+                date.setDate(date.getDate() + 1);
+            }
+            selectDate(date);
+        }
+
+        // Date Selection
+        function selectDate(date) {
+            selectedDate = date;
+            updateSelectedInfo();
+            loadAvailableSlots(date);
+            goToStep(2);
+        }
+
+        // Load available time slots
+        async function loadAvailableSlots(date) {
+            try {
+                const dateStr = date.toISOString().split('T')[0];
+                const response = await fetch(
+                    `${API_BASE}/tenants/${SUBDOMAIN}/available-slots?provider_id=${PROVIDER_ID}&event_type_id=${selectedEventType.id}&start_date=${dateStr}&days=1`
+                );
+                
+                const data = await response.json();
+                displayTimeSlots(data.available_days[0]?.slots || []);
+                
+                // Update selected date display
+                const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+                const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                               'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+                
+                document.getElementById('selectedDateDisplay').textContent = 
+                    `วัน${days[date.getDay()]}ที่ ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+                
+            } catch (error) {
+                console.error('Error loading slots:', error);
+                displayTimeSlots([]);
+            }
+        }
+
+        function displayTimeSlots(slots) {
+            const morningSlots = document.getElementById('morningSlots');
+            const afternoonSlots = document.getElementById('afternoonSlots');
+            const eveningSlots = document.getElementById('eveningSlots');
+            const noSlotsMessage = document.getElementById('noSlotsMessage');
+            
+            morningSlots.innerHTML = '';
+            afternoonSlots.innerHTML = '';
+            eveningSlots.innerHTML = '';
+            
+            const availableSlots = slots.filter(slot => slot.available);
+            
+            if (availableSlots.length === 0) {
+                noSlotsMessage.classList.remove('hidden');
+                return;
+            }
+            
+            noSlotsMessage.classList.add('hidden');
+            
+            availableSlots.forEach(slot => {
+                const hour = parseInt(slot.start_time.split(':')[0]);
+                const container = hour < 12 ? morningSlots : hour < 17 ? afternoonSlots : eveningSlots;
+                
+                const button = document.createElement('button');
+                button.className = 'time-slot p-3 border border-gray-200 rounded-lg text-center font-medium';
+                button.textContent = slot.start_time;
+                button.onclick = () => selectTime(slot);
+                
+                container.appendChild(button);
+            });
+        }
+
+        // Time Selection
+        function selectTime(slot) {
+            selectedTime = slot;
+            
+            // Update UI
+            document.querySelectorAll('.time-slot').forEach(btn => btn.classList.remove('selected'));
+            event.target.classList.add('selected');
+            
+            updateSelectedInfo();
+            goToStep(3);
+        }
+
+        // Update selected info panel
+        function updateSelectedInfo() {
+            const details = document.getElementById('selectedDetails');
+            let html = '';
+            
+            if (selectedDate) {
+                const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+                html += `<div>📅 วัน${days[selectedDate.getDay()]}ที่ ${selectedDate.getDate()}/${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}</div>`;
+            } else {
+                html += '<div>📅 เลือกวันที่</div>';
+            }
+            
+            if (selectedTime) {
+                const endTime = addMinutes(selectedTime.start_time, selectedEventType.duration);
+                html += `<div>🕐 ${selectedTime.start_time} - ${endTime}</div>`;
+            } else {
+                html += '<div>🕐 เลือกเวลา</div>';
+            }
+            
+            html += `<div>📋 ${selectedEventType.name}</div>`;
+            
+            details.innerHTML = html;
+        }
+
+        function addMinutes(timeStr, minutes) {
+            const [hours, mins] = timeStr.split(':').map(Number);
+            const date = new Date();
+            date.setHours(hours, mins + minutes);
+            return date.toTimeString().slice(0, 5);
+        }
+
+        // Step Navigation
+        function goToStep(step) {
+            document.querySelectorAll('.booking-step').forEach(s => s.classList.remove('active'));
+            document.getElementById(`step${step}`).classList.add('active');
+            currentStep = step;
+            
+            if (step === 3) {
+                updateBookingSummary();
+            }
+        }
+
+        function updateBookingSummary() {
+            if (selectedDate && selectedTime) {
+                const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+                const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                               'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+                
+                const dateStr = `วัน${days[selectedDate.getDay()]}ที่ ${selectedDate.getDate()} ${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
+                const endTime = addMinutes(selectedTime.start_time, selectedEventType.duration);
+                const timeStr = `${selectedTime.start_time} - ${endTime} (เขตเวลากรุงเทพ)`;
+                
+                document.getElementById('bookingSummaryDate').textContent = dateStr;
+                document.getElementById('bookingSummaryTime').textContent = timeStr;
+                document.getElementById('bookingSummaryType').textContent = selectedEventType.name;
+            }
+        }
+
+        // Form Submission
+        document.getElementById('bookingForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                provider_id: PROVIDER_ID,
+                event_type_id: selectedEventType.id,
+                date: selectedDate.toISOString().split('T')[0],
+                time: selectedTime.start_time,
+                guest_name: `${formData.get('firstName')} ${formData.get('lastName')}`,
+                guest_email: formData.get('email'),
+                guest_phone: formData.get('phone'),
+                notes: formData.get('notes'),
+                service_type: formData.get('serviceType')
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/book-appointment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showConfirmation(result);
+                    goToStep(4);
+                } else {
+                    throw new Error('Booking failed');
+                }
+                
+            } catch (error) {
+                console.error('Booking error:', error);
+                alert('เกิดข้อผิดพลาดในการจอง กรุณาลองใหม่อีกครั้ง');
+            }
+        });
+
+        function showConfirmation(bookingData) {
+            document.getElementById('bookingReference').textContent = bookingData.booking_reference || 'BK-A1B2C3';
+            
+            const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+            const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                           'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+            
+            document.getElementById('confirmDate').textContent = 
+                `${selectedDate.getDate()} ${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
+            
+            const endTime = addMinutes(selectedTime.start_time, selectedEventType.duration);
+            document.getElementById('confirmTime').textContent = `${selectedTime.start_time} - ${endTime} น.`;
+            document.getElementById('confirmType').textContent = selectedEventType.name;
+        }
+
+        // Action Functions
+        function addToCalendar() {
+            const startDateTime = new Date(selectedDate);
+            const [hours, minutes] = selectedTime.start_time.split(':');
+            startDateTime.setHours(parseInt(hours), parseInt(minutes));
+            
+            const endDateTime = new Date(startDateTime);
+            endDateTime.setMinutes(endDateTime.getMinutes() + selectedEventType.duration);
+            
+            const event = {
+                title: `${selectedEventType.name} - นพ.สมชาย ใจดี`,
+                start: startDateTime.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+                end: endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+                description: 'การนัดหมายกับนพ.สมชาย ใจดี'
+            };
+            
+            const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${event.start}/${event.end}&details=${encodeURIComponent(event.description)}`;
+            window.open(calendarUrl, '_blank');
+        }
+
+        function rescheduleBooking() {
+            alert('ฟีเจอร์เปลี่ยนเวลานัดจะเปิดใช้งานเร็วๆ นี้');
+        }
+
+        function cancelBooking() {
+            if (confirm('คุณแน่ใจหรือไม่ที่จะยกเลิกการนัดหมายนี้?')) {
+                alert('การนัดหมายถูกยกเลิกแล้ว');
+            }
+        }
+    </script>
+</body>
+</html>
