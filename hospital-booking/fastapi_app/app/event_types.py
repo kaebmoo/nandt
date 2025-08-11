@@ -124,11 +124,20 @@ async def create_event_type(subdomain: str, event_type_data: EventTypeCreate, db
         new_event_type = models.EventType(**event_type_dict)
         new_event_type.slug = slug
         
+        # 1. เพิ่ม object ใหม่เข้าไปใน Session
         db.add(new_event_type)
-        db.commit()
-        db.refresh(new_event_type)
         
-        return EventTypeResponse.from_orm(new_event_type)
+        # 2. "ซิงค์" ข้อมูลไปยัง Database เพื่อให้ object ได้รับ ID
+        db.flush()
+        
+        # 3. สร้าง Response object จากข้อมูลที่สมบูรณ์แล้ว
+        response_data = EventTypeResponse.from_orm(new_event_type)
+        
+        # 4. "ยืนยัน" Transaction เพื่อบันทึกข้อมูลอย่างถาวร
+        db.commit()
+        
+        # 5. ส่ง Response กลับไป
+        return response_data
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating event type: {str(e)}")
