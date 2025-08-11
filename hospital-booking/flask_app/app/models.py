@@ -1,8 +1,8 @@
-# hospital-booking/flask_app/app/models.py - แก้ไข Bug
+# hospital-booking/flask_app/app/models.py - Updated with new structure
 
 from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
                         create_engine, event, Boolean, 
-                        Time, Text, Enum as SQLEnum, JSON)
+                        Time, Text, Enum as SQLEnum, JSON, Date)
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.schema import CreateSchema
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,7 +15,7 @@ import string
 PublicBase = declarative_base()
 TenantBase = declarative_base()
 
-# --- Enum Definitions (ต้องประกาศก่อน Models) ---
+# --- Enum Definitions ---
 class DayOfWeek(enum.Enum):
     SUNDAY = 0
     MONDAY = 1
@@ -25,7 +25,7 @@ class DayOfWeek(enum.Enum):
     FRIDAY = 5
     SATURDAY = 6
 
-# --- Public Schema Models (เฉพาะ tables ที่ต้องอยู่ใน public) ---
+# --- Public Schema Models ---
 class Hospital(PublicBase):
     __tablename__ = 'hospitals'
     __table_args__ = {'schema': 'public'}
@@ -57,6 +57,119 @@ class User(PublicBase):
         return check_password_hash(self.password_hash, password)
 
 # --- Tenant Specific Models ---
+
+class AvailabilityTemplate(TenantBase):
+    """Template สำหรับตารางเวลาทำการ (ตารางใหม่!)"""
+    __tablename__ = 'availability_templates'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False, unique=True)  # "จันทร์-ศุกร์ (08:30-16:30)"
+    description = Column(Text)
+    timezone = Column(String(50), default='Asia/Bangkok')
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    availabilities = relationship("Availability", back_populates="template", cascade="all, delete-orphan")
+    date_overrides = relationship("DateOverride", back_populates="template", cascade="all, delete-orphan")
+    event_types = relationship("EventType", back_populates="availability_template")
+
+class Availability(TenantBase):
+    """ตารางเวลาทำการ (ปรับให้อ้างอิง template_id)"""
+    __tablename__ = 'availabilities'
+    
+    id = Column(Integer, primary_key=True)
+    
+    # Reference to template (ใหม่!)
+    template_id = Column(Integer, ForeignKey('availability_templates.id'), nullable=True)
+    
+    # ยังเก็บ fields เดิมไว้สำหรับ transition period
+    provider_id = Column(Integer, ForeignKey('providers.id'), nullable=True)
+    
+    # ลบ event_type_id ออก (ถ้ามี)
+    # event_type_id = Column(Integer, ForeignKey('event_types.id'), nullable=True)
+    
+    # Schedule details
+    day_of_week = Column(SQLEnum(DayOfWeek), nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    template = relationship("AvailabilityTemplate", back_populates="availabilities")
+    provider = relationship("Provider")
+    
+    # ยังเก็บไว้สำหรับ backward compatibility
+    # ลบ relationship นี้ออก
+    # event_types_legacy = relationship("EventType", 
+    #                                  foreign_keys="EventType.availability_id",
+    #
+    # เนื่องจากคุณ migration database เสร็จแล้ว และลบ column availability_id ไปแล้ว ต้องลบออกจาก models ด้วยครับ                                  back_populates="availability_legacy")
+
+class EventType(TenantBase):
+    """ประเภทการนัดหมาย (ปรับให้ใช้ template_id)"""
+    __tablename__ = 'event_types'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    slug = Column(String(50), nullable=False, unique=True)
+    description = Column(Text)
+    duration_minutes = Column(Integer, nullable=False, default=30)
+    color = Column(String(7), default="#6366f1")
+    is_active = Column(Boolean, default=True)
+    
+    # ใช้ template_id แทน availability_id (ใหม่!)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='SET NULL'), nullable=True)
+    
+    # เก็บ availability_id ไว้สำหรับ transition period
+    # ไม่ได้ใช้แล้ว
+    # availability_id = Column(Integer, ForeignKey('availabilities.id'), nullable=True)
+    
+    # Buffer times
+    buffer_before_minutes = Column(Integer, default=0)
+    buffer_after_minutes = Column(Integer, default=0)
+    
+    # Advanced settings
+    max_bookings_per_day = Column(Integer)
+    min_notice_hours = Column(Integer, default=4)
+    max_advance_days = Column(Integer, default=60)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    availability_template = relationship("AvailabilityTemplate", back_populates="event_types")
+    # ไม่ได้ใช้แล้ว
+    # availability_legacy = relationship("Availability", 
+    #                                   foreign_keys=[availability_id],
+    #                                   back_populates="event_types_legacy")
+    appointments = relationship("Appointment", back_populates="event_type")
+
+class DateOverride(TenantBase):
+    """การปรับเปลี่ยนตารางในวันเฉพาะ (ปรับให้อ้างอิง template)"""
+    __tablename__ = 'date_overrides'
+    
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)  # เปลี่ยนเป็น Date แทน DateTime
+    
+    # Template relationship (อ้างอิง availability_templates)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'), nullable=True)
+    template_scope = Column(String(50), default='template')
+    
+    # Override types
+    is_unavailable = Column(Boolean, default=False)
+    custom_start_time = Column(Time)
+    custom_end_time = Column(Time)
+    
+    reason = Column(String(255))
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    template = relationship("AvailabilityTemplate", back_populates="date_overrides")
+
 class Patient(TenantBase):
     __tablename__ = 'patients'
     
@@ -67,7 +180,7 @@ class Patient(TenantBase):
     
     # Additional details
     date_of_birth = Column(DateTime)
-    national_id = Column(String(20))  # เลขบัตรประชาชน
+    national_id = Column(String(20))
     address = Column(Text)
     emergency_contact = Column(String(100))
     emergency_phone = Column(String(20))
@@ -79,43 +192,12 @@ class Patient(TenantBase):
     
     # Preferences
     preferred_language = Column(String(10), default='th')
-    communication_preference = Column(String(20), default='sms')  # sms, email, phone
+    communication_preference = Column(String(20), default='sms')
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-class EventType(TenantBase):
-    """ประเภทการนัดหมาย เช่น ฉีดวัคซีน, Health Screening"""
-    __tablename__ = 'event_types'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)  # "ฉีดวัคซีน"
-    slug = Column(String(50), nullable=False, unique=True)  # "vaccination"
-    description = Column(Text)
-    duration_minutes = Column(Integer, nullable=False, default=30)
-    color = Column(String(7), default="#6366f1")  # hex color
-    is_active = Column(Boolean, default=True)
-    
-    # เลือกรูปแบบเวลาจาก availability
-    availability_id = Column(Integer, ForeignKey('availabilities.id'), nullable=True)
-    
-    # Buffer times
-    buffer_before_minutes = Column(Integer, default=0)
-    buffer_after_minutes = Column(Integer, default=0)
-    
-    # Advanced settings
-    max_bookings_per_day = Column(Integer)  # จำกัดจำนวนการจองต่อวัน
-    min_notice_hours = Column(Integer, default=4)  # ต้องจองล่วงหน้าอย่างน้อย
-    max_advance_days = Column(Integer, default=60)  # จองได้ล่วงหน้าสูงสุด
-    
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Relationships
-    availability = relationship("Availability", back_populates="event_types")
-    appointments = relationship("Appointment", back_populates="event_type")
-
 class ServiceType(TenantBase):
-    """ประเภทบริการ เช่น General Health, Vaccination, Health Screening"""
     __tablename__ = 'service_types'
     
     id = Column(Integer, primary_key=True)
@@ -123,86 +205,33 @@ class ServiceType(TenantBase):
     description = Column(Text)
     is_active = Column(Boolean, default=True)
     
-    # Relationships
     appointments = relationship("Appointment", back_populates="service_type")
 
 class Provider(TenantBase):
-    """ผู้ให้บริการ - หมอ/เจ้าหน้าที่"""
     __tablename__ = 'providers'
     
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
-    title = Column(String(50))  # "นพ.", "พญ."
+    title = Column(String(50))
     department = Column(String(100))
     email = Column(String(120))
     phone = Column(String(20))
     is_active = Column(Boolean, default=True)
     
-    # Public booking settings
-    public_booking_url = Column(String(100), unique=True)  # "dr-somchai"
+    public_booking_url = Column(String(100), unique=True)
     bio = Column(Text)
     profile_image_url = Column(String(255))
     
-    # Relationships  
     appointments = relationship("Appointment", back_populates="provider")
-
-class Availability(TenantBase):
-    """ตารางรูปแบบเวลาทำงาน (Schedule Template)"""
-    __tablename__ = 'availabilities'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)  # "จันทร์-ศุกร์ (08:30-16:30)"
-    description = Column(Text)  # คำอธิบายรูปแบบเวลา
-    
-    # Weekly recurring schedule
-    day_of_week = Column(SQLEnum(DayOfWeek), nullable=False)
-    start_time = Column(Time, nullable=False)
-    end_time = Column(Time, nullable=False)
-    
-    # Timezone
-    timezone = Column(String(50), default="Asia/Bangkok")
-    
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Relationships - event types ที่ใช้ availability นี้
-    event_types = relationship("EventType", back_populates="availability")
-    date_overrides = relationship("DateOverride", 
-                                 back_populates="template", 
-                                 foreign_keys="DateOverride.template_id",
-                                 cascade="all, delete-orphan")
-
-class DateOverride(TenantBase):
-    """การปรับเปลี่ยนตารางในวันเฉพาะ (วันหยุดพิเศษ, เปลี่ยนเวลาทำการ)"""
-    __tablename__ = 'date_overrides'
-    
-    id = Column(Integer, primary_key=True)
-    date = Column(DateTime, nullable=False)  # วันที่เฉพาะ
-    
-    # Template relationship
-    template_id = Column(Integer, ForeignKey('availabilities.id'), nullable=True)
-    template_scope = Column(String(50), default='template')  # 'template' or 'global'
-    
-    # Override types
-    is_unavailable = Column(Boolean, default=False)  # วันหยุด
-    custom_start_time = Column(Time)  # เวลาเริ่มต้นพิเศษ
-    custom_end_time = Column(Time)    # เวลาสิ้นสุดพิเศษ
-    
-    reason = Column(String(255))  # เหตุผล เช่น "วันหยุดนักขัตฤกษ์"
-    
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Relationships
-    template = relationship("Availability", back_populates="date_overrides", foreign_keys=[template_id])
+    availabilities = relationship("Availability", back_populates="provider")
 
 class Holiday(TenantBase):
-    """วันหยุดนักขัตฤกษ์"""
     __tablename__ = 'holidays'
     
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     date = Column(DateTime, nullable=False)
-    is_recurring = Column(Boolean, default=False)  # วันหยุดประจำปี
+    is_recurring = Column(Boolean, default=False)
     description = Column(Text)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -219,25 +248,21 @@ class Appointment(TenantBase):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     
-    # Booking details
-    booking_reference = Column(String(20), unique=True)  # REF-ABC123
-    status = Column(String(20), default='confirmed')  # confirmed, cancelled, rescheduled, completed
+    booking_reference = Column(String(20), unique=True)
+    status = Column(String(20), default='confirmed')
     
-    # Contact info (ถ้าไม่มี patient record)
     guest_name = Column(String(100))
     guest_email = Column(String(120))
     guest_phone = Column(String(20))
     
     notes = Column(String(500))
-    internal_notes = Column(Text)  # หมายเหตุภายใน
+    internal_notes = Column(Text)
     
-    # Notification settings
     reminder_sent = Column(Boolean, default=False)
     reminder_sent_at = Column(DateTime)
     
-    # Cancellation/Reschedule
     cancelled_at = Column(DateTime)
-    cancelled_by = Column(String(50))  # 'patient', 'provider', 'admin'
+    cancelled_by = Column(String(50))
     cancellation_reason = Column(Text)
     
     rescheduled_from_id = Column(Integer, ForeignKey('appointments.id'))
@@ -246,21 +271,17 @@ class Appointment(TenantBase):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
-    # Relationships
     patient = relationship("Patient")
     provider = relationship("Provider", back_populates="appointments")
     event_type = relationship("EventType", back_populates="appointments")
     service_type = relationship("ServiceType", back_populates="appointments")
-    
-    # Self-referential for rescheduling
     rescheduled_from = relationship("Appointment", remote_side=[id])
 
-# สำหรับ backward compatibility - export Base เป็น PublicBase
+# สำหรับ backward compatibility
 Base = PublicBase
 
-# Utility function สำหรับสร้าง booking reference
+# Utility function
 def generate_booking_reference():
-    """สร้างรหัสอ้างอิง เช่น BK-A1B2C3"""
     letters = ''.join(random.choices(string.ascii_uppercase, k=3))
     numbers = ''.join(random.choices(string.digits, k=3))
     return f"BK-{letters[0]}{numbers[0]}{letters[1]}{numbers[1]}{letters[2]}{numbers[2]}"
@@ -268,37 +289,29 @@ def generate_booking_reference():
 # Event to create schema for a new hospital
 @event.listens_for(Hospital, 'after_insert')
 def receive_after_insert(mapper, connection, target):
-    """
-    สร้าง schema และ tables สำหรับโรงพยาบาลใหม่
-    """
     schema_name = target.schema_name
     
-    # 1. สร้าง schema
     connection.execute(CreateSchema(schema_name, if_not_exists=True))
     
-    # 2. สร้าง tenant tables ใน schema ใหม่ (ลำดับสำคัญ!)
-    # ต้องสร้างตาม dependency order
+    # ต้องสร้างตามลำดับ dependency
     tenant_tables_order = [
         Patient.__table__,
-        EventType.__table__,
         ServiceType.__table__, 
         Provider.__table__,
+        AvailabilityTemplate.__table__,  # ใหม่! ต้องสร้างก่อน Availability
         Availability.__table__,
+        EventType.__table__,
         DateOverride.__table__,
         Holiday.__table__,
-        Appointment.__table__  # สุดท้าย เพราะมี FK หลายตัว
+        Appointment.__table__
     ]
     
-    # เก็บ schema เดิมไว้
     original_schema = TenantBase.metadata.schema
     
     try:
-        # ตั้งค่า schema ใหม่สำหรับ TenantBase
         TenantBase.metadata.schema = schema_name
         
-        # สร้าง tables ทีละตัวตามลำดับ
         for table in tenant_tables_order:
-            # สร้างสำเนาของ table โดยเปลี่ยน schema
             table_copy = table.tometadata(TenantBase.metadata, schema=schema_name)
             table_copy.create(connection, checkfirst=True)
             
@@ -308,5 +321,4 @@ def receive_after_insert(mapper, connection, target):
         print(f"❌ Error creating schema '{schema_name}': {e}")
         raise
     finally:
-        # คืนค่า schema เดิม
         TenantBase.metadata.schema = original_schema

@@ -60,76 +60,31 @@ def availability_settings():
         flash('ไม่สามารถเข้าถึงได้', 'error')
         return redirect(url_for('main.index'))
     
-    # ดึงข้อมูล templates พร้อม schedule
+    # ดึงข้อมูล templates จาก endpoint ใหม่
     templates_data, error = make_api_request('GET', '/availability/templates')
-    if error or not templates_data:
-        # ถ้าไม่มี templates endpoint ให้ใช้วิธีเดิม
-        template_data, error = make_api_request('GET', '/availability')
-        if error:
-            flash(f'เกิดข้อผิดพลาดในการโหลดเทมเพลต: {error}', 'error')
-            templates = []
-        else:
-            # จัดกลุ่ม availabilities เป็น templates พร้อม schedule
-            availabilities = template_data.get('availabilities', [])
-            templates_dict = {}
-            
-            for avail in availabilities:
-                name = avail['name']
-                if name not in templates_dict:
-                    templates_dict[name] = {
-                        'id': avail['id'],  # ใช้ ID ของ record แรก
-                        'name': name,
-                        'description': avail.get('description', ''),
-                        'days': [],
-                        'schedule': {}  # เพิ่ม schedule
-                    }
-                
-                # เพิ่มวันที่มีใน template นี้
-                day_num = avail['day_of_week']
-                if day_num not in templates_dict[name]['days']:
-                    templates_dict[name]['days'].append(day_num)
-                
-                # เพิ่ม schedule สำหรับวันนี้
-                day_str = str(day_num)
-                if day_str not in templates_dict[name]['schedule']:
-                    templates_dict[name]['schedule'][day_str] = []
-                
-                templates_dict[name]['schedule'][day_str].append({
-                    'start': avail['start_time'],
-                    'end': avail['end_time']
-                })
-            
-            # แปลงเป็น list
-            templates = list(templates_dict.values())
-            # เรียงวัน
-            for template in templates:
-                template['days'].sort()
+    
+    if error:
+        flash(f'เกิดข้อผิดพลาดในการโหลดเทมเพลต: {error}', 'error')
+        templates = []
     else:
         templates = templates_data.get('templates', [])
-        # ถ้ามี templates แต่ยังไม่มี schedule ให้ดึงเพิ่ม
+        
+        # ดึง schedule details สำหรับแต่ละ template
         for template in templates:
-            if 'schedule' not in template:
-                # ดึง schedule สำหรับแต่ละ template
-                detail_data, detail_error = make_api_request('GET', f'/availability/template/{template["id"]}/details')
-                if not detail_error and detail_data:
-                    template['schedule'] = detail_data.get('schedule', {})
-                else:
-                    template['schedule'] = {}
+            detail_data, _ = make_api_request('GET', f'/availability/template/{template["id"]}/details')
+            if detail_data:
+                template['schedule'] = detail_data.get('schedule', {})
     
-    # ไม่ต้องดึง global date overrides เพราะเราจะใช้แค่ template-specific
-    
-    # ตรวจสอบว่ามีการเลือก template หรือไม่
+    # เลือก template
     selected_template_id = request.args.get('selected_template', type=int)
     selected_template = None
     
     if selected_template_id:
-        # หา template ที่ถูกเลือก
         selected_template = next((t for t in templates if t['id'] == selected_template_id), None)
     elif templates:
-        # ถ้าไม่มีการเลือก ให้ใช้อันแรก
         selected_template = templates[0]
     
-    # ดึง date overrides สำหรับ selected template
+    # ดึง date overrides
     template_overrides = []
     if selected_template:
         overrides_data, _ = make_api_request('GET', '/date-overrides', params={'template_id': selected_template['id']})
@@ -148,6 +103,7 @@ def availability_settings():
 @login_required
 def create_template():
     """สร้าง availability template ใหม่"""
+
     current_user = get_current_user()
     tenant_schema, subdomain = get_tenant_info()
     
@@ -183,7 +139,12 @@ def create_template():
                 flash(f'เกิดข้อผิดพลาดในการสร้างเทมเพลต: {error}', 'error')
             else:
                 flash('สร้างเทมเพลตเรียบร้อยแล้ว!', 'success')
-                return redirect(url_for('availability.availability_settings'))
+                template_id = api_data.get('template_id') if api_data else None
+                if template_id:
+                    return redirect(url_for('availability.availability_settings', selected_template=template_id))
+                else:
+                    return redirect(url_for('availability.availability_settings'))
+                
         
         # ถ้าเป็น GET หรือ validation fail
         if request.method == 'GET':
@@ -413,73 +374,16 @@ def get_template_details(template_id):
     if not current_user or not check_tenant_access(subdomain):
         return jsonify({'error': 'Unauthorized'}), 401
     
-    # ดึงข้อมูล templates
-    templates_data, error = make_api_request('GET', '/availability/templates')
-    if error:
-        # ถ้าไม่มี templates endpoint ให้ลองใช้วิธีเดิม
-        template_data, error = make_api_request('GET', '/availability')
-        if error:
-            return jsonify({'error': error}), 500
-        
-        # หา records ของ template นี้
-        availabilities = template_data.get('availabilities', [])
-        
-        # หา template ตาม ID โดยดูจาก record แรกที่มี ID ตรงกัน
-        first_record = next((a for a in availabilities if a['id'] == template_id), None)
-        
-        if not first_record:
-            return jsonify({'error': 'Template not found'}), 404
-        
-        template_name = first_record['name']
-        
-        # ดึงเฉพาะ records ที่มี name เดียวกัน
-        template_records = [a for a in availabilities if a['name'] == template_name]
-        
-        # จัดกลุ่มตาม day_of_week
-        schedule_by_day = {}
-        template_desc = first_record.get('description', '')
-        
-        for record in template_records:
-            day_num = str(record['day_of_week'])  # แปลงเป็น string key
-            if day_num not in schedule_by_day:
-                schedule_by_day[day_num] = []
-            schedule_by_day[day_num].append({
-                'start': record['start_time'],
-                'end': record['end_time']
-            })
-    else:
-        # ใช้ข้อมูลจาก templates endpoint
-        templates = templates_data.get('templates', [])
-        template = next((t for t in templates if t['id'] == template_id), None)
-        
-        if not template:
-            return jsonify({'error': 'Template not found'}), 404
-        
-        # แปลง format ให้เข้ากับ frontend
-        schedule_by_day = {}
-        if 'days' in template:
-            # ถ้ามี days array
-            for day_num in template['days']:
-                day_str = str(day_num)
-                schedule_by_day[day_str] = []
-                # หา time slots สำหรับวันนี้
-                if 'schedule' in template and day_str in template['schedule']:
-                    for slot in template['schedule'][day_str]:
-                        schedule_by_day[day_str].append({
-                            'start': slot[0] if isinstance(slot, list) else slot.get('start', ''),
-                            'end': slot[1] if isinstance(slot, list) else slot.get('end', '')
-                        })
-        
-        template_name = template.get('name', '')
-        template_desc = template.get('description', '')
+    # ใช้ endpoint ใหม่โดยตรง
+    template_data, error = make_api_request('GET', f'/availability/template/{template_id}/details')
     
-    return jsonify({
-        'id': template_id,
-        'name': template_name,
-        'description': template_desc,
-        'schedule': schedule_by_day,
-        'timezone': template.get('timezone', 'Asia/Bangkok') if 'template' in locals() else template_records[0].get('timezone', 'Asia/Bangkok')
-    })
+    if error:
+        return jsonify({'error': error}), 500
+    
+    if not template_data:
+        return jsonify({'error': 'Template not found'}), 404
+    
+    return jsonify(template_data)
 
 # ===== UTILITY ROUTES =====
 @availability_bp.route('/api/quick-setup', methods=['POST'])

@@ -105,19 +105,29 @@ def parse_time(time_str: str) -> time:
 def format_time(time_obj: time) -> str:
     return time_obj.strftime("%H:%M")
 
-def get_or_create_default_availability(db: Session) -> int:
-    """สร้างหรือหา default availability template สำหรับใช้เป็น fallback"""
+def get_or_create_default_template(db: Session) -> int:
+    """สร้างหรือหา default availability template"""
     
     # หา default template ที่มีอยู่แล้ว
-    default_template = db.query(models.Availability).filter(
-        models.Availability.name == "เวลาทำการเริ่มต้น",
-        models.Availability.is_active == True
+    default_template = db.query(models.AvailabilityTemplate).filter(
+        models.AvailabilityTemplate.name == "เวลาทำการเริ่มต้น",
+        models.AvailabilityTemplate.is_active == True
     ).first()
     
     if default_template:
         return default_template.id
     
-    # สร้าง default template ใหม่ (จันทร์-ศุกร์ 08:30-16:30)
+    # สร้าง template ใหม่
+    template = models.AvailabilityTemplate(
+        name="เวลาทำการเริ่มต้น",
+        description="เวลาทำการเริ่มต้น (สร้างอัตโนมัติ)",
+        timezone="Asia/Bangkok",
+        is_active=True
+    )
+    db.add(template)
+    db.flush()
+    
+    # สร้าง default schedule (จันทร์-ศุกร์ 08:30-16:30)
     default_schedule = [
         (1, "08:30", "16:30"),  # Monday
         (2, "08:30", "16:30"),  # Tuesday  
@@ -126,51 +136,46 @@ def get_or_create_default_availability(db: Session) -> int:
         (5, "08:30", "16:30"),  # Friday
     ]
     
-    created_ids = []
     for day_of_week, start_time_str, end_time_str in default_schedule:
-        start_time = parse_time(start_time_str)
-        end_time = parse_time(end_time_str)
-        
         availability = models.Availability(
-            name="เวลาทำการเริ่มต้น",
-            description="เวลาทำการเริ่มต้น (สร้างอัตโนมัติ)",
+            template_id=template.id,
             day_of_week=models.DayOfWeek(day_of_week),
-            start_time=start_time,
-            end_time=end_time,
-            timezone="Asia/Bangkok",
+            start_time=parse_time(start_time_str),
+            end_time=parse_time(end_time_str),
             is_active=True
         )
         db.add(availability)
-        db.flush()
-        created_ids.append(availability.id)
     
     db.commit()
-    return created_ids[0]  # Return first ID
+    return template.id
 
 # --- API Endpoints ---
 
 @router.get("/availability", response_model=dict)
 async def get_availability(subdomain: str, db: Session = Depends(get_db)):
-    """Get availability schedules for a tenant"""
+    """Get all availability records (backward compatibility)"""
     try:
         get_tenant_db(subdomain, db)
         
-        availabilities = db.query(models.Availability).order_by(models.Availability.created_at).all()
+        # Query จาก availability_templates และ join กับ availabilities
+        templates = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.is_active == True
+        ).all()
         
-        # Convert to response format
         result = []
-        for avail in availabilities:
-            result.append({
-                "id": avail.id,
-                "name": avail.name,
-                "description": avail.description,
-                "day_of_week": avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week,
-                "start_time": format_time(avail.start_time),
-                "end_time": format_time(avail.end_time),
-                "timezone": avail.timezone,
-                "is_active": avail.is_active,
-                "created_at": avail.created_at
-            })
+        for template in templates:
+            for avail in template.availabilities:
+                result.append({
+                    "id": avail.id,
+                    "name": template.name,  # ใช้ name จาก template
+                    "description": template.description,
+                    "day_of_week": avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week,
+                    "start_time": format_time(avail.start_time),
+                    "end_time": format_time(avail.end_time),
+                    "timezone": template.timezone,
+                    "is_active": avail.is_active,
+                    "created_at": avail.created_at
+                })
         
         return {"availabilities": result}
     except Exception as e:
@@ -232,212 +237,177 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
     try:
         get_tenant_db(subdomain, db)
         
+        # สร้าง template ก่อน
+        template = models.AvailabilityTemplate(
+            name=schedule_data.name,
+            description=schedule_data.description,
+            timezone=schedule_data.timezone,
+            is_active=True
+        )
+        db.add(template)
+        db.flush()  # เพื่อได้ template.id
+        
+        # สร้าง availability records
         created_ids = []
         for day_of_week, slots in schedule_data.schedule.items():
             if not 0 <= int(day_of_week) <= 6:
                 raise HTTPException(status_code=400, detail=f"Invalid day of week: {day_of_week}")
+            
             for start_time_str, end_time_str in slots:
-                start_time, end_time = parse_time(start_time_str), parse_time(end_time_str)
+                start_time = parse_time(start_time_str)
+                end_time = parse_time(end_time_str)
+                
                 if start_time >= end_time:
                     raise HTTPException(status_code=400, detail=f"Start time must be before end time for day {day_of_week}")
+                
                 availability = models.Availability(
-                    name=schedule_data.name, description=schedule_data.description,
-                    day_of_week=models.DayOfWeek(int(day_of_week)), start_time=start_time, end_time=end_time,
-                    timezone=schedule_data.timezone, is_active=True)
+                    template_id=template.id,  # ใช้ template_id
+                    day_of_week=models.DayOfWeek(int(day_of_week)),
+                    start_time=start_time,
+                    end_time=end_time,
+                    is_active=True
+                )
                 db.add(availability)
                 db.flush()
                 created_ids.append(availability.id)
+        
         db.commit()
-        return {"message": "Availability template created successfully", "ids": created_ids}
-    except (ValueError, HTTPException) as ve:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(ve))
+        return {
+            "message": "Availability template created successfully",
+            "template_id": template.id,
+            "ids": created_ids
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/availability/templates/{template_id}", response_model=dict)
 async def update_availability_template(subdomain: str, template_id: int, schedule_data: WeeklySchedule, db: Session = Depends(get_db)):
-    """Update an entire availability template."""
-    get_tenant_db(subdomain, db)
+    """Update an entire availability template"""
     try:
-        # หา template ที่จะแก้ไข
-        original_template = db.query(models.Availability).filter(models.Availability.id == template_id).first()
-        if not original_template:
-            raise HTTPException(status_code=404, detail="Template not found.")
+        get_tenant_db(subdomain, db)
         
-        original_name = original_template.name
-        old_records = db.query(models.Availability).filter(models.Availability.name == original_name).all()
+        # หา template
+        template = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.id == template_id
+        ).first()
         
-        new_schedule = schedule_data.schedule
-        new_name, new_desc, new_tz = schedule_data.name, schedule_data.description, schedule_data.timezone
-
-        # ตรวจสอบว่า template นี้ถูกใช้โดย event types หรือไม่
-        old_record_ids = [r.id for r in old_records]
-        events_using_template = db.query(models.EventType).filter(models.EventType.availability_id.in_(old_record_ids)).all()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
         
-        # สร้าง mapping ของ availability_id -> event types ที่ใช้
-        usage_map = {}
-        for event in events_using_template:
-            if event.availability_id not in usage_map:
-                usage_map[event.availability_id] = []
-            usage_map[event.availability_id].append(event.name)
-
-        # จัดกลุ่ม old records ตาม day_of_week
-        old_slots_by_day = {day.value: [] for day in models.DayOfWeek}
-        for record in old_records:
-            old_slots_by_day[record.day_of_week.value].append(record)
-
-        # จัดกลุ่ม new schedule ตาม day
-        new_slots_by_day = {int(day): slots for day, slots in new_schedule.items()}
-
-        # อัปเดตหรือสร้าง slots ใหม่ทีละวัน
-        for day_int in range(7):
-            old_day_slots = sorted(old_slots_by_day.get(day_int, []), key=lambda r: r.start_time)
-            new_day_slots = sorted(new_slots_by_day.get(day_int, []), key=lambda t: parse_time(t[0]))
-
-            # อัปเดต existing slots หรือสร้างใหม่
-            for i, (start_str, end_str) in enumerate(new_day_slots):
-                start_time, end_time = parse_time(start_str), parse_time(end_str)
-                
-                if i < len(old_day_slots):
-                    # อัปเดต existing record
-                    record_to_update = old_day_slots[i]
-                    record_to_update.name = new_name
-                    record_to_update.description = new_desc
-                    record_to_update.timezone = new_tz
-                    record_to_update.start_time = start_time
-                    record_to_update.end_time = end_time
-                else:
-                    # สร้าง record ใหม่
-                    new_record = models.Availability(
-                        name=new_name, 
-                        description=new_desc, 
-                        day_of_week=models.DayOfWeek(day_int),
-                        start_time=start_time, 
-                        end_time=end_time, 
-                        timezone=new_tz, 
-                        is_active=True
-                    )
-                    db.add(new_record)
-
-            # ลบ slots ที่เหลือ (ถ้า new slots น้อยกว่า old slots)
-            if len(old_day_slots) > len(new_day_slots):
-                for i in range(len(new_day_slots), len(old_day_slots)):
-                    record_to_delete = old_day_slots[i]
-                    
-                    # ตรวจสอบว่า record นี้ถูกใช้โดย event type หรือไม่
-                    if record_to_delete.id in usage_map:
-                        event_names = ", ".join(usage_map[record_to_delete.id])
-                        day_name = models.DayOfWeek(day_int).name.capitalize()
-                        
-                        raise HTTPException(
-                            status_code=409, 
-                            detail=f"Cannot remove time slot {day_name} ({format_time(record_to_delete.start_time)} - {format_time(record_to_delete.end_time)}) because it is used by event type(s): {event_names}. Please reassign them first."
-                        )
-                    
-                    db.delete(record_to_delete)
-
+        # Update template info
+        template.name = schedule_data.name
+        template.description = schedule_data.description
+        template.timezone = schedule_data.timezone
+        
+        # ตรวจสอบ event types ที่ใช้ template นี้
+        events_using = db.query(models.EventType).filter(
+            models.EventType.template_id == template_id
+        ).all()
+        
+        # ลบ availabilities เดิมทั้งหมด
+        db.query(models.Availability).filter(
+            models.Availability.template_id == template_id
+        ).delete()
+        
+        # สร้าง availabilities ใหม่
+        for day_of_week, slots in schedule_data.schedule.items():
+            for start_time_str, end_time_str in slots:
+                availability = models.Availability(
+                    template_id=template_id,
+                    day_of_week=models.DayOfWeek(int(day_of_week)),
+                    start_time=parse_time(start_time_str),
+                    end_time=parse_time(end_time_str),
+                    is_active=True
+                )
+                db.add(availability)
+        
         db.commit()
-        return {"message": f"Template '{new_name}' updated successfully."}
+        return {"message": f"Template '{schedule_data.name}' updated successfully"}
         
-    except HTTPException:
-        db.rollback()
-        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/availability/templates/{template_id}")
 async def delete_availability_template(subdomain: str, template_id: int, db: Session = Depends(get_db)):
-    """Deletes an entire availability template with smart event type reassignment."""
-    get_tenant_db(subdomain, db)
+    """Delete an entire availability template"""
     try:
-        # หา template ที่จะลบ
-        template_to_delete = db.query(models.Availability).filter(models.Availability.id == template_id).first()
-        if not template_to_delete:
-            raise HTTPException(status_code=404, detail="Template not found.")
+        get_tenant_db(subdomain, db)
         
-        template_name = template_to_delete.name
-        records = db.query(models.Availability).filter(models.Availability.name == template_name).all()
-        record_ids = [r.id for r in records]
-
-        # ลบ date_overrides ที่เชื่อมกับ template นี้ (ใช้ MIN(id) เป็น reference)
-        if record_ids:
-            min_id = min(record_ids)
-            db.query(models.DateOverride).filter(
-                models.DateOverride.template_id == min_id
-            ).delete()
+        # หา template
+        template = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.id == template_id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        template_name = template.name
         
         # หา event types ที่ใช้ template นี้
-        conflicting_events = db.query(models.EventType).filter(models.EventType.availability_id.in_(record_ids)).all()
+        events_using = db.query(models.EventType).filter(
+            models.EventType.template_id == template_id
+        ).all()
         
-        if conflicting_events:
-            # หา default availability หรือสร้างใหม่
-            default_availability_id = get_or_create_default_availability(db)
+        if events_using:
+            # สร้างหรือหา default template
+            default_template_id = get_or_create_default_template(db)
             
-            # ย้าย event types ที่ใช้ template นี้ไปใช้ default
+            # ย้าย event types ไปใช้ default template
             event_names = []
-            for event in conflicting_events:
-                event.availability_id = default_availability_id
+            for event in events_using:
+                event.template_id = default_template_id
                 event_names.append(event.name)
             
             db.commit()
             
-            # ลบ template
-            for record in records:
-                db.delete(record)
-            
+            # ลบ template (cascade จะลบ availabilities และ date_overrides)
+            db.delete(template)
             db.commit()
             
-            moved_events = ", ".join(set(event_names))
             return {
-                "message": f"Template '{template_name}' deleted successfully. Event types ({moved_events}) have been moved to default availability template.",
-                "moved_events": list(set(event_names))
+                "message": f"Template '{template_name}' deleted successfully",
+                "moved_events": event_names
             }
         else:
-            # ไม่มี event types ใช้อยู่ ลบได้เลย
-            for record in records:
-                db.delete(record)
-            
+            # ลบ template ได้เลย
+            db.delete(template)
             db.commit()
-            return {"message": f"Template '{template_name}' deleted successfully."}
+            return {"message": f"Template '{template_name}' deleted successfully"}
         
-    except HTTPException:
-        db.rollback()
-        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/availability/templates", response_model=dict)
 async def get_availability_templates(subdomain: str, db: Session = Depends(get_db)):
-    """Get availability templates grouped by name"""
+    """Get all availability templates"""
     try:
         get_tenant_db(subdomain, db)
         
-        availabilities = db.query(models.Availability).filter(
-            models.Availability.is_active == True
-        ).order_by(models.Availability.created_at).all()
+        templates = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.is_active == True
+        ).order_by(models.AvailabilityTemplate.created_at).all()
         
-        templates = {}
-        for avail in availabilities:
-            template_name = avail.name or f"Template {avail.id}"
+        result = []
+        for template in templates:
+            # หาวันที่ template นี้มี
+            days = set()
+            for avail in template.availabilities:
+                day_value = avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week
+                days.add(day_value)
             
-            if template_name not in templates:
-                templates[template_name] = {
-                    "id": avail.id,
-                    "name": template_name,
-                    "description": avail.description,
-                    "days": [],
-                    "timezone": avail.timezone
-                }
-            
-            day_value = avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week
-            if day_value not in templates[template_name]["days"]:
-                templates[template_name]["days"].append(day_value)
-            
-        return {"templates": list(templates.values())}
+            result.append({
+                "id": template.id,
+                "name": template.name,
+                "description": template.description,
+                "days": sorted(list(days)),
+                "timezone": template.timezone
+            })
+        
+        return {"templates": result}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -448,43 +418,36 @@ async def get_availability_template_details(subdomain: str, template_id: int, db
     try:
         get_tenant_db(subdomain, db)
         
-        # หา template ตาม ID
-        template_record = db.query(models.Availability).filter(models.Availability.id == template_id).first()
-        if not template_record:
+        template = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.id == template_id
+        ).first()
+        
+        if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
-        template_name = template_record.name
-        
-        # ดึงทุก records ของ template นี้
-        template_records = db.query(models.Availability).filter(
-            models.Availability.name == template_name,
-            models.Availability.is_active == True
-        ).order_by(models.Availability.day_of_week, models.Availability.start_time).all()
-        
-        # จัดกลุ่มตาม day_of_week
+        # จัดกลุ่ม schedule ตาม day_of_week
         schedule = {}
-        for record in template_records:
-            day_num = record.day_of_week.value if hasattr(record.day_of_week, 'value') else record.day_of_week
-            day_str = str(day_num)
-            
-            if day_str not in schedule:
-                schedule[day_str] = []
-            
-            schedule[day_str].append({
-                'start': format_time(record.start_time),
-                'end': format_time(record.end_time)
-            })
+        for avail in template.availabilities:
+            if avail.is_active:
+                day_num = avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week
+                day_str = str(day_num)
+                
+                if day_str not in schedule:
+                    schedule[day_str] = []
+                
+                schedule[day_str].append({
+                    'start': format_time(avail.start_time),
+                    'end': format_time(avail.end_time)
+                })
         
         return {
-            "id": template_id,
-            "name": template_name,
-            "description": template_record.description,
-            "timezone": template_record.timezone,
+            "id": template.id,
+            "name": template.name,
+            "description": template.description,
+            "timezone": template.timezone,
             "schedule": schedule
         }
         
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -524,16 +487,13 @@ async def get_date_overrides(
     try:
         get_tenant_db(subdomain, db)
         
-        # Build query
         query = db.query(models.DateOverride)
         
-        # Filter by template_id if provided
         if template_id is not None:
             query = query.filter(models.DateOverride.template_id == template_id)
         
         overrides = query.order_by(models.DateOverride.date).all()
         
-        # Convert to response format
         result = []
         for override in overrides:
             result.append({
@@ -559,26 +519,17 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
         get_tenant_db(subdomain, db)
         
         # Parse date
-        try:
-            override_date = datetime.datetime.strptime(override_data.date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        override_date = datetime.datetime.strptime(override_data.date, "%Y-%m-%d").date()
         
         # Parse times if provided
-        custom_start_time = None
-        custom_end_time = None
+        custom_start_time = parse_time(override_data.custom_start_time) if override_data.custom_start_time else None
+        custom_end_time = parse_time(override_data.custom_end_time) if override_data.custom_end_time else None
         
-        if override_data.custom_start_time:
-            custom_start_time = parse_time(override_data.custom_start_time)
-        
-        if override_data.custom_end_time:
-            custom_end_time = parse_time(override_data.custom_end_time)
-        
-        # Validate time range if both provided
+        # Validate
         if custom_start_time and custom_end_time and custom_start_time >= custom_end_time:
             raise HTTPException(status_code=400, detail="Start time must be before end time")
         
-        # Create date override with template support
+        # Create override
         override = models.DateOverride(
             date=override_date,
             template_id=override_data.template_id,
@@ -608,8 +559,6 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
             }
         }
         
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -632,8 +581,6 @@ async def delete_date_override(subdomain: str, override_id: int, db: Session = D
         
         return {"message": "Date override deleted successfully"}
         
-    except HTTPException:
-        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
