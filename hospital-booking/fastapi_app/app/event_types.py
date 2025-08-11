@@ -1,4 +1,4 @@
-# fastapi_app/app/event_types.py - Event Types API endpoints
+# fastapi_app/app/event_types.py - Enhanced with availability validation
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -32,6 +32,31 @@ def get_tenant_db(subdomain: str, db: Session):
         return db
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
+
+def get_or_assign_default_availability(db: Session, availability_id: Optional[int] = None) -> int:
+    """หาหรือสร้าง default availability และตรวจสอบ availability_id ที่ส่งมา"""
+    
+    # ถ้ามี availability_id ให้ตรวจสอบว่ายังใช้ได้หรือไม่
+    if availability_id:
+        existing_availability = db.query(models.Availability).filter(
+            models.Availability.id == availability_id,
+            models.Availability.is_active == True
+        ).first()
+        if existing_availability:
+            return availability_id
+    
+    # หา default availability ที่มีอยู่แล้ว
+    default_availability = db.query(models.Availability).filter(
+        models.Availability.name == "เวลาทำการเริ่มต้น",
+        models.Availability.is_active == True
+    ).first()
+    
+    if default_availability:
+        return default_availability.id
+    
+    # สร้าง default availability ใหม่
+    from .availability import get_or_create_default_availability
+    return get_or_create_default_availability(db)
 
 # --- Pydantic Models ---
 class EventTypeCreate(BaseModel):
@@ -67,6 +92,7 @@ class EventTypeResponse(BaseModel):
     color: str
     is_active: bool
     availability_id: Optional[int]
+    availability_name: Optional[str] = None  # เพิ่มชื่อ availability
     buffer_before_minutes: int
     buffer_after_minutes: int
     max_bookings_per_day: Optional[int]
@@ -87,28 +113,35 @@ def create_slug(name: str) -> str:
 # --- API Endpoints ---
 
 @router.get("/event-types", response_model=dict)
-async def get_event_types(
-    subdomain: str,
-    db: Session = Depends(get_db)
-):
-    """Get all event types for a tenant"""
+async def get_event_types(subdomain: str, db: Session = Depends(get_db)):
+    """Get all event types for a tenant with availability info"""
     try:
         get_tenant_db(subdomain, db)
         
         event_types = db.query(models.EventType).order_by(models.EventType.created_at.desc()).all()
         
-        return {
-            "event_types": [EventTypeResponse.from_orm(et) for et in event_types]
-        }
+        # เพิ่มข้อมูล availability name
+        result = []
+        for et in event_types:
+            et_dict = EventTypeResponse.from_orm(et).dict()
+            
+            # หาชื่อ availability
+            if et.availability_id:
+                availability = db.query(models.Availability).filter(
+                    models.Availability.id == et.availability_id
+                ).first()
+                et_dict['availability_name'] = availability.name if availability else "ไม่พบข้อมูล"
+            else:
+                et_dict['availability_name'] = "ไม่ได้กำหนด"
+            
+            result.append(et_dict)
+        
+        return {"event_types": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/event-types/{event_type_id}", response_model=EventTypeResponse)
-async def get_event_type(
-    subdomain: str,
-    event_type_id: int,
-    db: Session = Depends(get_db)
-):
+async def get_event_type(subdomain: str, event_type_id: int, db: Session = Depends(get_db)):
     """Get a specific event type"""
     try:
         get_tenant_db(subdomain, db)
@@ -127,11 +160,7 @@ async def get_event_type(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/event-types", response_model=EventTypeResponse)
-async def create_event_type(
-    subdomain: str,
-    event_type_data: EventTypeCreate,
-    db: Session = Depends(get_db)
-):
+async def create_event_type(subdomain: str, event_type_data: EventTypeCreate, db: Session = Depends(get_db)):
     """Create a new event type"""
     try:
         get_tenant_db(subdomain, db)
@@ -152,14 +181,8 @@ async def create_event_type(
                     break
                 counter += 1
         
-        # Use first available availability if not provided
-        availability_id = event_type_data.availability_id
-        if not availability_id:
-            first_availability = db.query(models.Availability).filter(
-                models.Availability.is_active == True
-            ).first()
-            if first_availability:
-                availability_id = first_availability.id
+        # ใช้ function ใหม่สำหรับจัดการ availability
+        availability_id = get_or_assign_default_availability(db, event_type_data.availability_id)
 
         # Create event type
         event_type = models.EventType(
@@ -186,12 +209,7 @@ async def create_event_type(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/event-types/{event_type_id}", response_model=EventTypeResponse)
-async def update_event_type(
-    subdomain: str,
-    event_type_id: int,
-    event_type_data: EventTypeUpdate,
-    db: Session = Depends(get_db)
-):
+async def update_event_type(subdomain: str, event_type_id: int, event_type_data: EventTypeUpdate, db: Session = Depends(get_db)):
     """Update an event type"""
     try:
         get_tenant_db(subdomain, db)
@@ -213,6 +231,9 @@ async def update_event_type(
                 event_type.buffer_after_minutes = value
             elif field == "advance_booking_days":
                 event_type.max_advance_days = value
+            elif field == "availability_id":
+                # ใช้ function สำหรับตรวจสอบ availability
+                event_type.availability_id = get_or_assign_default_availability(db, value)
             elif hasattr(event_type, field):
                 setattr(event_type, field, value)
         
@@ -252,11 +273,7 @@ async def update_event_type(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/event-types/{event_type_id}")
-async def delete_event_type(
-    subdomain: str,
-    event_type_id: int,
-    db: Session = Depends(get_db)
-):
+async def delete_event_type(subdomain: str, event_type_id: int, db: Session = Depends(get_db)):
     """Delete an event type"""
     try:
         get_tenant_db(subdomain, db)
@@ -286,6 +303,45 @@ async def delete_event_type(
         
     except HTTPException:
         raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/event-types/validate-availability")
+async def validate_event_type_availability(subdomain: str, db: Session = Depends(get_db)):
+    """ตรวจสอบและแก้ไข event types ที่มี availability_id ผิดพลาด"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        # หา event types ที่มี availability_id ที่ไม่มีอยู่จริงหรือถูก deactivate
+        problematic_events = db.query(models.EventType).outerjoin(
+            models.Availability, 
+            models.EventType.availability_id == models.Availability.id
+        ).filter(
+            (models.Availability.id.is_(None)) |  # availability ไม่มีอยู่
+            (models.Availability.is_active == False)  # หรือถูก deactivate
+        ).all()
+        
+        if not problematic_events:
+            return {"message": "All event types have valid availability assignments", "fixed_count": 0}
+        
+        # แก้ไขโดยกำหนด default availability
+        default_availability_id = get_or_assign_default_availability(db)
+        fixed_events = []
+        
+        for event in problematic_events:
+            event.availability_id = default_availability_id
+            fixed_events.append(event.name)
+        
+        db.commit()
+        
+        return {
+            "message": f"Fixed {len(fixed_events)} event types with invalid availability",
+            "fixed_count": len(fixed_events),
+            "fixed_events": fixed_events,
+            "assigned_to": "เวลาทำการเริ่มต้น"
+        }
+        
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

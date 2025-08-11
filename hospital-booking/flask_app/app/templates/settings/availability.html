@@ -1,4 +1,3 @@
-<!-- hospital-booking/flask_app/settings/availability.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -23,19 +22,29 @@
         .time-slot-row:hover {
             background-color: #f9fafb;
         }
+        .template-item {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .template-item:hover {
+            background-color: #f3f4f6;
+        }
+        .template-item.active {
+            background-color: #e0e7ff;
+            border-color: #6366f1;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav class="bg-white shadow-sm border-b sticky top-0 z-40">
+        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-4">
-                    <button onclick="history.back()" class="text-gray-600 hover:text-gray-900">
+                    <a href="/dashboard" class="text-gray-600 hover:text-gray-900">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
-                    </button>
+                    </a>
                     <h1 class="text-xl font-semibold text-gray-900">ตั้งค่าเวลาทำการ</h1>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -47,24 +56,83 @@
         </div>
     </nav>
 
-    <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div class="space-y-8">
-            <!-- Working Hours -->
-            <div class="bg-white rounded-xl shadow-sm border p-8">
-                <!-- Template Name and Description -->
+    <div class="max-w-full mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-12 gap-8 h-screen">
+            <!-- Left Panel - Templates List -->
+            <div class="col-span-4 bg-white rounded-xl shadow-sm border p-6 overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-medium text-gray-900">เทมเพลตเวลาทำการ</h2>
+                    <button onclick="createNewTemplate()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm">
+                        + สร้างใหม่
+                    </button>
+                </div>
+                
+                <div id="templates-list" class="space-y-3">
+                    <!-- Templates will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Right Panel - Template Editor -->
+            <div class="col-span-8 bg-white rounded-xl shadow-sm border p-8 overflow-y-auto">
+                <div id="editor-content">
+                    <!-- Editor content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '/api/v1';
+        const SUBDOMAIN = new URLSearchParams(window.location.search).get('subdomain') || 'humnoi';
+        const DAYS = [
+            { key: 'sunday', name: 'Sunday' }, { key: 'monday', name: 'Monday' },
+            { key: 'tuesday', name: 'Tuesday' }, { key: 'wednesday', name: 'Wednesday' },
+            { key: 'thursday', name: 'Thursday' }, { key: 'friday', name: 'Friday' },
+            { key: 'saturday', name: 'Saturday' }
+        ];
+        
+        let timeSlotCounters = {};
+        let currentTemplateId = null;
+        let templates = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadExistingTemplates();
+            showWelcomeScreen();
+        });
+
+        function showWelcomeScreen() {
+            const editorContent = document.getElementById('editor-content');
+            editorContent.innerHTML = `
+                <div class="text-center py-20">
+                    <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">เลือกเทมเพลตเพื่อแก้ไข</h3>
+                    <p class="text-gray-500 mb-4">หรือสร้างเทมเพลตใหม่โดยกดปุ่ม "สร้างใหม่"</p>
+                </div>
+            `;
+        }
+
+        function showTemplateEditor(templateData = null) {
+            const isEditing = templateData !== null;
+            const editorContent = document.getElementById('editor-content');
+            
+            editorContent.innerHTML = `
                 <div class="mb-8 p-6 bg-gray-50 rounded-lg">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">ข้อมูลเทมเพลต</h3>
+                    <input type="hidden" id="editingTemplateId" value="${isEditing ? templateData.id : ''}">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">${isEditing ? 'แก้ไขเทมเพลต' : 'สร้างเทมเพลตใหม่'}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label for="templateName" class="block text-sm font-medium text-gray-700 mb-2">ชื่อเทมเพลต *</label>
                             <input type="text" id="templateName" placeholder="เช่น จันทร์-ศุกร์ (08:30-16:30)" 
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                   required>
+                                   value="${isEditing ? templateData.name : ''}" required>
                         </div>
                         <div>
                             <label for="templateDescription" class="block text-sm font-medium text-gray-700 mb-2">คำอธิบาย</label>
                             <input type="text" id="templateDescription" placeholder="เช่น เวลาทำการปกติวันธรรมดา"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                   value="${isEditing ? (templateData.description || '') : ''}">
                         </div>
                     </div>
                 </div>
@@ -82,278 +150,205 @@
                     </div>
                 </div>
 
-                <div class="space-y-1">
-                    <!-- Sunday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Sunday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="sunday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('sunday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="sunday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="sunday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Monday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Monday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="monday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('monday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="monday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="monday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tuesday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Tuesday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="tuesday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('tuesday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="tuesday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="tuesday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Wednesday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Wednesday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="wednesday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('wednesday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="wednesday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="wednesday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Thursday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Thursday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="thursday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('thursday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="thursday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="thursday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Friday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Friday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="friday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('friday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="friday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="friday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Saturday -->
-                    <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                        <div class="w-24">
-                            <label class="text-sm font-medium text-gray-900">Saturday</label>
-                        </div>
-                        <div class="flex-1 flex items-center space-x-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="saturday-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('saturday')">
-                            </div>
-                            <div class="flex-1">
-                                <div id="saturday-slots" class="space-y-2">
-                                    <!-- Time slots will be added here -->
-                                </div>
-                                <div id="saturday-unavailable" class="text-sm text-gray-400 hidden">
-                                    Unavailable
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="space-y-1" id="days-container">
+                    <!-- Days will be dynamically populated -->
                 </div>
 
                 <div class="mt-8 p-6 bg-gray-50 rounded-lg">
                     <h3 class="text-sm font-medium text-gray-900 mb-3">Quick actions</h3>
                     <div class="flex flex-wrap gap-2 mb-4">
-                        <button onclick="copyMondayToWeekdays()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                            Copy Monday to weekdays
+                         <button onclick="setWorkingHours('08:30', '16:30')" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            ตั้งเป็น จ-ศ (08:30-16:30)
                         </button>
-                        <button onclick="setWorkingHours('09:00', '17:00')" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                            Set 9-5 schedule
+                        <button onclick="copyMondayToWeekdays()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                           คัดลอกวันจันทร์ไปวันทำการ
                         </button>
                         <button onclick="clearAllSchedules()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-red-600 hover:text-red-700 transition-colors">
-                            Clear all
+                            ล้างทั้งหมด
                         </button>
                     </div>
-                    <div class="flex items-center space-x-2 text-sm text-gray-600">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>Select days when you're available, then set your time ranges. You can add multiple time slots per day.</span>
+                </div>
+
+                <!-- Date Overrides Section -->
+                <div class="mt-8 p-6 bg-white border rounded-lg">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-medium text-gray-900">วันที่มีการเปลี่ยนแปลง</h2>
+                        <button onclick="addDateOverride()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
+                            เพิ่มวันพิเศษ
+                        </button>
+                    </div>
+
+                    <div id="dateOverrides" class="space-y-4">
+                        <!-- Date overrides will be added here -->
+                    </div>
+
+                    <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                        <div class="flex items-center space-x-2 text-sm text-gray-600">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>ใช้สำหรับกำหนดวันหยุดพิเศษ หรือเปลี่ยนเวลาทำการในวันใดวันหนึ่ง</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Date Overrides -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-lg font-medium text-gray-900">วันที่มีการเปลี่ยนแปลง</h2>
-                    <button onclick="addDateOverride()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
-                        เพิ่มวันพิเศษ
+                <!-- Action Buttons -->
+                <div class="flex justify-between mt-8">
+                    <button onclick="cancelEdit()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                        ยกเลิก
                     </button>
-                </div>
-
-                <div id="dateOverrides" class="space-y-4">
-                    <!-- Date overrides will be added here -->
-                </div>
-
-                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <div class="flex items-center space-x-2 text-sm text-gray-600">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>ใช้สำหรับกำหนดวันหยุดพิเศษ หรือเปลี่ยนเวลาทำการในวันใดวันหนึ่ง</span>
+                    <div class="space-x-4">
+                        <button onclick="previewSchedule()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                            ดูตัวอย่าง
+                        </button>
+                        <button onclick="saveSettings()" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                            บันทึก
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            <!-- Save Button -->
-            <div class="flex justify-end space-x-4">
-                <button onclick="previewSchedule()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                    ดูตัวอย่าง
-                </button>
-                <button onclick="saveSettings()" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-                    บันทึกการตั้งค่า
-                </button>
-            </div>
-        </div>
-    </div>
+                <!-- Preview Modal -->
+                <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+                    <div class="bg-white rounded-xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-bold">ตัวอย่างตารางเวลา</h2>
+                            <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="previewContent" class="space-y-4"></div>
+                    </div>
+                </div>
+            `;
 
-    <!-- Preview Modal -->
-    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
-        <div class="bg-white rounded-xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">ตัวอย่างตารางเวลา</h2>
-                <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
+            // Initialize days
+            initializeDayRows();
             
-            <div id="previewContent" class="space-y-4">
-                <!-- Preview content will be generated by JavaScript -->
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const API_BASE = 'http://localhost:8000/api/v1';
-        
-        // Auto-detect subdomain from current URL
-        function getSubdomain() {
-            const hostname = window.location.hostname;
-            const urlParams = new URLSearchParams(window.location.search);
-            
-            // Check if subdomain is in URL parameter first
-            if (urlParams.has('subdomain')) {
-                return urlParams.get('subdomain');
+            // If editing, load template data
+            if (isEditing) {
+                loadTemplateData(templateData);
+            } else {
+                clearAndResetForm();
             }
-            
-            // Check if we're on a subdomain like humnoi.localhost
-            if (hostname !== 'localhost' && hostname.includes('.')) {
-                const parts = hostname.split('.');
-                if (parts.length > 1 && parts[1] === 'localhost') {
-                    return parts[0]; // Return subdomain part
-                }
-            }
-            
-            // Default fallback
-            return 'humnoi';
         }
-        
-        const SUBDOMAIN = getSubdomain();
-        console.log('Using subdomain:', SUBDOMAIN);
-        
-        let timeSlotCounters = {
-            sunday: 0, monday: 0, tuesday: 0, wednesday: 0, 
-            thursday: 0, friday: 0, saturday: 0
-        };
 
-        // Toggle day enabled/disabled
+        function initializeDayRows() {
+            const container = document.getElementById('days-container');
+            container.innerHTML = DAYS.map(day => `
+                <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
+                    <div class="w-24">
+                        <label class="text-sm font-medium text-gray-900">${day.name}</label>
+                    </div>
+                    <div class="flex-1 flex items-center space-x-3">
+                        <input type="checkbox" id="${day.key}-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('${day.key}')">
+                        <div class="flex-1">
+                            <div id="${day.key}-slots" class="space-y-2 hidden"></div>
+                            <div id="${day.key}-unavailable" class="text-sm text-gray-400">Unavailable</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            clearAndResetForm();
+        }
+
+        function createNewTemplate() {
+            currentTemplateId = null;
+            clearActiveTemplate();
+            showTemplateEditor();
+        }
+
+        function editTemplate(templateId) {
+            currentTemplateId = templateId;
+            const templateData = templates.find(t => t.id === templateId);
+            if (!templateData) {
+                alert('ไม่พบเทมเพลต');
+                return;
+            }
+            
+            setActiveTemplate(templateId);
+            showTemplateEditor(templateData);
+        }
+
+        function cancelEdit() {
+            currentTemplateId = null;
+            clearActiveTemplate();
+            showWelcomeScreen();
+        }
+
+        function setActiveTemplate(templateId) {
+            // Remove active class from all templates
+            document.querySelectorAll('.template-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to selected template
+            const templateElement = document.querySelector(`[data-template-id="${templateId}"]`);
+            if (templateElement) {
+                templateElement.classList.add('active');
+            }
+        }
+
+        function clearActiveTemplate() {
+            document.querySelectorAll('.template-item').forEach(item => {
+                item.classList.remove('active');
+            });
+        }
+
+        async function loadTemplateData(templateData) {
+            try {
+                // Fetch full template data
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`);
+                if (!response.ok) throw new Error('Could not fetch data.');
+                const data = await response.json();
+                
+                const templateRecords = data.availabilities.filter(a => a.name === templateData.name);
+                
+                document.getElementById('timezoneSelect').value = templateData.timezone;
+                
+                const recordsByDay = {};
+                templateRecords.forEach(rec => {
+                    if (!recordsByDay[rec.day_of_week]) recordsByDay[rec.day_of_week] = [];
+                    recordsByDay[rec.day_of_week].push({ start: rec.start_time, end: rec.end_time });
+                });
+
+                for (const dayIndex in recordsByDay) {
+                    const dayKey = DAYS[dayIndex].key;
+                    document.getElementById(`${dayKey}-enabled`).checked = true;
+                    toggleDay(dayKey);
+                    
+                    const slots = recordsByDay[dayIndex];
+                    // Fill first slot
+                    document.getElementById(`${dayKey}-start-1`).value = slots[0].start;
+                    document.getElementById(`${dayKey}-end-1`).value = slots[0].end;
+                    // Add subsequent slots
+                    for(let i = 1; i < slots.length; i++) {
+                        addTimeSlot(dayKey);
+                        document.getElementById(`${dayKey}-start-${i+1}`).value = slots[i].start;
+                        document.getElementById(`${dayKey}-end-${i+1}`).value = slots[i].end;
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error loading template data:', error);
+                alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + error.message);
+            }
+        }
+
         function toggleDay(day) {
             const checkbox = document.getElementById(`${day}-enabled`);
             const slotsContainer = document.getElementById(`${day}-slots`);
             const unavailableDiv = document.getElementById(`${day}-unavailable`);
             
             if (checkbox.checked) {
-                // Show time slots, hide unavailable text
                 slotsContainer.classList.remove('hidden');
                 unavailableDiv.classList.add('hidden');
-                
-                // Add first time slot if none exist
-                if (timeSlotCounters[day] === 0) {
-                    addTimeSlot(day);
-                }
+                if (timeSlotCounters[day] === 0) addTimeSlot(day);
             } else {
-                // Hide time slots, show unavailable text
                 slotsContainer.classList.add('hidden');
-                unavailableDiv.classList.remove('hidden');
-                
-                // Clear all time slots
                 slotsContainer.innerHTML = '';
+                unavailableDiv.classList.remove('hidden');
                 timeSlotCounters[day] = 0;
             }
         }
@@ -361,200 +356,98 @@
         function addTimeSlot(day) {
             timeSlotCounters[day]++;
             const slotsContainer = document.getElementById(`${day}-slots`);
-            
             const newSlot = document.createElement('div');
-            newSlot.className = 'flex items-center space-x-2 py-1';
+            newSlot.className = 'flex items-center space-x-2 py-1 time-slot-row';
             newSlot.id = `${day}-slot-${timeSlotCounters[day]}`;
             
-            const showRemoveButton = timeSlotCounters[day] > 1 || slotsContainer.children.length > 0;
-            
             newSlot.innerHTML = `
-                <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                    ${generateTimeOptions('08:30')}
-                </select>
+                <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">${generateTimeOptions('08:30')}</select>
                 <span class="text-gray-400">—</span>
-                <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                    ${generateTimeOptions('17:00')}
-                </select>
-                <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                </button>
-                ${showRemoveButton ? `
-                <button onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>` : ''}
+                <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">${generateTimeOptions('16:30')}</select>
+                <button type="button" onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></button>
+                <button type="button" onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
             `;
-            
             slotsContainer.appendChild(newSlot);
         }
         
         function generateTimeOptions(selectedTime = '09:00') {
-            const times = [];
-            for (let hour = 0; hour < 24; hour++) {
-                for (let minute = 0; minute < 60; minute += 15) {
-                    const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                    const selected = timeStr === selectedTime ? 'selected' : '';
-                    times.push(`<option value="${timeStr}" ${selected}>${timeStr}</option>`);
-                }
-            }
-            return times.join('');
+            return Array.from({ length: 24 * 4 }, (_, i) => {
+                const h = Math.floor(i / 4).toString().padStart(2, '0');
+                const m = (i % 4 * 15).toString().padStart(2, '0');
+                const time = `${h}:${m}`;
+                return `<option value="${time}" ${time === selectedTime ? 'selected' : ''}>${time}</option>`;
+            }).join('');
         }
 
         function removeTimeSlot(day, slotNumber) {
-            const slot = document.getElementById(`${day}-slot-${slotNumber}`);
-            if (slot) {
-                slot.remove();
-            }
+            document.getElementById(`${day}-slot-${slotNumber}`)?.remove();
         }
-        
-        // Quick action functions
-        function copyMondayToWeekdays() {
-            const mondayCheckbox = document.getElementById('monday-enabled');
-            const weekdays = ['tuesday', 'wednesday', 'thursday', 'friday'];
-            
-            if (!mondayCheckbox.checked) {
-                alert('Please set Monday schedule first');
-                return;
-            }
-            
-            // Get Monday's time slots
-            const mondaySlots = [];
-            let slotNum = 1;
-            while (document.getElementById(`monday-start-${slotNum}`)) {
-                const startSelect = document.getElementById(`monday-start-${slotNum}`);
-                const endSelect = document.getElementById(`monday-end-${slotNum}`);
-                
-                if (startSelect && endSelect) {
-                    mondaySlots.push({
-                        start: startSelect.value,
-                        end: endSelect.value
-                    });
-                }
-                slotNum++;
-            }
-            
-            // Apply to other weekdays
-            weekdays.forEach(day => {
-                const checkbox = document.getElementById(`${day}-enabled`);
-                const slotsContainer = document.getElementById(`${day}-slots`);
-                
-                // Clear existing slots
-                slotsContainer.innerHTML = '';
-                timeSlotCounters[day] = 0;
-                
-                // Enable the day
-                checkbox.checked = true;
-                
-                // Show slots container and hide unavailable text
-                slotsContainer.classList.remove('hidden');
-                document.getElementById(`${day}-unavailable`).classList.add('hidden');
-                
-                // Add Monday's time slots
-                mondaySlots.forEach(slot => {
-                    timeSlotCounters[day]++;
-                    const newSlot = document.createElement('div');
-                    newSlot.className = 'flex items-center space-x-2 py-1';
-                    newSlot.id = `${day}-slot-${timeSlotCounters[day]}`;
-                    
-                    const showRemoveButton = timeSlotCounters[day] > 1;
-                    
-                    newSlot.innerHTML = `
-                        <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                            ${generateTimeOptions(slot.start)}
-                        </select>
-                        <span class="text-gray-400">—</span>
-                        <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                            ${generateTimeOptions(slot.end)}
-                        </select>
-                        <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                        </button>
-                        ${showRemoveButton ? `
-                        <button onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </button>` : ''}
-                    `;
-                    
-                    slotsContainer.appendChild(newSlot);
-                });
+
+        function clearAndResetForm() {
+            DAYS.forEach(({ key }) => {
+                timeSlotCounters[key] = 0;
+                const checkbox = document.getElementById(`${key}-enabled`);
+                if (checkbox) checkbox.checked = false;
+                toggleDay(key);
             });
+        }
+
+        function clearAllSchedules() {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลในฟอร์ม?')) {
+                clearAndResetForm();
+            }
         }
         
         function setWorkingHours(startTime, endTime) {
-            const workingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+            clearAndResetForm();
+            const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+            const templateName = document.getElementById('templateName');
+            const templateDesc = document.getElementById('templateDescription');
             
-            // Also set template name if empty
-            const templateNameInput = document.getElementById('templateName');
-            if (!templateNameInput.value.trim()) {
-                templateNameInput.value = `จันทร์-ศุกร์ (${startTime}-${endTime})`;
+            if (!templateName.value.trim()) {
+                templateName.value = `จันทร์-ศุกร์ (${startTime}-${endTime})`;
+            }
+            if (!templateDesc.value.trim()) {
+                templateDesc.value = 'เวลาทำการปกติวันธรรมดา';
             }
             
-            const templateDescInput = document.getElementById('templateDescription');
-            if (!templateDescInput.value.trim()) {
-                templateDescInput.value = 'เวลาทำการปกติวันธรรมดา';
-            }
-            
-            workingDays.forEach(day => {
-                const checkbox = document.getElementById(`${day}-enabled`);
-                const slotsContainer = document.getElementById(`${day}-slots`);
-                
-                // Clear existing
-                slotsContainer.innerHTML = '';
-                timeSlotCounters[day] = 0;
-                
-                // Enable day
-                checkbox.checked = true;
-                slotsContainer.classList.remove('hidden');
-                document.getElementById(`${day}-unavailable`).classList.add('hidden');
-                
-                // Add single time slot
-                timeSlotCounters[day] = 1;
-                const newSlot = document.createElement('div');
-                newSlot.className = 'flex items-center space-x-2 py-1';
-                newSlot.id = `${day}-slot-1`;
-                
-                newSlot.innerHTML = `
-                    <select id="${day}-start-1" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                        ${generateTimeOptions(startTime)}
-                    </select>
-                    <span class="text-gray-400">—</span>
-                    <select id="${day}-end-1" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">
-                        ${generateTimeOptions(endTime)}
-                    </select>
-                    <button onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                        </svg>
-                    </button>
-                `;
-                
-                slotsContainer.appendChild(newSlot);
+            weekdays.forEach(day => {
+                document.getElementById(`${day}-enabled`).checked = true;
+                toggleDay(day);
+                document.getElementById(`${day}-start-1`).value = startTime;
+                document.getElementById(`${day}-end-1`).value = endTime;
             });
         }
-        
-        function clearAllSchedules() {
-            if (!confirm('Are you sure you want to clear all schedules?')) return;
+
+        function copyMondayToWeekdays() {
+            const mondayCheckbox = document.getElementById('monday-enabled');
+            if (!mondayCheckbox.checked) {
+                alert('กรุณาตั้งค่าเวลาวันจันทร์ก่อน');
+                return;
+            }
             
-            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const mondaySlots = [];
+            let slotNum = 1;
+            while(document.getElementById(`monday-start-${slotNum}`)) {
+                const start = document.getElementById(`monday-start-${slotNum}`).value;
+                const end = document.getElementById(`monday-end-${slotNum}`).value;
+                if (start && end) mondaySlots.push({start, end});
+                slotNum++;
+            }
             
-            days.forEach(day => {
-                const checkbox = document.getElementById(`${day}-enabled`);
+            ['tuesday', 'wednesday', 'thursday', 'friday'].forEach(day => {
+                document.getElementById(`${day}-enabled`).checked = true;
                 const slotsContainer = document.getElementById(`${day}-slots`);
-                
-                checkbox.checked = false;
                 slotsContainer.innerHTML = '';
                 timeSlotCounters[day] = 0;
                 
-                slotsContainer.classList.add('hidden');
-                document.getElementById(`${day}-unavailable`).classList.remove('hidden');
+                toggleDay(day);
+                
+                mondaySlots.forEach((slot, index) => {
+                    if (index > 0) addTimeSlot(day);
+                    document.getElementById(`${day}-start-${index + 1}`).value = slot.start;
+                    document.getElementById(`${day}-end-${index + 1}`).value = slot.end;
+                });
             });
         }
 
@@ -609,7 +502,6 @@
             const modal = document.getElementById('previewModal');
             const content = document.getElementById('previewContent');
             
-            // Generate preview content
             content.innerHTML = generatePreviewHTML();
             modal.classList.remove('hidden');
         }
@@ -695,75 +587,45 @@
 
         async function saveSettings() {
             try {
-                // Get template name and description
                 const templateName = document.getElementById('templateName').value.trim();
-                const templateDescription = document.getElementById('templateDescription').value.trim();
-                
-                if (!templateName) {
-                    alert('กรุณาใส่ชื่อเทมเพลต');
-                    return;
-                }
-                
-                // Collect weekly schedule data
-                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                if (!templateName) return alert('กรุณาใส่ชื่อเทมเพลต');
+
                 const schedule = {};
                 let hasAnySchedule = false;
-                
-                for (let index = 0; index < days.length; index++) {
-                    const day = days[index];
-                    const enabled = document.getElementById(`${day}-enabled`).checked;
-                    
-                    if (enabled) {
-                        schedule[index] = []; // day_of_week as key, slots as array
-                        
+                for (let i = 0; i < DAYS.length; i++) {
+                    const dayKey = DAYS[i].key;
+                    if (document.getElementById(`${dayKey}-enabled`).checked) {
+                        schedule[i] = [];
                         let slotNum = 1;
-                        while (document.getElementById(`${day}-start-${slotNum}`)) {
-                            const startSelect = document.getElementById(`${day}-start-${slotNum}`);
-                            const endSelect = document.getElementById(`${day}-end-${slotNum}`);
-                            
-                            if (startSelect && endSelect) {
-                                const start = startSelect.value;
-                                const end = endSelect.value;
-                                
-                                // Add time slot to this day
-                                schedule[index].push([start, end]);
-                                hasAnySchedule = true;
-                            }
-                            
+                        while(document.getElementById(`${dayKey}-start-${slotNum}`)) {
+                            const start = document.getElementById(`${dayKey}-start-${slotNum}`).value;
+                            const end = document.getElementById(`${dayKey}-end-${slotNum}`).value;
+                            if (start && end) schedule[i].push([start, end]);
                             slotNum++;
                         }
+                        if (schedule[i].length > 0) hasAnySchedule = true;
                     }
                 }
-                
-                if (!hasAnySchedule) {
-                    alert('กรุณาเลือกอย่างน้อยหนึ่งวันและกำหนดเวลา');
-                    return;
-                }
-                
-                // Create WeeklySchedule payload
-                const weeklySchedule = {
+                if (!hasAnySchedule) return alert('กรุณาเลือกอย่างน้อยหนึ่งวันและกำหนดเวลา');
+
+                const payload = {
                     name: templateName,
-                    description: templateDescription || `เวลาทำการ ${templateName}`,
+                    description: document.getElementById('templateDescription').value.trim(),
                     timezone: document.getElementById('timezoneSelect').value,
                     schedule: schedule
                 };
-                
-                // Send single POST request to new endpoint
-                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(weeklySchedule)
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Failed to save availability template');
-                }
-                
+
+                const editingId = document.getElementById('editingTemplateId').value;
+                const url = editingId 
+                    ? `${API_BASE}/tenants/${SUBDOMAIN}/availability/templates/${editingId}`
+                    : `${API_BASE}/tenants/${SUBDOMAIN}/availability`;
+                const method = editingId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await response.json();
-                console.log('Saved weekly schedule:', data);
-                
-                // Save date overrides (no provider_id needed)
+                if (!response.ok) throw new Error(data.detail || 'Failed to save settings');
+
+                // Save date overrides
                 const overrides = document.querySelectorAll('#dateOverrides > div');
                 for (const override of overrides) {
                     const date = override.querySelector('input[type="date"]').value;
@@ -795,136 +657,86 @@
                     }
                 }
                 
-                alert(`บันทึกเทมเพลต "${templateName}" เรียบร้อยแล้ว! สร้าง ${data.ids.length} รายการ`);
+                alert(data.message);
                 
-                // Clear form
-                document.getElementById('templateName').value = '';
-                document.getElementById('templateDescription').value = '';
-                
-                // Uncheck all days and clear time slots
-                days.forEach(day => {
-                    const checkbox = document.getElementById(`${day}-enabled`);
-                    const slotsContainer = document.getElementById(`${day}-slots`);
-                    const unavailableDiv = document.getElementById(`${day}-unavailable`);
-                    
-                    checkbox.checked = false;
-                    slotsContainer.innerHTML = '';
-                    slotsContainer.classList.add('hidden');
-                    unavailableDiv.classList.remove('hidden');
-                });
-                
-                // Reset counters
-                timeSlotCounters = {
-                    sunday: 0, monday: 0, tuesday: 0, wednesday: 0, 
-                    thursday: 0, friday: 0, saturday: 0
-                };
-                
+                // Refresh templates list and go back to welcome screen
+                await loadExistingTemplates();
+                currentTemplateId = null;
+                clearActiveTemplate();
+                showWelcomeScreen();
+
             } catch (error) {
                 console.error('Error saving settings:', error);
                 alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
             }
         }
 
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize all days as unavailable
-            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            days.forEach(day => {
-                document.getElementById(`${day}-unavailable`).classList.remove('hidden');
-            });
-            
-            // Load and display existing templates
-            loadExistingTemplates();
-        });
-        
-        // Load existing templates for display/editing
         async function loadExistingTemplates() {
             try {
                 const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates`);
                 const data = await response.json();
-                displayExistingTemplates(data.templates || []);
+                templates = data.templates || [];
+                displayTemplatesList(templates);
             } catch (error) {
                 console.error('Error loading existing templates:', error);
             }
         }
-        
-        // Display existing templates list
-        function displayExistingTemplates(templates) {
-            if (templates.length === 0) return;
+
+        function displayTemplatesList(templates) {
+            const container = document.getElementById('templates-list');
+            const dayNames = ['อา','จ','อ','พ','พฤ','ศ','ส'];
             
-            // Create templates display section
-            const container = document.querySelector('.max-w-5xl > .space-y-8');
-            const templatesSection = document.createElement('div');
-            templatesSection.className = 'bg-white rounded-xl shadow-sm border p-8';
-            templatesSection.innerHTML = `
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-lg font-medium text-gray-900">เทมเพลตที่มีอยู่</h2>
-                    <span class="text-sm text-gray-500">${templates.length} เทมเพลต</span>
-                </div>
-                <div id="existingTemplates" class="space-y-4">
-                    ${templates.map(template => `
-                        <div class="border rounded-lg p-4 bg-gray-50">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-medium text-gray-900">${template.name}</h3>
-                                    ${template.description ? `<p class="text-sm text-gray-600 mt-1">${template.description}</p>` : ''}
-                                    <div class="flex items-center space-x-4 mt-2">
-                                        <span class="text-sm text-gray-500">วัน: ${template.days.map(d => ['อา','จ','อ','พ','พฤ','ศ','ส'][d]).join(', ')}</span>
-                                        <span class="text-sm text-gray-500">เขตเวลา: ${template.timezone}</span>
-                                    </div>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <button onclick="editTemplate(${template.id})" class="text-blue-600 hover:text-blue-700 text-sm">แก้ไข</button>
-                                    <button onclick="deleteTemplate(${template.id})" class="text-red-600 hover:text-red-700 text-sm">ลบ</button>
-                                </div>
+            if (templates.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <p>ยังไม่มีเทมเพลต</p>
+                        <p class="text-sm">กดปุ่ม "สร้างใหม่" เพื่อเริ่มต้น</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = templates.map(t => `
+                <div class="template-item border rounded-lg p-4 bg-gray-50 hover:bg-gray-100" 
+                     data-template-id="${t.id}" onclick="editTemplate(${t.id})">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h3 class="font-medium text-gray-900">${t.name}</h3>
+                            ${t.description ? `<p class="text-sm text-gray-600 mt-1">${t.description}</p>` : ''}
+                            <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                                <span>วัน: ${t.days.map(d => dayNames[d]).join(', ')}</span>
                             </div>
                         </div>
-                    `).join('')}
+                        <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+                            <button onclick="event.stopPropagation(); deleteTemplate(${t.id})" 
+                                    class="text-red-600 hover:text-red-700 text-sm font-medium">
+                                ลบ
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            `;
-            
-            // Insert before the main form
-            container.insertBefore(templatesSection, container.firstElementChild);
+            `).join('');
         }
         
-        // Edit template function
-        async function editTemplate(templateId) {
-            alert('การแก้ไข template จะมาในอนาคต (ตอนนี้ใช้การลบแล้วสร้างใหม่)');
-        }
-        
-        // Delete template function  
         async function deleteTemplate(templateId) {
-            if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตทั้งหมดที่ใช้ชื่อนี้?')) return;
-            
+            if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตนี้?\n\nหมายเหตุ: หาก Event Type ใดใช้เทมเพลตนี้อยู่ ระบบจะย้ายไปใช้เทมเพลตเริ่มต้นอัตโนมัติ')) return;
             try {
-                // First get all availability records for this template name
-                const templatesResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates`);
-                const templatesData = await templatesResponse.json();
-                const targetTemplate = templatesData.templates.find(t => t.id === templateId);
+                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates/${templateId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
                 
-                if (!targetTemplate) {
-                    throw new Error('Template not found');
+                alert(data.message);
+                if (data.moved_events && data.moved_events.length > 0) {
+                    alert(`Event Types ที่ถูกย้าย: ${data.moved_events.join(', ')}`);
                 }
                 
-                // Get all availability records to find ones with same name
-                const availResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`);
-                const availData = await availResponse.json();
-                const recordsToDelete = availData.availabilities.filter(a => a.name === targetTemplate.name);
-                
-                // Delete all records with this template name
-                let deleteCount = 0;
-                for (const record of recordsToDelete) {
-                    const deleteResponse = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/${record.id}`, {
-                        method: 'DELETE'
-                    });
-                    if (deleteResponse.ok) {
-                        deleteCount++;
-                    }
+                // If currently editing this template, go back to welcome screen
+                if (currentTemplateId === templateId) {
+                    currentTemplateId = null;
+                    showWelcomeScreen();
                 }
                 
-                alert(`ลบเทมเพลต "${targetTemplate.name}" เรียบร้อยแล้ว (${deleteCount} รายการ)`);
-                location.reload(); // Reload page to refresh templates list
-                
+                await loadExistingTemplates();
             } catch (error) {
                 console.error('Error deleting template:', error);
                 alert('เกิดข้อผิดพลาดในการลบ: ' + error.message);
