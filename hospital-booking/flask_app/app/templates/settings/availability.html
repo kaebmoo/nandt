@@ -1,3 +1,4 @@
+<!-- templates/settings/availability.html - ปรับปรุงให้ใช้ Jinja2 เต็มที่ -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -8,39 +9,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Sarabun', sans-serif; }
-        .cal-select {
-            appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3e%3cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd' /%3e%3c/svg%3e");
-            background-position: right 8px center;
-            background-repeat: no-repeat;
-            background-size: 16px;
-            padding-right: 32px;
-        }
-        .time-slot-row {
-            transition: all 0.2s ease;
-        }
-        .time-slot-row:hover {
-            background-color: #f9fafb;
-        }
-        .template-item {
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        .template-item:hover {
-            background-color: #f3f4f6;
-        }
-        .template-item.active {
-            background-color: #e0e7ff;
-            border-color: #6366f1;
-        }
     </style>
 </head>
 <body class="bg-gray-50">
+    <!-- Navigation -->
     <nav class="bg-white shadow-sm border-b sticky top-0 z-40">
         <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-4">
-                    <a href="/dashboard" class="text-gray-600 hover:text-gray-900">
+                    <a href="{{ url_for('main.dashboard') }}" class="text-gray-600 hover:text-gray-900">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
@@ -48,700 +25,351 @@
                     <h1 class="text-xl font-semibold text-gray-900">ตั้งค่าเวลาทำการ</h1>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <button onclick="saveSettings()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
-                        บันทึก
-                    </button>
+                    <a href="{{ url_for('availability.create_template') }}" 
+                       class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                        สร้างเทมเพลตใหม่
+                    </a>
                 </div>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-full mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-12 gap-8 h-screen">
-            <!-- Left Panel - Templates List -->
-            <div class="col-span-4 bg-white rounded-xl shadow-sm border p-6 overflow-y-auto">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-lg font-medium text-gray-900">เทมเพลตเวลาทำการ</h2>
-                    <button onclick="createNewTemplate()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm">
-                        + สร้างใหม่
-                    </button>
-                </div>
-                
-                <div id="templates-list" class="space-y-3">
-                    <!-- Templates will be loaded here -->
-                </div>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} 
+                                bg-{{ 'red' if category == 'error' else 'green' }}-100 
+                                border border-{{ 'red' if category == 'error' else 'green' }}-400 
+                                text-{{ 'red' if category == 'error' else 'green' }}-700 
+                                px-4 py-3 rounded mb-4">
+                        {{ message }}
+                    </div>
+                {% endfor %}
             </div>
+        {% endif %}
+    {% endwith %}
 
-            <!-- Right Panel - Template Editor -->
-            <div class="col-span-8 bg-white rounded-xl shadow-sm border p-8 overflow-y-auto">
-                <div id="editor-content">
-                    <!-- Editor content will be loaded here -->
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        const API_BASE = '/api/v1';
-        const SUBDOMAIN = new URLSearchParams(window.location.search).get('subdomain') || 'humnoi';
-        const DAYS = [
-            { key: 'sunday', name: 'Sunday' }, { key: 'monday', name: 'Monday' },
-            { key: 'tuesday', name: 'Tuesday' }, { key: 'wednesday', name: 'Wednesday' },
-            { key: 'thursday', name: 'Thursday' }, { key: 'friday', name: 'Friday' },
-            { key: 'saturday', name: 'Saturday' }
-        ];
-        
-        let timeSlotCounters = {};
-        let currentTemplateId = null;
-        let templates = [];
-
-        document.addEventListener('DOMContentLoaded', () => {
-            loadExistingTemplates();
-            showWelcomeScreen();
-        });
-
-        function showWelcomeScreen() {
-            const editorContent = document.getElementById('editor-content');
-            editorContent.innerHTML = `
-                <div class="text-center py-20">
-                    <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">เลือกเทมเพลตเพื่อแก้ไข</h3>
-                    <p class="text-gray-500 mb-4">หรือสร้างเทมเพลตใหม่โดยกดปุ่ม "สร้างใหม่"</p>
-                </div>
-            `;
-        }
-
-        function showTemplateEditor(templateData = null) {
-            const isEditing = templateData !== null;
-            const editorContent = document.getElementById('editor-content');
+    <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            editorContent.innerHTML = `
-                <div class="mb-8 p-6 bg-gray-50 rounded-lg">
-                    <input type="hidden" id="editingTemplateId" value="${isEditing ? templateData.id : ''}">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">${isEditing ? 'แก้ไขเทมเพลต' : 'สร้างเทมเพลตใหม่'}</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="templateName" class="block text-sm font-medium text-gray-700 mb-2">ชื่อเทมเพลต *</label>
-                            <input type="text" id="templateName" placeholder="เช่น จันทร์-ศุกร์ (08:30-16:30)" 
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                   value="${isEditing ? templateData.name : ''}" required>
+            <!-- Templates List (Server-Rendered) -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-medium text-gray-900 mb-6">เทมเพลตเวลาทำการ</h2>
+                    
+                    {% if templates %}
+                        <div class="space-y-3">
+                            {% for template in templates %}
+                                <div class="template-item border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                                     onclick="selectTemplate({{ template.id }})">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="font-medium text-gray-900">{{ template.name }}</h3>
+                                            {% if template.description %}
+                                                <p class="text-sm text-gray-600 mt-1">{{ template.description }}</p>
+                                            {% endif %}
+                                            <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                                                <span>วัน: 
+                                                    {% set day_names = ['อา','จ','อ','พ','พฤ','ศ','ส'] %}
+                                                    {% for day_num in template.days %}
+                                                        {{ day_names[day_num] }}{% if not loop.last %}, {% endif %}
+                                                    {% endfor %}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+                                            <a href="{{ url_for('availability.edit_template', template_id=template.id) }}" 
+                                               class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                                                แก้ไข
+                                            </a>
+                                            <form method="POST" action="{{ url_for('availability.delete_template', template_id=template.id) }}" 
+                                                  style="display: inline;" 
+                                                  onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตนี้?')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="text-red-600 hover:text-red-700 text-sm font-medium">
+                                                    ลบ
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
                         </div>
-                        <div>
-                            <label for="templateDescription" class="block text-sm font-medium text-gray-700 mb-2">คำอธิบาย</label>
-                            <input type="text" id="templateDescription" placeholder="เช่น เวลาทำการปกติวันธรรมดา"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                   value="${isEditing ? (templateData.description || '') : ''}">
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500">
+                            <p>ยังไม่มีเทมเพลต</p>
+                            <p class="text-sm">กดปุ่ม "สร้างเทมเพลตใหม่" เพื่อเริ่มต้น</p>
                         </div>
-                    </div>
+                    {% endif %}
                 </div>
+            </div>
 
-                <div class="flex justify-between items-center mb-8">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-900">เลือกวันและเวลาทำการ</h3>
-                        <p class="text-sm text-gray-600 mt-1">กำหนดวันและเวลาที่ให้บริการสำหรับเทมเพลตนี้</p>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <span class="text-sm text-gray-600">Timezone:</span>
-                        <select id="timezoneSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
-                            <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="space-y-1" id="days-container">
-                    <!-- Days will be dynamically populated -->
-                </div>
-
-                <div class="mt-8 p-6 bg-gray-50 rounded-lg">
-                    <h3 class="text-sm font-medium text-gray-900 mb-3">Quick actions</h3>
-                    <div class="flex flex-wrap gap-2 mb-4">
-                         <button onclick="setWorkingHours('08:30', '16:30')" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                            ตั้งเป็น จ-ศ (08:30-16:30)
-                        </button>
-                        <button onclick="copyMondayToWeekdays()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                           คัดลอกวันจันทร์ไปวันทำการ
-                        </button>
-                        <button onclick="clearAllSchedules()" class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-red-600 hover:text-red-700 transition-colors">
-                            ล้างทั้งหมด
-                        </button>
+            <!-- Template Details & Date Overrides -->
+            <div class="lg:col-span-2">
+                
+                <!-- Selected Template Details -->
+                <div id="template-details" class="bg-white rounded-xl shadow-sm border p-6 mb-8 hidden">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">รายละเอียดเทมเพลต</h3>
+                    <div id="template-details-content">
+                        <!-- จะเติมด้วย JavaScript เมื่อเลือก template -->
                     </div>
                 </div>
 
                 <!-- Date Overrides Section -->
-                <div class="mt-8 p-6 bg-white border rounded-lg">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-lg font-medium text-gray-900">วันที่มีการเปลี่ยนแปลง</h2>
-                        <button onclick="addDateOverride()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
+                        <button id="add-date-override-btn" 
+                                onclick="showDateOverrideForm()" 
+                                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
                             เพิ่มวันพิเศษ
                         </button>
                     </div>
 
-                    <div id="dateOverrides" class="space-y-4">
-                        <!-- Date overrides will be added here -->
-                    </div>
-
-                    <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                        <div class="flex items-center space-x-2 text-sm text-gray-600">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span>ใช้สำหรับกำหนดวันหยุดพิเศษ หรือเปลี่ยนเวลาทำการในวันใดวันหนึ่ง</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="flex justify-between mt-8">
-                    <button onclick="cancelEdit()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                        ยกเลิก
-                    </button>
-                    <div class="space-x-4">
-                        <button onclick="previewSchedule()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                            ดูตัวอย่าง
-                        </button>
-                        <button onclick="saveSettings()" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-                            บันทึก
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Preview Modal -->
-                <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
-                    <div class="bg-white rounded-xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                        <div class="flex justify-between items-center mb-6">
-                            <h2 class="text-2xl font-bold">ตัวอย่างตารางเวลา</h2>
-                            <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                            </button>
-                        </div>
-                        <div id="previewContent" class="space-y-4"></div>
-                    </div>
-                </div>
-            `;
-
-            // Initialize days
-            initializeDayRows();
-            
-            // If editing, load template data
-            if (isEditing) {
-                loadTemplateData(templateData);
-            } else {
-                clearAndResetForm();
-            }
-        }
-
-        function initializeDayRows() {
-            const container = document.getElementById('days-container');
-            container.innerHTML = DAYS.map(day => `
-                <div class="flex items-center py-4 border-b border-gray-100 last:border-b-0">
-                    <div class="w-24">
-                        <label class="text-sm font-medium text-gray-900">${day.name}</label>
-                    </div>
-                    <div class="flex-1 flex items-center space-x-3">
-                        <input type="checkbox" id="${day.key}-enabled" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" onchange="toggleDay('${day.key}')">
-                        <div class="flex-1">
-                            <div id="${day.key}-slots" class="space-y-2 hidden"></div>
-                            <div id="${day.key}-unavailable" class="text-sm text-gray-400">Unavailable</div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-            clearAndResetForm();
-        }
-
-        function createNewTemplate() {
-            currentTemplateId = null;
-            clearActiveTemplate();
-            showTemplateEditor();
-        }
-
-        function editTemplate(templateId) {
-            currentTemplateId = templateId;
-            const templateData = templates.find(t => t.id === templateId);
-            if (!templateData) {
-                alert('ไม่พบเทมเพลต');
-                return;
-            }
-            
-            setActiveTemplate(templateId);
-            showTemplateEditor(templateData);
-        }
-
-        function cancelEdit() {
-            currentTemplateId = null;
-            clearActiveTemplate();
-            showWelcomeScreen();
-        }
-
-        function setActiveTemplate(templateId) {
-            // Remove active class from all templates
-            document.querySelectorAll('.template-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            
-            // Add active class to selected template
-            const templateElement = document.querySelector(`[data-template-id="${templateId}"]`);
-            if (templateElement) {
-                templateElement.classList.add('active');
-            }
-        }
-
-        function clearActiveTemplate() {
-            document.querySelectorAll('.template-item').forEach(item => {
-                item.classList.remove('active');
-            });
-        }
-
-        async function loadTemplateData(templateData) {
-            try {
-                // Fetch full template data
-                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability`);
-                if (!response.ok) throw new Error('Could not fetch data.');
-                const data = await response.json();
-                
-                const templateRecords = data.availabilities.filter(a => a.name === templateData.name);
-                
-                document.getElementById('timezoneSelect').value = templateData.timezone;
-                
-                const recordsByDay = {};
-                templateRecords.forEach(rec => {
-                    if (!recordsByDay[rec.day_of_week]) recordsByDay[rec.day_of_week] = [];
-                    recordsByDay[rec.day_of_week].push({ start: rec.start_time, end: rec.end_time });
-                });
-
-                for (const dayIndex in recordsByDay) {
-                    const dayKey = DAYS[dayIndex].key;
-                    document.getElementById(`${dayKey}-enabled`).checked = true;
-                    toggleDay(dayKey);
-                    
-                    const slots = recordsByDay[dayIndex];
-                    // Fill first slot
-                    document.getElementById(`${dayKey}-start-1`).value = slots[0].start;
-                    document.getElementById(`${dayKey}-end-1`).value = slots[0].end;
-                    // Add subsequent slots
-                    for(let i = 1; i < slots.length; i++) {
-                        addTimeSlot(dayKey);
-                        document.getElementById(`${dayKey}-start-${i+1}`).value = slots[i].start;
-                        document.getElementById(`${dayKey}-end-${i+1}`).value = slots[i].end;
-                    }
-                }
-
-            } catch (error) {
-                console.error('Error loading template data:', error);
-                alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + error.message);
-            }
-        }
-
-        function toggleDay(day) {
-            const checkbox = document.getElementById(`${day}-enabled`);
-            const slotsContainer = document.getElementById(`${day}-slots`);
-            const unavailableDiv = document.getElementById(`${day}-unavailable`);
-            
-            if (checkbox.checked) {
-                slotsContainer.classList.remove('hidden');
-                unavailableDiv.classList.add('hidden');
-                if (timeSlotCounters[day] === 0) addTimeSlot(day);
-            } else {
-                slotsContainer.classList.add('hidden');
-                slotsContainer.innerHTML = '';
-                unavailableDiv.classList.remove('hidden');
-                timeSlotCounters[day] = 0;
-            }
-        }
-
-        function addTimeSlot(day) {
-            timeSlotCounters[day]++;
-            const slotsContainer = document.getElementById(`${day}-slots`);
-            const newSlot = document.createElement('div');
-            newSlot.className = 'flex items-center space-x-2 py-1 time-slot-row';
-            newSlot.id = `${day}-slot-${timeSlotCounters[day]}`;
-            
-            newSlot.innerHTML = `
-                <select id="${day}-start-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">${generateTimeOptions('08:30')}</select>
-                <span class="text-gray-400">—</span>
-                <select id="${day}-end-${timeSlotCounters[day]}" class="cal-select px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[100px]">${generateTimeOptions('16:30')}</select>
-                <button type="button" onclick="addTimeSlot('${day}')" class="p-1 text-gray-400 hover:text-purple-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></button>
-                <button type="button" onclick="removeTimeSlot('${day}', ${timeSlotCounters[day]})" class="p-1 text-gray-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-            `;
-            slotsContainer.appendChild(newSlot);
-        }
-        
-        function generateTimeOptions(selectedTime = '09:00') {
-            return Array.from({ length: 24 * 4 }, (_, i) => {
-                const h = Math.floor(i / 4).toString().padStart(2, '0');
-                const m = (i % 4 * 15).toString().padStart(2, '0');
-                const time = `${h}:${m}`;
-                return `<option value="${time}" ${time === selectedTime ? 'selected' : ''}>${time}</option>`;
-            }).join('');
-        }
-
-        function removeTimeSlot(day, slotNumber) {
-            document.getElementById(`${day}-slot-${slotNumber}`)?.remove();
-        }
-
-        function clearAndResetForm() {
-            DAYS.forEach(({ key }) => {
-                timeSlotCounters[key] = 0;
-                const checkbox = document.getElementById(`${key}-enabled`);
-                if (checkbox) checkbox.checked = false;
-                toggleDay(key);
-            });
-        }
-
-        function clearAllSchedules() {
-            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลในฟอร์ม?')) {
-                clearAndResetForm();
-            }
-        }
-        
-        function setWorkingHours(startTime, endTime) {
-            clearAndResetForm();
-            const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-            const templateName = document.getElementById('templateName');
-            const templateDesc = document.getElementById('templateDescription');
-            
-            if (!templateName.value.trim()) {
-                templateName.value = `จันทร์-ศุกร์ (${startTime}-${endTime})`;
-            }
-            if (!templateDesc.value.trim()) {
-                templateDesc.value = 'เวลาทำการปกติวันธรรมดา';
-            }
-            
-            weekdays.forEach(day => {
-                document.getElementById(`${day}-enabled`).checked = true;
-                toggleDay(day);
-                document.getElementById(`${day}-start-1`).value = startTime;
-                document.getElementById(`${day}-end-1`).value = endTime;
-            });
-        }
-
-        function copyMondayToWeekdays() {
-            const mondayCheckbox = document.getElementById('monday-enabled');
-            if (!mondayCheckbox.checked) {
-                alert('กรุณาตั้งค่าเวลาวันจันทร์ก่อน');
-                return;
-            }
-            
-            const mondaySlots = [];
-            let slotNum = 1;
-            while(document.getElementById(`monday-start-${slotNum}`)) {
-                const start = document.getElementById(`monday-start-${slotNum}`).value;
-                const end = document.getElementById(`monday-end-${slotNum}`).value;
-                if (start && end) mondaySlots.push({start, end});
-                slotNum++;
-            }
-            
-            ['tuesday', 'wednesday', 'thursday', 'friday'].forEach(day => {
-                document.getElementById(`${day}-enabled`).checked = true;
-                const slotsContainer = document.getElementById(`${day}-slots`);
-                slotsContainer.innerHTML = '';
-                timeSlotCounters[day] = 0;
-                
-                toggleDay(day);
-                
-                mondaySlots.forEach((slot, index) => {
-                    if (index > 0) addTimeSlot(day);
-                    document.getElementById(`${day}-start-${index + 1}`).value = slot.start;
-                    document.getElementById(`${day}-end-${index + 1}`).value = slot.end;
-                });
-            });
-        }
-
-        function addDateOverride() {
-            const container = document.getElementById('dateOverrides');
-            const overrideId = Date.now();
-            
-            const override = document.createElement('div');
-            override.className = 'border rounded-lg p-4 bg-yellow-50';
-            override.innerHTML = `
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center space-x-3">
-                        <input type="date" class="px-3 py-2 border border-gray-300 rounded-md">
-                        <span class="text-sm font-medium text-gray-700">เลือกวันที่</span>
-                    </div>
-                    <button onclick="removeOverride(this)" class="text-red-600 hover:text-red-800">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="flex items-center space-x-2 mb-2">
-                            <input type="radio" name="override-type-${overrideId}" value="unavailable" class="text-purple-600">
-                            <span class="text-sm">วันหยุด</span>
-                        </label>
-                        <label class="flex items-center space-x-2">
-                            <input type="radio" name="override-type-${overrideId}" value="custom" checked class="text-purple-600">
-                            <span class="text-sm">เวลาพิเศษ</span>
-                        </label>
-                    </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center space-x-2">
-                            <input type="time" class="time-input px-3 py-2 border border-gray-300 rounded-md">
-                            <span class="text-gray-500">-</span>
-                            <input type="time" class="time-input px-3 py-2 border border-gray-300 rounded-md">
-                        </div>
-                        <input type="text" placeholder="เหตุผล (ไม่บังคับ)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                    </div>
-                </div>
-            `;
-            
-            container.appendChild(override);
-        }
-
-        function removeOverride(button) {
-            button.closest('.border').remove();
-        }
-
-        function previewSchedule() {
-            const modal = document.getElementById('previewModal');
-            const content = document.getElementById('previewContent');
-            
-            content.innerHTML = generatePreviewHTML();
-            modal.classList.remove('hidden');
-        }
-
-        function closePreview() {
-            document.getElementById('previewModal').classList.add('hidden');
-        }
-
-        function generatePreviewHTML() {
-            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-            
-            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
-            
-            days.forEach((day, index) => {
-                const enabled = document.getElementById(`${day}-enabled`).checked;
-                const dayName = dayNames[index];
-                
-                html += `<div class="border rounded-lg p-4 ${enabled ? 'bg-green-50' : 'bg-gray-50'}">`;
-                html += `<h3 class="font-medium text-gray-900 mb-2">${dayName}</h3>`;
-                
-                if (enabled) {
-                    const slots = [];
-                    let slotNum = 1;
-                    while (document.getElementById(`${day}-start-${slotNum}`)) {
-                        const startSelect = document.getElementById(`${day}-start-${slotNum}`);
-                        const endSelect = document.getElementById(`${day}-end-${slotNum}`);
-                        
-                        if (startSelect && endSelect) {
-                            const start = startSelect.value;
-                            const end = endSelect.value;
-                            slots.push(`${start} - ${end}`);
-                        }
-                        slotNum++;
-                    }
-                    
-                    html += `<div class="space-y-1">`;
-                    slots.forEach(slot => {
-                        html += `<div class="text-sm text-green-700">${slot}</div>`;
-                    });
-                    html += `</div>`;
-                } else {
-                    html += `<div class="text-sm text-gray-500">ปิด</div>`;
-                }
-                
-                html += `</div>`;
-            });
-            
-            html += '</div>';
-            
-            // Add date overrides section
-            const overrides = document.querySelectorAll('#dateOverrides > div');
-            if (overrides.length > 0) {
-                html += '<div class="mt-6 border-t pt-6">';
-                html += '<h3 class="font-medium text-gray-900 mb-4">วันที่มีการเปลี่ยนแปลง</h3>';
-                html += '<div class="space-y-2">';
-                
-                overrides.forEach(override => {
-                    const date = override.querySelector('input[type="date"]').value;
-                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
-                    
-                    if (date) {
-                        if (isUnavailable) {
-                            html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-red-600">วันหยุด</span></div>`;
-                        } else {
-                            const times = override.querySelectorAll('input[type="time"]');
-                            const start = times[0].value;
-                            const end = times[1].value;
-                            const reason = override.querySelector('input[type="text"]').value;
-                            
-                            html += `<div class="text-sm"><span class="font-medium">${date}:</span> <span class="text-blue-600">${start} - ${end}</span>`;
-                            if (reason) html += ` <span class="text-gray-500">(${reason})</span>`;
-                            html += `</div>`;
-                        }
-                    }
-                });
-                
-                html += '</div></div>';
-            }
-            
-            return html;
-        }
-
-        async function saveSettings() {
-            try {
-                const templateName = document.getElementById('templateName').value.trim();
-                if (!templateName) return alert('กรุณาใส่ชื่อเทมเพลต');
-
-                const schedule = {};
-                let hasAnySchedule = false;
-                for (let i = 0; i < DAYS.length; i++) {
-                    const dayKey = DAYS[i].key;
-                    if (document.getElementById(`${dayKey}-enabled`).checked) {
-                        schedule[i] = [];
-                        let slotNum = 1;
-                        while(document.getElementById(`${dayKey}-start-${slotNum}`)) {
-                            const start = document.getElementById(`${dayKey}-start-${slotNum}`).value;
-                            const end = document.getElementById(`${dayKey}-end-${slotNum}`).value;
-                            if (start && end) schedule[i].push([start, end]);
-                            slotNum++;
-                        }
-                        if (schedule[i].length > 0) hasAnySchedule = true;
-                    }
-                }
-                if (!hasAnySchedule) return alert('กรุณาเลือกอย่างน้อยหนึ่งวันและกำหนดเวลา');
-
-                const payload = {
-                    name: templateName,
-                    description: document.getElementById('templateDescription').value.trim(),
-                    timezone: document.getElementById('timezoneSelect').value,
-                    schedule: schedule
-                };
-
-                const editingId = document.getElementById('editingTemplateId').value;
-                const url = editingId 
-                    ? `${API_BASE}/tenants/${SUBDOMAIN}/availability/templates/${editingId}`
-                    : `${API_BASE}/tenants/${SUBDOMAIN}/availability`;
-                const method = editingId ? 'PUT' : 'POST';
-
-                const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Failed to save settings');
-
-                // Save date overrides
-                const overrides = document.querySelectorAll('#dateOverrides > div');
-                for (const override of overrides) {
-                    const date = override.querySelector('input[type="date"]').value;
-                    if (!date) continue;
-                    
-                    const isUnavailable = override.querySelector('input[value="unavailable"]').checked;
-                    const reason = override.querySelector('input[type="text"]').value;
-                    
-                    const overrideData = {
-                        date: date,
-                        is_unavailable: isUnavailable,
-                        reason: reason
-                    };
-                    
-                    if (!isUnavailable) {
-                        const times = override.querySelectorAll('input[type="time"]');
-                        overrideData.custom_start_time = times[0].value;
-                        overrideData.custom_end_time = times[1].value;
-                    }
-                    
-                    const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/date-overrides`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(overrideData)
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error('Failed to save date override');
-                    }
-                }
-                
-                alert(data.message);
-                
-                // Refresh templates list and go back to welcome screen
-                await loadExistingTemplates();
-                currentTemplateId = null;
-                clearActiveTemplate();
-                showWelcomeScreen();
-
-            } catch (error) {
-                console.error('Error saving settings:', error);
-                alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
-            }
-        }
-
-        async function loadExistingTemplates() {
-            try {
-                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates`);
-                const data = await response.json();
-                templates = data.templates || [];
-                displayTemplatesList(templates);
-            } catch (error) {
-                console.error('Error loading existing templates:', error);
-            }
-        }
-
-        function displayTemplatesList(templates) {
-            const container = document.getElementById('templates-list');
-            const dayNames = ['อา','จ','อ','พ','พฤ','ศ','ส'];
-            
-            if (templates.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center py-8 text-gray-500">
-                        <p>ยังไม่มีเทมเพลต</p>
-                        <p class="text-sm">กดปุ่ม "สร้างใหม่" เพื่อเริ่มต้น</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            container.innerHTML = templates.map(t => `
-                <div class="template-item border rounded-lg p-4 bg-gray-50 hover:bg-gray-100" 
-                     data-template-id="${t.id}" onclick="editTemplate(${t.id})">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <h3 class="font-medium text-gray-900">${t.name}</h3>
-                            ${t.description ? `<p class="text-sm text-gray-600 mt-1">${t.description}</p>` : ''}
-                            <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                                <span>วัน: ${t.days.map(d => dayNames[d]).join(', ')}</span>
+                    <!-- Global Date Overrides (Server-Rendered) -->
+                    {% set global_overrides = date_overrides | selectattr('template_scope', 'equalto', 'global') | list %}
+                    {% if global_overrides %}
+                        <div class="mb-6">
+                            <h4 class="text-sm font-medium text-gray-600 mb-3">🌍 วันพิเศษทั่วไป (ใช้กับทุกเทมเพลต)</h4>
+                            <div class="space-y-3">
+                                {% for override in global_overrides %}
+                                    <div class="border rounded-lg p-4 bg-gray-50 border-gray-200">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center space-x-3">
+                                                <span class="text-sm font-medium text-gray-700">📅 {{ override.date }}</span>
+                                                <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">ทั่วไป</span>
+                                            </div>
+                                            <form method="POST" action="{{ url_for('availability.delete_date_override', override_id=override.id) }}" 
+                                                  style="display: inline;" 
+                                                  onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="text-red-600 hover:text-red-800">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <span class="text-sm font-medium">{{ '🚫 วันหยุด' if override.is_unavailable else '⏰ เวลาพิเศษ' }}</span>
+                                            </div>
+                                            <div>
+                                                {% if override.is_unavailable %}
+                                                    <div class="text-sm text-red-600">ปิดทำการ</div>
+                                                {% else %}
+                                                    <div class="flex items-center space-x-2">
+                                                        <span class="text-sm font-mono">{{ override.custom_start_time or '' }}</span>
+                                                        <span class="text-gray-500">-</span>
+                                                        <span class="text-sm font-mono">{{ override.custom_end_time or '' }}</span>
+                                                    </div>
+                                                {% endif %}
+                                                {% if override.reason %}
+                                                    <div class="text-sm text-gray-600">"{{ override.reason }}"</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
                             </div>
                         </div>
-                        <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
-                            <button onclick="event.stopPropagation(); deleteTemplate(${t.id})" 
-                                    class="text-red-600 hover:text-red-700 text-sm font-medium">
-                                ลบ
-                            </button>
+                    {% endif %}
+
+                    <!-- Template-Specific Date Overrides (AJAX Loaded) -->
+                    <div id="template-specific-overrides">
+                        <div class="text-center py-8 text-gray-500">
+                            <p class="text-sm">เลือกเทมเพลตเพื่อดูวันพิเศษเฉพาะเทมเพลต</p>
+                        </div>
+                    </div>
+
+                    <!-- Date Override Form Modal -->
+                    <div id="date-override-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+                        <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">เพิ่มวันพิเศษ</h3>
+                            <form id="date-override-form" method="POST" action="{{ url_for('availability.create_date_override') }}">
+                                <input type="hidden" name="template_id" id="selected-template-id" value="">
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">วันที่</label>
+                                        <input type="date" name="date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">ประเภท</label>
+                                        <div class="space-y-2">
+                                            <label class="flex items-center space-x-2">
+                                                <input type="radio" name="override_type" value="unavailable" class="text-purple-600">
+                                                <span class="text-sm">วันหยุด</span>
+                                            </label>
+                                            <label class="flex items-center space-x-2">
+                                                <input type="radio" name="override_type" value="custom" checked class="text-purple-600">
+                                                <span class="text-sm">เวลาพิเศษ</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="custom-time-section">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">เวลาพิเศษ</label>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <input type="time" name="custom_start_time" class="px-3 py-2 border border-gray-300 rounded-lg">
+                                            <input type="time" name="custom_end_time" class="px-3 py-2 border border-gray-300 rounded-lg">
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">เหตุผล (ไม่บังคับ)</label>
+                                        <input type="text" name="reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="เช่น วันหยุดนักขัตฤกษ์">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">ขอบเขต</label>
+                                        <div class="space-y-2">
+                                            <label class="flex items-center space-x-2">
+                                                <input type="radio" name="scope" value="global" class="text-purple-600">
+                                                <span class="text-sm">ใช้กับทุกเทมเพลต</span>
+                                            </label>
+                                            <label class="flex items-center space-x-2">
+                                                <input type="radio" name="scope" value="template" checked class="text-purple-600">
+                                                <span class="text-sm">เฉพาะเทมเพลตที่เลือก</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex justify-end space-x-4 mt-6">
+                                    <button type="button" onclick="hideDateOverrideForm()" 
+                                            class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                                        ยกเลิก
+                                    </button>
+                                    <button type="submit" 
+                                            class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                                        บันทึก
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
-            `).join('');
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ลด JavaScript ให้เหลือแค่ UI interactions
+        let selectedTemplateId = null;
+        
+        // การเลือก template (AJAX load template-specific data)
+        function selectTemplate(templateId) {
+            selectedTemplateId = templateId;
+            
+            // Update UI
+            document.querySelectorAll('.template-item').forEach(item => {
+                item.classList.remove('ring-2', 'ring-purple-500', 'bg-purple-50');
+            });
+            event.currentTarget.classList.add('ring-2', 'ring-purple-500', 'bg-purple-50');
+            
+            // Show template details
+            document.getElementById('template-details').classList.remove('hidden');
+            
+            // Load template-specific date overrides
+            loadTemplateOverrides(templateId);
         }
         
-        async function deleteTemplate(templateId) {
-            if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตนี้?\n\nหมายเหตุ: หาก Event Type ใดใช้เทมเพลตนี้อยู่ ระบบจะย้ายไปใช้เทมเพลตเริ่มต้นอัตโนมัติ')) return;
+        // AJAX load template-specific date overrides
+        async function loadTemplateOverrides(templateId) {
             try {
-                const response = await fetch(`${API_BASE}/tenants/${SUBDOMAIN}/availability/templates/${templateId}`, { method: 'DELETE' });
+                const response = await fetch(`/api/availability/template/${templateId}/date-overrides`);
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail);
                 
-                alert(data.message);
-                if (data.moved_events && data.moved_events.length > 0) {
-                    alert(`Event Types ที่ถูกย้าย: ${data.moved_events.join(', ')}`);
+                const container = document.getElementById('template-specific-overrides');
+                const templateOverrides = data.date_overrides.filter(o => o.template_id == templateId);
+                
+                if (templateOverrides.length > 0) {
+                    container.innerHTML = `
+                        <h4 class="text-sm font-medium text-gray-600 mb-3">📋 วันพิเศษเฉพาะเทมเพลตนี้</h4>
+                        <div class="space-y-3">
+                            ${templateOverrides.map(override => `
+                                <div class="border rounded-lg p-4 bg-blue-50 border-blue-200">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="text-sm font-medium text-gray-700">📅 ${override.date}</span>
+                                            <span class="text-xs bg-blue-200 text-blue-600 px-2 py-1 rounded">เฉพาะเทมเพลต</span>
+                                        </div>
+                                        <form method="POST" action="/settings/availability/date-override/${override.id}/delete" style="display: inline;" onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="text-red-600 hover:text-red-800">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <span class="text-sm font-medium">${override.is_unavailable ? '🚫 วันหยุด' : '⏰ เวลาพิเศษ'}</span>
+                                        </div>
+                                        <div>
+                                            ${override.is_unavailable ? 
+                                                '<div class="text-sm text-red-600">ปิดทำการ</div>' :
+                                                `<div class="flex items-center space-x-2">
+                                                    <span class="text-sm font-mono">${override.custom_start_time || ''}</span>
+                                                    <span class="text-gray-500">-</span>
+                                                    <span class="text-sm font-mono">${override.custom_end_time || ''}</span>
+                                                </div>`
+                                            }
+                                            ${override.reason ? `<div class="text-sm text-gray-600">"${override.reason}"</div>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            <p class="text-sm">ยังไม่มีวันพิเศษเฉพาะเทมเพลตนี้</p>
+                        </div>
+                    `;
                 }
-                
-                // If currently editing this template, go back to welcome screen
-                if (currentTemplateId === templateId) {
-                    currentTemplateId = null;
-                    showWelcomeScreen();
-                }
-                
-                await loadExistingTemplates();
             } catch (error) {
-                console.error('Error deleting template:', error);
-                alert('เกิดข้อผิดพลาดในการลบ: ' + error.message);
+                console.error('Error loading template overrides:', error);
             }
         }
+        
+        // Date Override Form Functions
+        function showDateOverrideForm() {
+            if (selectedTemplateId) {
+                document.getElementById('selected-template-id').value = selectedTemplateId;
+                document.querySelector('input[name="scope"][value="template"]').checked = true;
+            } else {
+                document.querySelector('input[name="scope"][value="global"]').checked = true;
+            }
+            document.getElementById('date-override-modal').classList.remove('hidden');
+        }
+        
+        function hideDateOverrideForm() {
+            document.getElementById('date-override-modal').classList.add('hidden');
+            document.getElementById('date-override-form').reset();
+        }
+        
+        // Toggle custom time section based on override type
+        document.addEventListener('DOMContentLoaded', function() {
+            const overrideTypeRadios = document.querySelectorAll('input[name="override_type"]');
+            const customTimeSection = document.getElementById('custom-time-section');
+            
+            overrideTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'unavailable') {
+                        customTimeSection.style.display = 'none';
+                    } else {
+                        customTimeSection.style.display = 'block';
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>

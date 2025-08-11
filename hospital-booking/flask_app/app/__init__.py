@@ -1,4 +1,4 @@
-# flask_app/app/__init__.py - เพิ่ม Authentication
+# flask_app/app/__init__.py - อัปเดตให้รองรับ Blueprint ใหม่
 
 import os
 from flask import Flask, g, request, redirect, url_for
@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from celery import Celery, Task
+from flask_wtf.csrf import CSRFProtect
 
 # โหลด .env ก่อนเสมอ
 load_dotenv()
@@ -56,6 +57,11 @@ def create_app() -> Flask:
         SESSION_COOKIE_SECURE=False,  # True สำหรับ HTTPS
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
+        
+        # WTF-Forms settings
+        WTF_CSRF_ENABLED=True,
+        WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
+        
         CELERY=dict(
             broker_url=os.environ.get("REDIS_URL"),
             result_backend=os.environ.get("REDIS_URL"),
@@ -63,6 +69,10 @@ def create_app() -> Flask:
             # imports=("app.tasks",)
         ),
     )
+
+    # Initialize CSRF Protection
+    csrf = CSRFProtect()
+    csrf.init_app(app)
 
     # --- Middleware สำหรับ Multi-Tenancy ---
     @app.before_request
@@ -72,9 +82,19 @@ def create_app() -> Flask:
             return
 
         db = SessionLocal()
-        hostname = request.host.split(':')[0]
-        parts = hostname.split('.')
-        subdomain = parts[0] if len(parts) > 2 else None
+        
+        # ตรวจสอบ subdomain จาก URL parameter ก่อน (สำหรับ development)
+        subdomain_param = request.args.get('subdomain')
+        subdomain = None
+        
+        if subdomain_param:
+            subdomain = subdomain_param
+        else:
+            # ตรวจสอบจาก hostname (สำหรับ production)
+            hostname = request.host.split(':')[0]
+            parts = hostname.split('.')
+            if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api']:
+                subdomain = parts[0]
         
         hospital_schema = None
         if subdomain:
@@ -85,6 +105,7 @@ def create_app() -> Flask:
                 hospital_schema = result
 
         g.tenant = hospital_schema
+        g.subdomain = subdomain
         
         if hospital_schema:
             # FIX: ใช้ text() กับคำสั่ง SET search_path ด้วยเพื่อความปลอดภัย
@@ -114,6 +135,146 @@ def create_app() -> Flask:
             finally:
                 db.close()
 
+    # --- Helper Functions ---
+    def get_current_user():
+        """ดึงข้อมูลผู้ใช้ปัจจุบัน"""
+        from flask import session
+        if 'user_id' not in session:
+            return None
+        
+        db = SessionLocal()
+        try:
+            user = db.query(models.User).filter_by(id=session['user_id']).first()
+            if user:
+                user.hospital = db.query(models.Hospital).filter_by(id=user.hospital_id).first()
+            return user
+        finally:
+            db.close()
+
+    def get_tenant_info():
+        """ดึงข้อมูล tenant ปัจจุบัน"""
+        return getattr(g, 'tenant', None), getattr(g, 'subdomain', None)
+
+    # --- Template Functions ---
+    @app.template_global()
+    def get_current_user():
+        """Template function สำหรับดึงข้อมูลผู้ใช้ปัจจุบัน"""
+        from flask import session
+        if 'user_id' not in session:
+            return None
+        
+        db = SessionLocal()
+        try:
+            user = db.query(models.User).filter_by(id=session['user_id']).first()
+            if user:
+                user.hospital = db.query(models.Hospital).filter_by(id=user.hospital_id).first()
+            return user
+        finally:
+            db.close()
+
+    @app.template_global()
+    def get_tenant_info():
+        """Template function สำหรับดึงข้อมูล tenant"""
+        return getattr(g, 'tenant', None), getattr(g, 'subdomain', None)
+
+    # --- Template Filters ---
+    @app.template_filter('day_name_th')
+    def day_name_th_filter(day_number):
+        """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทย"""
+        day_names = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
+        return day_names[day_number] if 0 <= day_number < 7 else ''
+
+    @app.template_filter('day_name_th_short')
+    def day_name_th_short_filter(day_number):
+        """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทยแบบสั้น"""
+        day_names = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
+        return day_names[day_number] if 0 <= day_number < 7 else ''
+
+    @app.template_filter('format_time_range')
+    def format_time_range_filter(start_time, end_time):
+        """Filter สำหรับ format ช่วงเวลา"""
+        return f"{start_time} - {end_time}"
+
+    @app.template_filter('thai_date')
+    def thai_date_filter(date):
+        """Filter สำหรับแปลงวันที่เป็นรูปแบบ dd/mm/yyyy"""
+        if not date:
+            return ''
+        
+        try:
+            from datetime import datetime
+            
+            # ถ้าเป็น string
+            if isinstance(date, str):
+                # ถ้าเป็น yyyy-mm-dd format
+                if '-' in date and len(date.split('-')[0]) == 4:
+                    parts = date.split('-')
+                    if len(parts) == 3:
+                        return f"{parts[2]}/{parts[1]}/{parts[0]}"
+                # ถ้าเป็น dd/mm/yyyy อยู่แล้ว
+                elif '/' in date:
+                    return date
+                # พยายาม parse
+                else:
+                    try:
+                        dt = datetime.strptime(date[:10], '%Y-%m-%d')
+                        return dt.strftime('%d/%m/%Y')
+                    except:
+                        return date
+            
+            # ถ้าเป็น datetime/date object
+            elif hasattr(date, 'strftime'):
+                return date.strftime('%d/%m/%Y')
+            
+            return str(date)
+        except:
+            return str(date)
+
+    @app.template_filter('thai_time')
+    def thai_time_filter(time):
+        """Filter สำหรับ format เวลา"""
+        if not time:
+            return ''
+        
+        try:
+            if isinstance(time, str):
+                return time[:5]  # HH:MM
+            return time.strftime('%H:%M')
+        except:
+            return str(time)
+
+    # --- Context Processors ---
+    @app.context_processor
+    def inject_template_vars():
+        """Context processor สำหรับส่งตัวแปรทั่วไปไป template"""
+        return {
+            'day_names_th': ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'],
+            'day_names_th_short': ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'],
+            'current_year': lambda: datetime.now().year + 543,  # ปี พ.ศ.
+        }
+
+    # --- Error Handlers ---
+    @app.errorhandler(404)
+    def not_found_error(error):
+        from flask import render_template, request
+        if request.is_json:
+            return {'error': 'ไม่พบหน้าที่ต้องการ'}, 404
+        return render_template('errors/404.html'), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        from flask import render_template, request
+        if request.is_json:
+            return {'error': 'เกิดข้อผิดพลาดภายในระบบ'}, 500
+        return render_template('errors/500.html'), 500
+
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        from flask import render_template, request
+        if request.is_json:
+            return {'error': 'ไม่มีสิทธิ์เข้าถึง'}, 403
+        return render_template('errors/403.html'), 403
+
     # --- ลงทะเบียนส่วนต่างๆ ---
     # 1. ลงทะเบียน Routes หลัก
     from . import routes
@@ -123,7 +284,14 @@ def create_app() -> Flask:
     from . import auth
     app.register_blueprint(auth.auth_bp)
 
-    # 3. เริ่มต้น Celery
+    # 3. ลงทะเบียน Availability Routes (ใหม่)
+    from .availability_routes import availability_bp
+    app.register_blueprint(availability_bp)
+
+    # 4. เริ่มต้น Celery
     celery_init_app(app)
 
     return app
+
+# สำหรับ backward compatibility
+from .routes import get_current_user, get_tenant_info

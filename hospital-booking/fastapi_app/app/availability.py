@@ -1,4 +1,4 @@
-# fastapi_app/app/availability.py - Fixed version
+# fastapi_app/app/availability.py - Fixed version with template support
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -59,6 +59,8 @@ class AvailabilityResponse(BaseModel):
 
 class DateOverrideCreate(BaseModel):
     date: str
+    template_id: Optional[int] = None
+    template_scope: str = 'template'
     is_unavailable: bool = False
     custom_start_time: Optional[str] = None
     custom_end_time: Optional[str] = None
@@ -67,6 +69,8 @@ class DateOverrideCreate(BaseModel):
 class DateOverrideResponse(BaseModel):
     id: int
     date: datetime.datetime
+    template_id: Optional[int]
+    template_scope: str
     is_unavailable: bool
     custom_start_time: Optional[str]
     custom_end_time: Optional[str]
@@ -431,6 +435,52 @@ async def get_availability_templates(subdomain: str, db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/availability/template/{template_id}/details", response_model=dict)
+async def get_availability_template_details(subdomain: str, template_id: int, db: Session = Depends(get_db)):
+    """Get detailed schedule for a specific template"""
+    try:
+        get_tenant_db(subdomain, db)
+        
+        # หา template ตาม ID
+        template_record = db.query(models.Availability).filter(models.Availability.id == template_id).first()
+        if not template_record:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        template_name = template_record.name
+        
+        # ดึงทุก records ของ template นี้
+        template_records = db.query(models.Availability).filter(
+            models.Availability.name == template_name,
+            models.Availability.is_active == True
+        ).order_by(models.Availability.day_of_week, models.Availability.start_time).all()
+        
+        # จัดกลุ่มตาม day_of_week
+        schedule = {}
+        for record in template_records:
+            day_num = record.day_of_week.value if hasattr(record.day_of_week, 'value') else record.day_of_week
+            day_str = str(day_num)
+            
+            if day_str not in schedule:
+                schedule[day_str] = []
+            
+            schedule[day_str].append({
+                'start': format_time(record.start_time),
+                'end': format_time(record.end_time)
+            })
+        
+        return {
+            "id": template_id,
+            "name": template_name,
+            "description": template_record.description,
+            "timezone": template_record.timezone,
+            "schedule": schedule
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/availability/{availability_id}")
 async def delete_availability(subdomain: str, availability_id: int, db: Session = Depends(get_db)):
     """Delete availability slot"""
@@ -458,30 +508,23 @@ async def delete_availability(subdomain: str, availability_id: int, db: Session 
 # --- Date Overrides ---
 
 @router.get("/date-overrides", response_model=dict)
-async def get_date_overrides(subdomain: str, db: Session = Depends(get_db)):
-    """Get date overrides for a tenant"""
+async def get_date_overrides(
+    subdomain: str, 
+    template_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """Get date overrides for a tenant, optionally filtered by template_id"""
     try:
         get_tenant_db(subdomain, db)
         
-        # ตรวจสอบว่า table date_overrides มีอยู่หรือไม่
-        try:
-            overrides = db.query(models.DateOverride).order_by(models.DateOverride.date).all()
-        except Exception as table_error:
-            # ถ้าไม่มี table date_overrides ให้สร้าง
-            print(f"DateOverride table not found, creating: {table_error}")
-            db.execute(text('''
-                CREATE TABLE IF NOT EXISTS date_overrides (
-                    id SERIAL PRIMARY KEY,
-                    date DATE NOT NULL,
-                    is_unavailable BOOLEAN DEFAULT false,
-                    custom_start_time TIME,
-                    custom_end_time TIME,
-                    reason VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            '''))
-            db.commit()
-            overrides = []
+        # Build query
+        query = db.query(models.DateOverride)
+        
+        # Filter by template_id if provided
+        if template_id is not None:
+            query = query.filter(models.DateOverride.template_id == template_id)
+        
+        overrides = query.order_by(models.DateOverride.date).all()
         
         # Convert to response format
         result = []
@@ -489,6 +532,8 @@ async def get_date_overrides(subdomain: str, db: Session = Depends(get_db)):
             result.append({
                 "id": override.id,
                 "date": override.date.strftime("%Y-%m-%d"),
+                "template_id": override.template_id,
+                "template_scope": override.template_scope,
                 "is_unavailable": override.is_unavailable,
                 "custom_start_time": format_time(override.custom_start_time) if override.custom_start_time else None,
                 "custom_end_time": format_time(override.custom_end_time) if override.custom_end_time else None,
@@ -502,26 +547,9 @@ async def get_date_overrides(subdomain: str, db: Session = Depends(get_db)):
 
 @router.post("/date-overrides", response_model=dict)
 async def create_date_override(subdomain: str, override_data: DateOverrideCreate, db: Session = Depends(get_db)):
-    """Create date override"""
+    """Create date override with template support"""
     try:
         get_tenant_db(subdomain, db)
-        
-        # ตรวจสอบและสร้าง table ถ้าไม่มี
-        try:
-            db.execute(text('''
-                CREATE TABLE IF NOT EXISTS date_overrides (
-                    id SERIAL PRIMARY KEY,
-                    date DATE NOT NULL,
-                    is_unavailable BOOLEAN DEFAULT false,
-                    custom_start_time TIME,
-                    custom_end_time TIME,
-                    reason VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            '''))
-            db.commit()
-        except Exception as create_error:
-            print(f"Error creating date_overrides table: {create_error}")
         
         # Parse date
         try:
@@ -543,67 +571,35 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
         if custom_start_time and custom_end_time and custom_start_time >= custom_end_time:
             raise HTTPException(status_code=400, detail="Start time must be before end time")
         
-        # Create date override using SQLAlchemy model if available, otherwise use raw SQL
-        try:
-            override = models.DateOverride(
-                date=override_date,
-                is_unavailable=override_data.is_unavailable,
-                custom_start_time=custom_start_time,
-                custom_end_time=custom_end_time,
-                reason=override_data.reason
-            )
-            
-            db.add(override)
-            db.commit()
-            db.refresh(override)
-            
-            return {
-                "message": "Date override created successfully",
-                "date_override": {
-                    "id": override.id,
-                    "date": override.date.strftime("%Y-%m-%d"),
-                    "is_unavailable": override.is_unavailable,
-                    "custom_start_time": format_time(override.custom_start_time) if override.custom_start_time else None,
-                    "custom_end_time": format_time(override.custom_end_time) if override.custom_end_time else None,
-                    "reason": override.reason,
-                    "created_at": override.created_at
-                }
+        # Create date override with template support
+        override = models.DateOverride(
+            date=override_date,
+            template_id=override_data.template_id,
+            template_scope=override_data.template_scope,
+            is_unavailable=override_data.is_unavailable,
+            custom_start_time=custom_start_time,
+            custom_end_time=custom_end_time,
+            reason=override_data.reason
+        )
+        
+        db.add(override)
+        db.commit()
+        db.refresh(override)
+        
+        return {
+            "message": "Date override created successfully",
+            "date_override": {
+                "id": override.id,
+                "date": override.date.strftime("%Y-%m-%d"),
+                "template_id": override.template_id,
+                "template_scope": override.template_scope,
+                "is_unavailable": override.is_unavailable,
+                "custom_start_time": format_time(override.custom_start_time) if override.custom_start_time else None,
+                "custom_end_time": format_time(override.custom_end_time) if override.custom_end_time else None,
+                "reason": override.reason,
+                "created_at": override.created_at
             }
-        except Exception as model_error:
-            # Fallback to raw SQL if model doesn't work
-            print(f"Model creation failed, using raw SQL: {model_error}")
-            db.rollback()
-            
-            # Use raw SQL as fallback
-            sql = text("""
-                INSERT INTO date_overrides (date, is_unavailable, custom_start_time, custom_end_time, reason, created_at)
-                VALUES (:date, :is_unavailable, :custom_start_time, :custom_end_time, :reason, NOW())
-                RETURNING id, date, is_unavailable, custom_start_time, custom_end_time, reason, created_at
-            """)
-            
-            result = db.execute(sql, {
-                'date': override_date,
-                'is_unavailable': override_data.is_unavailable,
-                'custom_start_time': custom_start_time,
-                'custom_end_time': custom_end_time,
-                'reason': override_data.reason
-            })
-            
-            db.commit()
-            row = result.fetchone()
-            
-            return {
-                "message": "Date override created successfully",
-                "date_override": {
-                    "id": row[0],
-                    "date": row[1].strftime("%Y-%m-%d"),
-                    "is_unavailable": row[2],
-                    "custom_start_time": format_time(row[3]) if row[3] else None,
-                    "custom_end_time": format_time(row[4]) if row[4] else None,
-                    "reason": row[5],
-                    "created_at": row[6]
-                }
-            }
+        }
         
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -617,27 +613,15 @@ async def delete_date_override(subdomain: str, override_id: int, db: Session = D
     try:
         get_tenant_db(subdomain, db)
         
-        try:
-            override = db.query(models.DateOverride).filter(
-                models.DateOverride.id == override_id
-            ).first()
-            
-            if not override:
-                raise HTTPException(status_code=404, detail="Date override not found")
-            
-            db.delete(override)
-            db.commit()
-        except Exception as model_error:
-            # Fallback to raw SQL
-            print(f"Model deletion failed, using raw SQL: {model_error}")
-            db.rollback()
-            
-            result = db.execute(text("DELETE FROM date_overrides WHERE id = :id"), {'id': override_id})
-            
-            if result.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Date override not found")
-            
-            db.commit()
+        override = db.query(models.DateOverride).filter(
+            models.DateOverride.id == override_id
+        ).first()
+        
+        if not override:
+            raise HTTPException(status_code=404, detail="Date override not found")
+        
+        db.delete(override)
+        db.commit()
         
         return {"message": "Date override deleted successfully"}
         

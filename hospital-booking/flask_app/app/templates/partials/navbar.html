@@ -1,0 +1,67 @@
+<!-- templates/partials/navbar.html -->
+<nav class="bg-white shadow-sm border-b sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="flex items-center space-x-3">
+                        <svg class="w-8 h-8 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                        </svg>
+                        <h1 class="text-xl font-bold text-gray-900">MedBooking</h1>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- User Menu -->
+            {% if get_current_user() %}
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500">{{ get_current_user().hospital.name if get_current_user().hospital else 'ระบบจัดการ' }}</span>
+                
+                <!-- User Dropdown -->
+                <div class="relative group">
+                    <button class="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
+                        <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                            <span class="text-sm font-medium text-purple-600">
+                                {{ get_current_user().name[0] if get_current_user().name else 'U' }}
+                            </span>
+                        </div>
+                        <span class="text-sm font-medium">{{ get_current_user().name if get_current_user().name else 'ผู้ใช้' }}</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                        <div class="px-4 py-2 border-b">
+                            <p class="text-sm font-medium text-gray-900">{{ get_current_user().name }}</p>
+                            <p class="text-xs text-gray-500">{{ get_current_user().email }}</p>
+                        </div>
+                        <a href="{{ url_for('main.dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            🏠 หน้าหลัก
+                        </a>
+                        <a href="{{ url_for('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            👤 โปรไฟล์
+                        </a>
+                        <a href="{{ url_for('availability.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            🕐 ตั้งค่าเวลาทำการ
+                        </a>
+                        <div class="border-t">
+                            <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                🚪 ออกจากระบบ
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="flex items-center space-x-4">
+                <a href="{{ url_for('auth.login') }}" class="text-sm text-gray-600 hover:text-gray-900">
+                    เข้าสู่ระบบ
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</nav>

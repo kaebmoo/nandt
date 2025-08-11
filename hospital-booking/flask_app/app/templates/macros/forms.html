@@ -1,0 +1,101 @@
+<!-- templates/macros/forms.html -->
+
+{# Render form field with label and wrapper #}
+{% macro render_field(field, label_visible=true, class='', rows='', placeholder='') %}
+    <div class="form-group{% if field.errors %} has-error{% endif %}">
+        {% if label_visible and field.label %}
+            {{ field.label(class="block text-sm font-medium text-gray-700 mb-2") }}
+        {% endif %}
+        
+        {% set field_class = class %}
+        {% if field.errors %}
+            {% set field_class = field_class + ' border-red-300 focus:border-red-500 focus:ring-red-500' %}
+        {% else %}
+            {% set field_class = field_class + ' border-gray-300 focus:border-purple-500 focus:ring-purple-500' %}
+        {% endif %}
+        
+        {% if rows %}
+            {{ field(class=field_class, rows=rows, placeholder=placeholder) }}
+        {% elif placeholder %}
+            {{ field(class=field_class, placeholder=placeholder) }}
+        {% else %}
+            {{ field(class=field_class) }}
+        {% endif %}
+        
+        {% if field.errors %}
+            <div class="mt-1">
+                {% for error in field.errors %}
+                    <p class="text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if field.description %}
+            <p class="mt-1 text-sm text-gray-500">{{ field.description }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Render field errors only #}
+{% macro render_field_errors(field) %}
+    {% if field.errors %}
+        <div class="mt-1">
+            {% for error in field.errors %}
+                <p class="text-sm text-red-600">{{ error }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{# Render checkbox field #}
+{% macro render_checkbox(field) %}
+    <div class="form-group{% if field.errors %} has-error{% endif %}">
+        <div class="flex items-center">
+            {{ field(class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500") }}
+            {% if field.label %}
+                {{ field.label(class="ml-2 block text-sm text-gray-900") }}
+            {% endif %}
+        </div>
+        
+        {% if field.errors %}
+            <div class="mt-1">
+                {% for error in field.errors %}
+                    <p class="text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if field.description %}
+            <p class="mt-1 text-sm text-gray-500">{{ field.description }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Render form validation summary #}
+{% macro render_form_errors(form) %}
+    {% if form.errors %}
+        <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">กรุณาแก้ไขข้อผิดพลาดต่อไปนี้:</h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        <ul class="list-disc pl-5 space-y-1">
+                            {% for field_name, errors in form.errors.items() %}
+                                {% if field_name != 'csrf_token' %}
+                                    {% for error in errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endmacro %}

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 import os
-from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash
+from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash, send_from_directory
 from .models import Appointment, User, Hospital
 from .auth import login_required, check_tenant_access
 from . import SessionLocal
@@ -300,24 +300,14 @@ def admin_check_database():
 @login_required
 def working_hours():
     """หน้าตั้งค่าเวลาทำการ (เก่า - redirect ไปใหม่)"""
-    return redirect(url_for('main.availability_settings'))
+    return redirect(url_for('availability.availability_settings'))
 
-@bp.route('/settings/availability')
-@login_required
-def availability_settings():
-    """หน้าตั้งค่าเวลาทำการ (Availability)"""
-    current_user = get_current_user()
-    if not current_user:
-        flash('กรุณาเข้าสู่ระบบ', 'error')
-        return redirect(url_for('auth.login'))
-    
-    hospital = current_user.hospital
-    if not hospital:
-        flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
-        return redirect(url_for('main.index'))
-    
-    return render_template('settings/availability.html', 
-                         current_user=current_user)
+# @bp.route('/settings/availability')
+# @login_required  
+# def availability_settings():
+#     """หน้าตั้งค่าเวลาทำการ (Availability) - ถูกย้ายไป availability_routes.py"""
+#     # Redirect ไปยัง availability blueprint
+#     return redirect(url_for('availability.availability_settings'))
 
 @bp.route('/settings/event-types')
 @login_required
@@ -438,4 +428,11 @@ def health():
         "host": request.host,
         "environment": os.environ.get('ENVIRONMENT', 'development')
     }
+
+@bp.route('/favicon.ico')
+def favicon():
+    """Favicon route to prevent 404 errors"""
+    # Return a simple 204 No Content response to avoid 404 errors
+    from flask import Response
+    return Response(status=204)
 

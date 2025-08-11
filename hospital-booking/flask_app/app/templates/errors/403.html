@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}ไม่มีสิทธิ์เข้าถึง - MedBooking{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8 text-center">
+        <div>
+            <h1 class="text-9xl font-bold text-yellow-600">403</h1>
+            <h2 class="mt-6 text-3xl font-bold text-gray-900">
+                ไม่มีสิทธิ์เข้าถึง
+            </h2>
+            <p class="mt-2 text-sm text-gray-600">
+                ขอโทษครับ คุณไม่มีสิทธิ์เข้าถึงหน้านี้
+            </p>
+        </div>
+        <div class="mt-8">
+            <a href="{{ url_for('main.index') }}" 
+               class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                กลับหน้าแรก
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

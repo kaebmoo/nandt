@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}เกิดข้อผิดพลาด - MedBooking{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8 text-center">
+        <div>
+            <h1 class="text-9xl font-bold text-red-600">500</h1>
+            <h2 class="mt-6 text-3xl font-bold text-gray-900">
+                เกิดข้อผิดพลาดภายในระบบ
+            </h2>
+            <p class="mt-2 text-sm text-gray-600">
+                ขอโทษครับ เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง
+            </p>
+        </div>
+        <div class="mt-8">
+            <a href="{{ url_for('main.index') }}" 
+               class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                กลับหน้าแรก
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

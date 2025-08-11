@@ -1,0 +1,182 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}MedBooking{% endblock %}</title>
+
+    <!-- สำหรับ favicon.ico error: ไม่ต้องกังวลครับ เป็นเพราะไม่มีไฟล์ favicon 
+     แต่ไม่กระทบการทำงานของระบบ ถ้าอยากแก้ให้เพิ่มไฟล์ favicon.ico 
+     ในโฟลเดอร์ static/ หรือเพิ่มใน <head> ของ base.html: -->
+    <link rel="icon" href="data:,">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Base Styles -->
+    <style>
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+        
+        /* Smooth transitions */
+        * {
+            transition: colors 0.2s ease;
+        }
+        
+        /* Form focus states */
+        .form-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        /* Loading states */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        /* Flash message animations */
+        .flash-message {
+            animation: slideInTop 0.3s ease-out;
+        }
+        
+        @keyframes slideInTop {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <!-- Navigation -->
+    {% include 'partials/navbar.html' %}
+    
+    <!-- Flash Messages -->
+    {% include 'partials/flash_messages.html' %}
+    
+    <!-- Main Content -->
+    <main class="pb-8">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    {% include 'partials/footer.html' %}
+    
+    <!-- Global Scripts -->
+    <script>
+        // CSRF Token for AJAX requests
+        window.csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        // Global utility functions
+        window.utils = {
+            // Show loading state
+            showLoading: function(element) {
+                if (element) {
+                    element.classList.add('loading');
+                }
+            },
+            
+            // Hide loading state
+            hideLoading: function(element) {
+                if (element) {
+                    element.classList.remove('loading');
+                }
+            },
+            
+            // Show notification
+            showNotification: function(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg text-white flash-message ${
+                    type === 'success' ? 'bg-green-500' :
+                    type === 'error' ? 'bg-red-500' :
+                    type === 'warning' ? 'bg-yellow-500' :
+                    'bg-blue-500'
+                }`;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 5000);
+            },
+            
+            // Format date
+            formatDate: function(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('th-TH');
+            },
+            
+            // Format time
+            formatTime: function(timeString) {
+                return timeString.substring(0, 5); // HH:MM
+            },
+            
+            // Debounce function
+            debounce: function(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+        };
+        
+        // Global event handlers
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-hide flash messages
+            const flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach(message => {
+                if (!message.querySelector('.manual-close')) {
+                    setTimeout(() => {
+                        message.style.opacity = '0';
+                        setTimeout(() => message.remove(), 300);
+                    }, 5000);
+                }
+            });
+            
+            // Setup CSRF for all AJAX requests
+            const token = document.querySelector('meta[name="csrf-token"]');
+            if (token) {
+                window.csrfToken = token.getAttribute('content');
+            }
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

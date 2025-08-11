@@ -1,0 +1,463 @@
+<!-- templates/settings/availability/index.html -->
+{% extends "base.html" %}
+{% from 'macros/forms.html' import render_field, render_field_errors %}
+
+{% block title %}ตั้งค่าเวลาทำการ - MedBooking{% endblock %}
+
+{% block extra_css %}
+<style>
+    .template-item {
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    .template-item:hover {
+        background-color: #f3f4f6;
+    }
+    .template-item.active {
+        background-color: #e0e7ff;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 2px #6366f1;
+    }
+    .override-item {
+        transition: all 0.2s ease;
+    }
+    .day-schedule {
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">ตั้งค่าเวลาทำการ</h1>
+                <p class="mt-2 text-gray-600">จัดการเทมเพลตเวลาทำการและวันพิเศษสำหรับการจองนัดหมาย</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{{ url_for('availability.create_template') }}" 
+                   class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                    <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    สร้างเทมเพลตใหม่
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Templates List -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-6">เทมเพลตเวลาทำการ</h2>
+                
+                {% if templates %}
+                    <div class="space-y-3" id="templates-list">
+                        {% for template in templates %}
+                            <div class="template-item border rounded-lg p-4 hover:bg-gray-100 {% if selected_template and selected_template.id == template.id %}active bg-blue-50 border-blue-500{% else %}bg-gray-50{% endif %}" 
+                                 data-template-id="{{ template.id }}"
+                                 onclick="selectTemplate({{ template.id }})">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h3 class="font-medium text-gray-900 mb-1">{{ template.name }}</h3>
+                                        {% if template.description %}
+                                            <p class="text-sm text-gray-600 mb-2">{{ template.description }}</p>
+                                        {% endif %}
+                                        <div class="text-xs text-gray-500">
+                                            <span>วัน: </span>
+                                            {% for day_num in template.days %}
+                                                <span class="inline-block bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-1">
+                                                    {{ day_num | day_name_th_short }}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-1 ml-3">
+                                        <a href="{{ url_for('availability.edit_template', template_id=template.id) }}" 
+                                           class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                           title="แก้ไข"
+                                           onclick="event.stopPropagation()">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                            </svg>
+                                        </a>
+                                        <form method="POST" action="{{ url_for('availability.delete_template', template_id=template.id) }}" 
+                                              style="display: inline;" 
+                                              onsubmit="event.stopPropagation(); return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตนี้?\n\nหมายเหตุ: หาก Event Type ใดใช้เทมเพลตนี้อยู่ ระบบจะย้ายไปใช้เทมเพลตเริ่มต้นอัตโนมัติ')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" 
+                                                    class="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                                    title="ลบ">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-12 text-gray-500">
+                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">ยังไม่มีเทมเพลต</h3>
+                        <p class="text-sm mb-4">เริ่มต้นสร้างเทมเพลตเวลาทำการแรกของคุณ</p>
+                        <a href="{{ url_for('availability.create_template') }}" 
+                           class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                            สร้างเทมเพลตใหม่
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Template Details & Date Overrides -->
+        <div class="lg:col-span-2 space-y-8">
+            
+            <!-- Selected Template Details -->
+            <div id="template-details" class="bg-white rounded-xl shadow-sm border p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">รายละเอียดเทมเพลต</h3>
+                </div>
+                <div id="template-details-content">
+                    {% if selected_template %}
+                        <div class="mb-4">
+                            <h4 class="font-medium text-gray-900 mb-2">{{ selected_template.name }}</h4>
+                            {% if selected_template.description %}
+                                <p class="text-sm text-gray-600 mb-3">{{ selected_template.description }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {% set day_names = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'] %}
+                            {% for day_num in range(7) %}
+                                {% set is_active = day_num in selected_template.days %}
+                                <div class="border rounded-lg p-3 {% if is_active %}bg-green-50 border-green-200{% else %}bg-gray-50 border-gray-200{% endif %}">
+                                    <h5 class="font-medium text-gray-900 mb-1">{{ day_names[day_num] }}</h5>
+                                    {% if is_active %}
+                                        {% if selected_template.schedule and selected_template.schedule[day_num|string] %}
+                                            {% for slot in selected_template.schedule[day_num|string] %}
+                                                <div class="text-sm text-green-700">
+                                                    {{ slot.start if slot.start else slot[0] }} - {{ slot.end if slot.end else slot[1] }}
+                                                </div>
+                                            {% endfor %}
+                                        {% else %}
+                                            <div class="text-sm text-green-700">08:30 - 16:30</div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="text-sm text-gray-500">ปิด</div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500">
+                            <p class="text-sm">เลือกเทมเพลตเพื่อดูรายละเอียด</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Template-Specific Date Overrides -->
+            {% if selected_template %}
+            <div id="template-date-overrides" class="bg-white rounded-xl shadow-sm border p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">วันพิเศษ</h2>
+                        <p class="text-sm text-gray-600 mt-1">วันที่เวลาทำการเปลี่ยนแปลงจากตารางปกติ</p>
+                    </div>
+                </div>
+
+                {% if template_overrides %}
+                    <div class="space-y-3">
+                        {% for override in template_overrides %}
+                            <div class="override-item border rounded-lg p-4 bg-purple-50 border-purple-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-sm font-medium text-gray-700">📅 {{ override.date | thai_date }}</span>
+                                    </div>
+                                    <form method="POST" action="{{ url_for('availability.delete_date_override', override_id=override.id) }}" 
+                                          style="display: inline;" 
+                                          onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="text-red-600 hover:text-red-800 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span class="text-sm font-medium">
+                                            {% if override.is_unavailable %}
+                                                🚫 วันหยุด
+                                            {% else %}
+                                                ⏰ เวลาพิเศษ
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        {% if override.is_unavailable %}
+                                            <div class="text-sm text-red-600">ปิดทำการ</div>
+                                        {% else %}
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-sm font-mono">{{ override.custom_start_time or '' }}</span>
+                                                <span class="text-gray-500">-</span>
+                                                <span class="text-sm font-mono">{{ override.custom_end_time or '' }}</span>
+                                            </div>
+                                        {% endif %}
+                                        {% if override.reason %}
+                                            <div class="text-sm text-gray-600 mt-1">"{{ override.reason }}"</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4v10a2 2 0 002 2h4a2 2 0 002-2V11"></path>
+                        </svg>
+                        <p class="text-sm">ยังไม่มีวันพิเศษสำหรับเทมเพลตนี้</p>
+                        <p class="text-xs text-gray-400 mt-1">กดแก้ไขเทมเพลตเพื่อเพิ่มวันพิเศษ</p>
+                    </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <div class="text-center py-8 text-gray-500">
+                    <p class="text-sm">เลือกเทมเพลตเพื่อดูวันพิเศษ</p>
+                </div>
+            </div>
+            {% endif %}
+
+
+        </div>
+    </div>
+</div>
+
+<!-- Date Override Modal -->
+<div id="date-override-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">เพิ่มวันพิเศษ</h3>
+            <button onclick="hideOverrideForm()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="date-override-form" method="POST" action="{{ url_for('availability.create_date_override') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="template_id" id="modal-template-id" value="">
+            <input type="hidden" name="scope" id="modal-scope" value="global">
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่</label>
+                    <input type="date" name="date" required 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ประเภท</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="override_type" value="custom" checked 
+                                   class="text-purple-600" onchange="toggleTimeInputs()">
+                            <span class="text-sm">เวลาพิเศษ</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="override_type" value="unavailable" 
+                                   class="text-purple-600" onchange="toggleTimeInputs()">
+                            <span class="text-sm">วันหยุด</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="time-inputs">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เวลาพิเศษ</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="time" name="custom_start_time" 
+                               class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <input type="time" name="custom_end_time" 
+                               class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เหตุผล (ไม่บังคับ)</label>
+                    <input type="text" name="reason" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="เช่น วันหยุดนักขัตฤกษ์">
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" onclick="hideOverrideForm()" 
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    บันทึก
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let selectedTemplateId = null;
+    
+    // เลือก template - ใช้ server-side rendering
+    function selectTemplate(templateId) {
+        // Reload page with selected template parameter เพื่อให้ server render ใหม่
+        const url = new URL(window.location);
+        url.searchParams.set('selected_template', templateId);
+        
+        // เก็บ subdomain parameter ไว้ด้วย
+        const subdomain = url.searchParams.get('subdomain');
+        if (subdomain) {
+            url.searchParams.set('subdomain', subdomain);
+        }
+        
+        window.location.href = url.toString();
+    }
+    
+    // โหลด template-specific overrides
+    async function loadTemplateOverrides(templateId) {
+        try {
+            const response = await fetch(`/settings/api/template/${templateId}/overrides`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                const content = document.getElementById('template-overrides-content');
+                const overrides = data.date_overrides || [];
+                
+                if (overrides.length > 0) {
+                    let overridesHtml = '<div class="space-y-3">';
+                    
+                    overrides.forEach(override => {
+                        overridesHtml += `
+                            <div class="override-item border rounded-lg p-4 bg-purple-50 border-purple-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-sm font-medium text-gray-700">📅 ${override.date}</span>
+                                        <span class="text-xs bg-purple-200 text-purple-700 px-2 py-1 rounded-full">เฉพาะเทมเพลต</span>
+                                    </div>
+                                    <form method="POST" action="/settings/availability/date-override/${override.id}/delete" 
+                                          style="display: inline;" 
+                                          onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
+                                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name=csrf-token]').getAttribute('content')}">
+                                        <button type="submit" class="text-red-600 hover:text-red-800 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span class="text-sm font-medium">${override.is_unavailable ? '🚫 วันหยุด' : '⏰ เวลาพิเศษ'}</span>
+                                    </div>
+                                    <div>
+                                        ${override.is_unavailable ? 
+                                            '<div class="text-sm text-red-600">ปิดทำการ</div>' :
+                                            `<div class="flex items-center space-x-2">
+                                                <span class="text-sm font-mono">${override.custom_start_time || ''}</span>
+                                                <span class="text-gray-500">-</span>
+                                                <span class="text-sm font-mono">${override.custom_end_time || ''}</span>
+                                            </div>`
+                                        }
+                                        ${override.reason ? `<div class="text-sm text-gray-600 mt-1">"${override.reason}"</div>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    overridesHtml += '</div>';
+                    content.innerHTML = overridesHtml;
+                } else {
+                    content.innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4v10a2 2 0 002 2h4a2 2 0 002-2V11"></path>
+                            </svg>
+                            <p class="text-sm">ยังไม่มีวันพิเศษสำหรับเทมเพลตนี้</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading template overrides:', error);
+        }
+    }
+    
+    // แสดง form สำหรับวันพิเศษทั่วไป
+    function showGlobalOverrideForm() {
+        document.getElementById('modal-template-id').value = '';
+        document.getElementById('modal-scope').value = 'global';
+        document.getElementById('date-override-modal').classList.remove('hidden');
+    }
+    
+    // แสดง form สำหรับวันพิเศษเฉพาะเทมเพลต
+    function showTemplateOverrideForm() {
+        {% if selected_template %}
+        const templateId = {{ selected_template.id }};
+        document.getElementById('modal-template-id').value = templateId;
+        document.getElementById('modal-scope').value = 'template';
+        document.getElementById('date-override-modal').classList.remove('hidden');
+        {% else %}
+        alert('กรุณาเลือกเทมเพลตก่อน');
+        {% endif %}
+    }
+    
+    // ซ่อน form
+    function hideOverrideForm() {
+        document.getElementById('date-override-modal').classList.add('hidden');
+        document.getElementById('date-override-form').reset();
+    }
+    
+    // Toggle time inputs ตาม override type
+    function toggleTimeInputs() {
+        const overrideType = document.querySelector('input[name="override_type"]:checked').value;
+        const timeInputs = document.getElementById('time-inputs');
+        
+        if (overrideType === 'unavailable') {
+            timeInputs.style.display = 'none';
+            // Clear time values
+            document.querySelector('input[name="custom_start_time"]').value = '';
+            document.querySelector('input[name="custom_end_time"]').value = '';
+        } else {
+            timeInputs.style.display = 'block';
+        }
+    }
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        // Setup override type change handler
+        document.querySelectorAll('input[name="override_type"]').forEach(radio => {
+            radio.addEventListener('change', toggleTimeInputs);
+        });
+        
+        // ถ้ามี selected_template ให้โหลด overrides
+        // {% if selected_template %}
+        // loadTemplateOverrides({{ selected_template.id }});
+        // {% endif %}
+    });
+</script>
+{% endblock %}

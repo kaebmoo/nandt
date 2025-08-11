@@ -167,6 +167,10 @@ class Availability(TenantBase):
     
     # Relationships - event types ที่ใช้ availability นี้
     event_types = relationship("EventType", back_populates="availability")
+    date_overrides = relationship("DateOverride", 
+                                 back_populates="template", 
+                                 foreign_keys="DateOverride.template_id",
+                                 cascade="all, delete-orphan")
 
 class DateOverride(TenantBase):
     """การปรับเปลี่ยนตารางในวันเฉพาะ (วันหยุดพิเศษ, เปลี่ยนเวลาทำการ)"""
@@ -174,6 +178,10 @@ class DateOverride(TenantBase):
     
     id = Column(Integer, primary_key=True)
     date = Column(DateTime, nullable=False)  # วันที่เฉพาะ
+    
+    # Template relationship
+    template_id = Column(Integer, ForeignKey('availabilities.id'), nullable=True)
+    template_scope = Column(String(50), default='template')  # 'template' or 'global'
     
     # Override types
     is_unavailable = Column(Boolean, default=False)  # วันหยุด
@@ -183,6 +191,9 @@ class DateOverride(TenantBase):
     reason = Column(String(255))  # เหตุผล เช่น "วันหยุดนักขัตฤกษ์"
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    template = relationship("Availability", back_populates="date_overrides", foreign_keys=[template_id])
 
 class Holiday(TenantBase):
     """วันหยุดนักขัตฤกษ์"""
