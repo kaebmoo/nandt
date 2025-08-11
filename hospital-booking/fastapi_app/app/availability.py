@@ -361,6 +361,13 @@ async def delete_availability_template(subdomain: str, template_id: int, db: Ses
         template_name = template_to_delete.name
         records = db.query(models.Availability).filter(models.Availability.name == template_name).all()
         record_ids = [r.id for r in records]
+
+        # ลบ date_overrides ที่เชื่อมกับ template นี้ (ใช้ MIN(id) เป็น reference)
+        if record_ids:
+            min_id = min(record_ids)
+            db.query(models.DateOverride).filter(
+                models.DateOverride.template_id == min_id
+            ).delete()
         
         # หา event types ที่ใช้ template นี้
         conflicting_events = db.query(models.EventType).filter(models.EventType.availability_id.in_(record_ids)).all()
