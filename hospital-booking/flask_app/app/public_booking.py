@@ -227,10 +227,13 @@ def success(reference):
             
             # Format datetime
             dt = datetime.fromisoformat(booking['appointment_datetime'])
-            booking['date_display'] = dt.strftime('%d/%m/%Y')
+            thai_day_names = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์', 'วันอาทิตย์']
+            thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+
             booking['time_display'] = dt.strftime('%H:%M')
-            booking['day_name'] = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'][dt.weekday()]
-            
+            # สร้าง key ใหม่ชื่อ full_date_display เพื่อเก็บรูปแบบวันที่ที่ต้องการ
+            booking['full_date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month - 1]} {dt.year + 543}"
+                        
             return render_template('booking/success.html',
                                  booking=booking,
                                  subdomain=subdomain)
@@ -260,8 +263,12 @@ def manage_booking(reference):
             
             # Format datetime
             dt = datetime.fromisoformat(booking['appointment_datetime'])
-            booking['date_display'] = dt.strftime('%d/%m/%Y')
+            thai_day_names = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์', 'วันอาทิตย์']
+            thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+
             booking['time_display'] = dt.strftime('%H:%M')
+            booking['full_date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month - 1]} {dt.year + 543}"
+
             
             return render_template('booking/manage.html',
                                  booking=booking,
@@ -318,6 +325,16 @@ def reschedule_booking(reference):
             return redirect(url_for('booking.booking_home'))
             
         booking = response.json()
+
+        # จัดรูปแบบวันที่และเวลาให้อ่านง่าย
+        dt = datetime.fromisoformat(booking['appointment_datetime'])
+        thai_day_names = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์', 'วันอาทิตย์']
+        thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+        
+        # สร้าง Key ใหม่สำหรับแสดงผลโดยเฉพาะ
+        booking['time_display'] = dt.strftime('%H:%M')
+        booking['full_date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month - 1]} {dt.year + 543}"
+        # ------------------------
         
         if not booking.get('can_reschedule'):
             flash('ไม่สามารถเลื่อนนัดได้ (ใกล้เวลานัดเกินไป)', 'error')
@@ -345,7 +362,7 @@ def reschedule_booking(reference):
         
         # 3. สร้าง calendar data
         today = datetime.now()
-        calendar_data = generate_calendar_data_with_availability(
+        calendar_data = generate_calendar_for_booking(
             today.year, 
             today.month,
             booking.get('availability_schedule', {})
@@ -354,6 +371,7 @@ def reschedule_booking(reference):
         return render_template('booking/reschedule.html',
                              booking=booking,
                              calendar_data=calendar_data,
+                             availability_schedule=booking.get('availability_schedule', {}), 
                              subdomain=subdomain,
                              today=today.isoformat())
                              
@@ -469,51 +487,6 @@ def generate_calendar_for_booking(year, month, availability_schedule):
         'can_go_previous': date(year, month, 1) > date.today().replace(day=1)
     }
 
-def generate_calendar_data_with_availability(year, month, availability_schedule):
-    """Generate calendar data พร้อมข้อมูล availability"""
-    cal = calendar.monthcalendar(year, month)
-    today = datetime.now().date()
-    
-    month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-                   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-    
-    # Process calendar weeks with availability info
-    weeks_with_availability = []
-    for week in cal:
-        week_data = []
-        for day in week:
-            if day == 0:
-                week_data.append({
-                    'day': 0,
-                    'date': None,
-                    'available': False,
-                    'past': False
-                })
-            else:
-                date_obj = datetime(year, month, day).date()
-                day_of_week = date_obj.weekday()
-                # Monday = 0, Sunday = 6 -> convert to Sunday = 0, Saturday = 6
-                day_of_week = (day_of_week + 1) % 7
-                
-                week_data.append({
-                    'day': day,
-                    'date': date_obj.isoformat(),
-                    'day_of_week': day_of_week,
-                    'available': str(day_of_week) in availability_schedule and date_obj > today,
-                    'past': date_obj < today,
-                    'today': date_obj == today
-                })
-        weeks_with_availability.append(week_data)
-    
-    return {
-        'year': year,
-        'month': month,
-        'month_name': month_names[month - 1],
-        'weeks': weeks_with_availability,
-        'availability_schedule': availability_schedule,
-        'can_go_previous': datetime(year, month, 1).date() > today.replace(day=1)
-    }
-
 # เพิ่ม AJAX endpoint สำหรับ calendar navigation
 @public_bp.route('/api/calendar/<int:year>/<int:month>')
 def get_calendar(year, month):
@@ -540,7 +513,7 @@ def get_calendar(year, month):
         except:
             pass
     
-    calendar_data = generate_calendar_data_with_availability(year, month, availability_schedule)
+    calendar_data = generate_calendar_for_booking(year, month, availability_schedule)
     return jsonify(calendar_data)
 
 def generate_calendar_with_availability(year, month, availability_schedule):

@@ -312,8 +312,71 @@
                 currentYear--;
             }
             
-            // Reload page with new month
-            window.location.href = `/book/service/${eventTypeId}?subdomain=${subdomain}&month=${currentMonth}&year=${currentYear}`;
+            // Load new calendar via AJAX
+            try {
+                const response = await fetch(`/book/api/calendar/${currentYear}/${currentMonth}?event_type_id=${eventTypeId}&subdomain=${subdomain}`);
+                const data = await response.json();
+                
+                // Update month display
+                document.getElementById('current-month').textContent = 
+                    `${data.month_name} ${data.year + 543}`;
+                
+                // Update calendar grid
+                renderCalendarGrid(data);
+                
+                // Update prev button state
+                const prevBtn = document.getElementById('prev-month-btn');
+                if (!data.can_go_previous) {
+                    prevBtn.disabled = true;
+                    prevBtn.style.opacity = '0.3';
+                    prevBtn.style.cursor = 'not-allowed';
+                } else {
+                    prevBtn.disabled = false;
+                    prevBtn.style.opacity = '1';
+                    prevBtn.style.cursor = 'pointer';
+                }
+                
+            } catch (error) {
+                console.error('Error loading calendar:', error);
+            }
+        }
+
+        function renderCalendarGrid(calendarData) {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            
+            calendarData.weeks.forEach(week => {
+                week.forEach(dayInfo => {
+                    if (dayInfo.day === 0) {
+                        grid.innerHTML += '<div class="p-3"></div>';
+                    } else {
+                        let classes = 'calendar-day p-3 text-center rounded-lg';
+                        let onclick = '';
+                        
+                        if (dayInfo.past) {
+                            classes += ' past disabled';
+                        } else if (dayInfo.available) {
+                            classes += ' available';
+                            onclick = `onclick="selectDate(this)"`;
+                        } else {
+                            classes += ' disabled';
+                        }
+                        
+                        if (dayInfo.today) {
+                            classes += ' today';
+                        }
+                        
+                        grid.innerHTML += `
+                            <div class="${classes}"
+                                 data-date="${dayInfo.date}"
+                                 data-day-of-week="${dayInfo.day_of_week}"
+                                 ${onclick}>
+                                ${dayInfo.day}
+                            </div>
+                        `;
+                    }
+                });
+            });
         }
     </script>
 </body>

@@ -101,6 +101,17 @@ class RescheduleRequest(BaseModel):
     new_time: str
     reason: Optional[str] = None
 
+class EventTypeDetail(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    duration_minutes: int
+    color: Optional[str] = None
+    template_id: Optional[int] = None
+    # เพิ่ม field อื่นๆ ที่จำเป็นสำหรับหน้า reschedule
+    max_advance_days: Optional[int] = None
+    min_notice_hours: int
+
 class CancelRequest(BaseModel):
     booking_reference: str
     reason: Optional[str] = None
@@ -134,6 +145,32 @@ def generate_time_slots(start_time: time, end_time: time, duration_minutes: int)
     return slots
 
 # --- Main API Endpoints ---
+
+@router.get("/event-types/{event_type_id}", response_model=EventTypeDetail)
+async def get_event_type_details(
+    subdomain: str,
+    event_type_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get details for a single event type."""
+    # Set search_path for the correct tenant
+    schema_name = f"tenant_{subdomain}"
+    try:
+        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        db.commit()
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
+
+    # Query for the event type
+    event_type = db.query(models.EventType).filter(
+        models.EventType.id == event_type_id,
+        models.EventType.is_active == True
+    ).first()
+
+    if not event_type:
+        raise HTTPException(status_code=404, detail="Event type not found or is not active")
+
+    return event_type
 
 @router.get("/booking/availability/{event_type_id}")
 async def get_booking_availability(
@@ -494,6 +531,7 @@ async def get_booking_details(
         "guest_phone": appointment.guest_phone,
         "notes": appointment.notes,
         "event_type": {
+            "id": event_type.id if event_type else None,
             "name": event_type.name,
             "duration": event_type.duration_minutes
         } if event_type else None,
@@ -621,7 +659,7 @@ async def cancel_booking(
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
     db.commit()
-    
+
     try:
         # Find appointment
         appointment = db.query(models.Appointment).filter_by(

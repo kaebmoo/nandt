@@ -75,7 +75,7 @@
                           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 <span class="text-sm text-yellow-800">
-                    นัดหมายเดิม: <strong>{{ booking.appointment_datetime|thai_date }}</strong> เวลา <strong>{{ booking.appointment_datetime|thai_time }} น.</strong>
+                    นัดหมายเดิม: <strong>{{ booking.full_date_display }}</strong> เวลา <strong>{{ booking.time_display }} น.</strong>
                     | รหัส: <strong>{{ booking.booking_reference }}</strong>
                 </span>
             </div>
@@ -200,7 +200,7 @@
         const eventTypeId = {{ booking.event_type.id }};
         const subdomain = '{{ subdomain }}';
         const today = '{{ today }}';
-        const availabilitySchedule = {{ calendar_data.availability_schedule|tojson }};
+        const availabilitySchedule = {{ availability_schedule|tojson|safe }};
         
         function selectDate(element) {
             const date = element.dataset.date;
