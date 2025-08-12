@@ -1,0 +1,320 @@
+<!-- templates/booking/select_time.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เลือกวันและเวลา - {{ event_type.name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .calendar-day {
+            min-height: 45px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .calendar-day.available {
+            background-color: #f3f4f6;
+        }
+        .calendar-day.available:hover {
+            background-color: #e0e7ff;
+        }
+        .calendar-day.selected {
+            background-color: #6366f1 !important;
+            color: white !important;
+        }
+        .calendar-day.disabled {
+            color: #d1d5db;
+            cursor: not-allowed;
+            background-color: transparent;
+        }
+        .calendar-day.past {
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .calendar-day.today {
+            border: 2px solid #6366f1;
+        }
+        .time-slot {
+            transition: all 0.2s ease;
+        }
+        .time-slot:hover {
+            transform: scale(1.05);
+        }
+        .time-slot.selected {
+            background-color: #6366f1;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen">
+    
+    <!-- Header -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <a href="/book?subdomain={{ subdomain }}" class="text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </a>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">เลือกวันและเวลา</h1>
+                        <p class="text-gray-600">{{ event_type.name }} ( {{ event_type.duration_minutes }} นาที)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="bg-white border-b">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex items-center py-4">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center font-semibold">1</div>
+                    <span class="ml-2 text-purple-600 font-medium">เลือกวันเวลา</span>
+                </div>
+                <div class="flex-1 mx-4 h-1 bg-gray-200"></div>
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-gray-300 text-white rounded-full flex items-center justify-center font-semibold">2</div>
+                    <span class="ml-2 text-gray-400">กรอกข้อมูล</span>
+                </div>
+                <div class="flex-1 mx-4 h-1 bg-gray-200"></div>
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-gray-300 text-white rounded-full flex items-center justify-center font-semibold">3</div>
+                    <span class="ml-2 text-gray-400">ยืนยันการจอง</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            
+            <!-- Calendar Section (3 columns) -->
+            <div class="lg:col-span-3 bg-white rounded-xl shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-800">เลือกวันที่</h2>
+                    <div class="flex items-center gap-4">
+                        <button type="button" onclick="changeMonth(-1)" 
+                                id="prev-month-btn"
+                                class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                {% if not calendar_data.can_go_previous %}disabled style="opacity: 0.3; cursor: not-allowed;"{% endif %}>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                        </button>
+                        <h3 class="text-lg font-medium" id="current-month">
+                            {{ calendar_data.month_name }} {{ calendar_data.year + 543 }}
+                        </h3>
+                        <button type="button" onclick="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded-lg">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Calendar Grid -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-center text-sm font-medium text-red-500 py-2">อา</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">จ</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">อ</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">พ</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">พฤ</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">ศ</div>
+                    <div class="text-center text-sm font-medium text-gray-600 py-2">ส</div>
+                </div>
+                
+                <div class="grid grid-cols-7 gap-1" id="calendar-grid">
+                    {% for week in calendar_data.weeks %}
+                        {% for day_info in week %}
+                            {% if day_info.day == 0 %}
+                                <div class="p-3"></div>
+                            {% else %}
+                                <div class="calendar-day p-3 text-center rounded-lg
+                                           {% if day_info.past %}past disabled{% endif %}
+                                           {% if day_info.today %}today{% endif %}
+                                           {% if day_info.available and not day_info.past %}available{% else %}disabled{% endif %}"
+                                     data-date="{{ day_info.date }}"
+                                     data-day-of-week="{{ day_info.day_of_week }}"
+                                     {% if day_info.available and not day_info.past %}onclick="selectDate(this)"{% endif %}>
+                                    {{ day_info.day }}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Time Slots Section (2 columns) -->
+            <div class="lg:col-span-2 bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">เลือกเวลา</h2>
+                
+                <div id="selected-date-display" class="mb-4 p-3 bg-purple-50 rounded-lg hidden">
+                    <span class="text-purple-700 font-medium"></span>
+                </div>
+                
+                <div id="time-slots-container">
+                    <div class="text-center py-12 text-gray-400">
+                        <svg class="w-16 h-16 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                                  d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M12 12h.01M12 12h-.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p>ไม่มีเวลาว่างในวันนี้</p>
+                        <p class="text-sm">กรุณาเลือกวันที่ก่อน</p>
+                    </div>
+                </div>
+                
+                <div id="loading-slots" class="hidden">
+                    <div class="flex justify-center items-center py-12">
+                        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Continue Button -->
+        <div class="mt-8 flex justify-end">
+            <form id="booking-form" method="POST" action="/book/confirm?subdomain={{ subdomain }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="event_type_id" value="{{ event_type.id }}">
+                <input type="hidden" name="event_type_name" value="{{ event_type.name }}">
+                <input type="hidden" name="date" id="selected-date">
+                <input type="hidden" name="time" id="selected-time">
+                
+                <button type="submit" id="continue-btn" disabled
+                        class="px-8 py-3 bg-gray-300 text-white rounded-lg font-medium cursor-not-allowed transition-all">
+                    ดำเนินการต่อ
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let selectedDate = null;
+        let selectedTime = null;
+        const eventTypeId = {{ event_type.id }};
+        const subdomain = '{{ subdomain }}';
+        const today = '{{ today }}';
+        const availabilitySchedule = {{ availability_schedule|tojson|safe }};
+        let currentMonth = {{ current_month }};
+        let currentYear = {{ current_year }};
+        
+        function selectDate(element) {
+            const date = element.dataset.date;
+            
+            // Update UI
+            document.querySelectorAll('.calendar-day').forEach(day => {
+                day.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            
+            selectedDate = date;
+            selectedTime = null;
+            
+            // Update display
+            const dateObj = new Date(date + 'T00:00:00');
+            const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'];
+            const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 
+                              'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            
+            const displayText = `${dayNames[dateObj.getDay()]} ${dateObj.getDate()} ${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear() + 543}`;
+            
+            const displayDiv = document.getElementById('selected-date-display');
+            displayDiv.classList.remove('hidden');
+            displayDiv.querySelector('span').textContent = displayText;
+            
+            // Update form
+            document.getElementById('selected-date').value = date;
+            
+            // Reset button
+            const btn = document.getElementById('continue-btn');
+            btn.disabled = true;
+            btn.classList.add('bg-gray-300', 'cursor-not-allowed');
+            btn.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600');
+            
+            // Load time slots
+            loadTimeSlots(date);
+        }
+        
+        async function loadTimeSlots(date) {
+            const container = document.getElementById('time-slots-container');
+            const loading = document.getElementById('loading-slots');
+            
+            container.style.display = 'none';
+            loading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
+                const data = await response.json();
+                
+                if (data.slots && data.slots.length > 0) {
+                    let slotsHtml = '<div class="grid grid-cols-2 gap-2">';
+                    
+                    data.slots.forEach(slot => {
+                        if (slot.available) {
+                            slotsHtml += `
+                                <button type="button" 
+                                        class="time-slot p-3 border-2 border-gray-200 rounded-lg hover:border-purple-400 transition-all"
+                                        onclick="selectTime('${slot.time}', this)">
+                                    ${slot.time}
+                                </button>
+                            `;
+                        }
+                    });
+                    
+                    slotsHtml += '</div>';
+                    container.innerHTML = slotsHtml;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            <p>ไม่มีเวลาว่างในวันนี้</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = '<div class="text-center py-8 text-red-500">เกิดข้อผิดพลาด</div>';
+            } finally {
+                loading.classList.add('hidden');
+                container.style.display = 'block';
+            }
+        }
+        
+        function selectTime(time, element) {
+            document.querySelectorAll('.time-slot').forEach(slot => {
+                slot.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            
+            selectedTime = time;
+            document.getElementById('selected-time').value = time;
+            
+            // Enable button
+            const btn = document.getElementById('continue-btn');
+            btn.disabled = false;
+            btn.classList.remove('bg-gray-300', 'cursor-not-allowed');
+            btn.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'hover:from-purple-700', 'hover:to-blue-700');
+        }
+        
+        async function changeMonth(direction) {
+            currentMonth += direction;
+            if (currentMonth > 12) {
+                currentMonth = 1;
+                currentYear++;
+            } else if (currentMonth < 1) {
+                currentMonth = 12;
+                currentYear--;
+            }
+            
+            // Reload page with new month
+            window.location.href = `/book/service/${eventTypeId}?subdomain=${subdomain}&month=${currentMonth}&year=${currentYear}`;
+        }
+    </script>
+</body>
+</html>

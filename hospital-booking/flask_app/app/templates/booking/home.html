@@ -1,0 +1,127 @@
+<!-- templates/booking/home.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จองนัดหมาย - MedBooking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .event-card {
+            transition: all 0.3s ease;
+        }
+        .event-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen">
+    
+    <!-- Header -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-6">
+            <h1 class="text-3xl font-bold text-gray-800">จองนัดหมายออนไลน์</h1>
+            <p class="text-gray-600 mt-1">เลือกประเภทการนัดหมายที่ต้องการ</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-6xl mx-auto px-4 py-12">
+        
+        {% if event_types %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for event_type in event_types %}
+            <div class="event-card bg-white rounded-xl shadow-md hover:shadow-xl cursor-pointer" 
+                 onclick="selectEventType({{ event_type.id }})">
+                <div class="p-6">
+                    <!-- Icon/Color Bar -->
+                    <div class="h-2 rounded-full mb-4" 
+                         style="background-color: {{ event_type.color or '#6366f1' }}"></div>
+                    
+                    <!-- Title -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-2">
+                        {{ event_type.name }}
+                    </h3>
+                    
+                    <!-- Description -->
+                    {% if event_type.description %}
+                    <p class="text-gray-600 text-sm mb-4">
+                        {{ event_type.description }}
+                    </p>
+                    {% endif %}
+                    
+                    <!-- Details -->
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center text-gray-500">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            ระยะเวลา: {{ event_type.duration_minutes }} นาที
+                        </div>
+                        
+                        {% if event_type.max_advance_days %}
+                        <div class="flex items-center text-gray-500">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            จองล่วงหน้าได้: {{ event_type.max_advance_days }} วัน
+                        </div>
+                        {% endif %}
+                        
+                        {% if event_type.min_notice_hours %}
+                        <div class="flex items-center text-gray-500">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            จองล่วงหน้าอย่างน้อย: {{ event_type.min_notice_hours }} ชั่วโมง
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Button -->
+                    <button class="w-full mt-6 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2 px-4 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all">
+                        เลือกและดูเวลาว่าง
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-xl shadow-md p-12 text-center">
+            <svg class="w-24 h-24 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">ยังไม่มีประเภทการนัดหมาย</h3>
+            <p class="text-gray-600">กรุณาติดต่อเจ้าหน้าที่เพื่อขอข้อมูลเพิ่มเติม</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-20 py-8 border-t bg-white">
+        <div class="max-w-6xl mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>ระบบจองนัดหมายออนไลน์ &copy; 2025 MedBooking</p>
+            <p class="mt-2">
+                หากมีปัญหาในการจอง กรุณาติดต่อ: 
+                <a href="tel:021234567" class="text-purple-600 hover:underline">02-123-4567</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function selectEventType(eventTypeId) {
+            // Redirect to time selection page
+            const subdomain = '{{ subdomain }}';
+            const params = subdomain ? `?subdomain=${subdomain}` : '';
+            window.location.href = `/book/service/${eventTypeId}${params}`;
+        }
+    </script>
+</body>
+</html>

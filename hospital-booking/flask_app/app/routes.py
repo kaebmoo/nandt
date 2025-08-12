@@ -3,10 +3,19 @@
 from datetime import datetime
 import os
 from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash, send_from_directory
-from .models import Appointment, User, Hospital
+
+from .models import (Appointment, User, Hospital, 
+                    Provider, EventType, Patient, 
+                    ServiceType, AvailabilityTemplate)
 from .auth import login_required, check_tenant_access
+from .utils.logger import log_route_access 
 from . import SessionLocal
 from sqlalchemy import text
+from flask import current_app
+import logging
+
+# สร้าง logger สำหรับ module นี้
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
 
@@ -62,18 +71,25 @@ def get_current_user():
 @bp.route('/')
 def index():
     """หน้าแรก - Smart routing with user context"""
+
+    current_app.logger.debug("Index route called")
     
     # ตรวจสอบว่าผู้ใช้ login อยู่หรือไม่
     current_user = get_current_user()
+    current_app.logger.debug(f"Current user: {current_user.email if current_user else 'None'}")
     
     tenant_schema, subdomain = get_tenant_info()
+    current_app.logger.debug(f"Tenant: {tenant_schema}, Subdomain: {subdomain}")
     
     # ถ้ามี tenant และผู้ใช้ login แล้ว
     if tenant_schema and current_user:
+        current_app.logger.debug("Has tenant and user, checking access...")
         # ตรวจสอบสิทธิ์เข้าถึง
         if check_tenant_access(subdomain):
+            current_app.logger.info(f"User {current_user.email} accessing dashboard for {subdomain}")
             return redirect(url_for('main.dashboard'))
         else:
+            current_app.logger.warning(f"Access denied for user {current_user.email} to {subdomain}")
             flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
             return redirect(url_for('auth.logout'))
     
@@ -94,13 +110,18 @@ def index():
                          current_user=current_user)
 
 @bp.route('/dashboard')
+@log_route_access
 def dashboard():
     """Dashboard - ต้อง login และมีสิทธิ์เข้าถึง"""
     
+    current_app.logger.debug("Dashboard route called")
+
     tenant_schema, subdomain = get_tenant_info()
+    current_app.logger.debug(f"Dashboard - Tenant: {tenant_schema}, Subdomain: {subdomain}")
     
     # ตรวจสอบ tenant
     if not tenant_schema:
+        current_app.logger.warning("No tenant schema found in dashboard")
         flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
         return redirect(url_for('main.index'))
     
@@ -192,14 +213,38 @@ def dashboard():
         
         # ชื่อโรงพยาบาลจาก database
         hospital_display_name = current_user.hospital.name
+
+        # คำนวณ statistics ก่อนส่งไป template
+        from datetime import datetime
+
+        today = datetime.now().date()
+        today_appointments = []
+        upcoming_appointments = []
+        
+        for appointment in appointments:
+            if hasattr(appointment, 'start_time') and appointment.start_time:
+                if appointment.start_time.date() == today:
+                    today_appointments.append(appointment)
+                elif appointment.start_time.date() > today:
+                    upcoming_appointments.append(appointment)
         
         return render_template('dashboard.html', 
-                             hospital_name=hospital_display_name,
-                             subdomain=subdomain,
-                             current_user=current_user,
-                             appointments=appointments)
+                         hospital_name=hospital_display_name,
+                         subdomain=subdomain,
+                         current_user=current_user,
+                         appointments=appointments,
+                         today_count=len(today_appointments), 
+                         upcoming_count=len(upcoming_appointments))
+        
                              
     except Exception as e:
+        current_app.logger.error(f"Dashboard error for {tenant_schema}: {str(e)}", exc_info=True)
+        # ป้องกัน redirect loop
+        if request.referrer and '/dashboard' in request.referrer:
+            current_app.logger.critical("Redirect loop detected in dashboard")
+            return render_template('errors/500.html', 
+                                 error="Dashboard loading error"), 500
+        
         # ถ้าเกิด error ระดับ connection หรือ schema
         print(f"Error accessing tenant '{tenant_schema}': {e}")
         

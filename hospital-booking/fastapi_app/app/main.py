@@ -23,6 +23,7 @@ from .database import SessionLocal, engine
 # Import routers
 from .event_types import router as event_types_router
 from .availability import router as availability_router
+from .booking import router as booking_router
 
 # สร้างเฉพาะ public tables
 models.PublicBase.metadata.create_all(bind=engine)
@@ -65,6 +66,7 @@ app.add_middleware(
 # Include routers
 app.include_router(event_types_router)
 app.include_router(availability_router)
+app.include_router(booking_router)
 
 # --- Dependency ---
 def get_db():

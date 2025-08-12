@@ -153,8 +153,7 @@
                             <dl>
                                 <dt class="text-sm font-medium text-gray-500 truncate">วันนี้</dt>
                                 <dd class="text-lg font-medium text-gray-900">
-                                    {% set today_count = appointments|selectattr('start_time')|selectattr('start_time', 'match', '2024-08-1[0-9]')|list|length %}
-                                    {{ today_count }}
+                                    <div>นัดวันนี้: {{ today_count }} รายการ</div>                                    
                                 </dd>
                             </dl>
                         </div>

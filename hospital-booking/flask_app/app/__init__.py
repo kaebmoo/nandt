@@ -1,6 +1,8 @@
 # flask_app/app/__init__.py - อัปเดตให้รองรับ Blueprint ใหม่
 
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask, g, request, redirect, url_for
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -15,6 +17,8 @@ load_dotenv()
 import sys
 sys.path.append('.')
 from . import models
+
+log_level = os.environ.get('LOG_LEVEL', 'INFO')
 
 # --- ส่วนกลาง ---
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -47,6 +51,29 @@ def create_app() -> Flask:
     สร้างและตั้งค่า Flask Application
     """
     app = Flask(__name__)
+
+    # === Setup Logging ===
+    app.logger.setLevel(getattr(logging, log_level))
+    if not app.debug and not app.testing:
+        # Production logging
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        
+        file_handler = RotatingFileHandler('logs/hospital-booking.log',
+                                          maxBytes=10240000,  # 10MB
+                                          backupCount=10)
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s '
+            '[in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('Hospital Booking startup')
+    else:
+        # Development logging
+        app.logger.setLevel(logging.DEBUG)
 
     # --- โหลด Configuration ---
     # ตั้งค่าหลักๆ สำหรับ Flask และ Celery จาก .env
@@ -288,7 +315,14 @@ def create_app() -> Flask:
     from .availability_routes import availability_bp
     app.register_blueprint(availability_bp)
 
-    # 4. เริ่มต้น Celery
+    # 4. ลงทะเบียน Public Booking Routes (เพิ่มบรรทัดนี้!)
+    from .public_booking import public_bp
+    app.register_blueprint(public_bp)
+
+    # Exempt the specific view from CSRF protection
+    # csrf.exempt('booking.get_availability')
+
+    # 5. เริ่มต้น Celery
     celery_init_app(app)
 
     return app
