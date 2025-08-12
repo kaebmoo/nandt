@@ -118,10 +118,10 @@ class CancelRequest(BaseModel):
 
 # --- Helper Functions ---
 def generate_booking_reference():
-    """Generate booking reference like BK-A1B2C3"""
+    """Generate booking reference like VN-A1B2C3"""
     letters = ''.join(random.choices(string.ascii_uppercase, k=3))
     numbers = ''.join(random.choices(string.digits, k=3))
-    return f"BK-{letters[0]}{numbers[0]}{letters[1]}{numbers[1]}{letters[2]}{numbers[2]}"
+    return f"VN-{letters[0]}{numbers[0]}{letters[1]}{numbers[1]}{letters[2]}{numbers[2]}"
 
 def parse_datetime(date_str: str, time_str: str) -> datetime:
     """Parse date and time strings to datetime"""

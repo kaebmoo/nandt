@@ -2,9 +2,10 @@
 
 import os
 import requests
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
 from datetime import datetime, timedelta
 import calendar
+import json
 
 # สร้าง Blueprint
 public_bp = Blueprint('booking', __name__, url_prefix='/book')
@@ -149,8 +150,21 @@ def confirm_booking():
     # Format date for display
     date_obj = datetime.strptime(date, '%Y-%m-%d')
     date_display = date_obj.strftime('%d/%m/%Y')
+
+    # สร้าง token สำหรับหน้านี้
+    from .utils.security import generate_booking_token
+    booking_token = generate_booking_token()
+    
+    # เก็บ token ใน session เพื่อตรวจสอบภายหลัง
+    if 'booking_tokens' not in session:
+        session['booking_tokens'] = []
+    session['booking_tokens'].append(booking_token)
+    
+    # ลบ token เก่าที่หมดอายุ (เก็บแค่ 10 อันล่าสุด)
+    session['booking_tokens'] = session['booking_tokens'][-10:]
     
     return render_template('booking/confirm.html',
+                         booking_token=booking_token,
                          event_type_id=event_type_id,
                          event_type_name=event_type_name,
                          date=date,
@@ -162,6 +176,55 @@ def confirm_booking():
 def create_booking():
     """สร้างการจองจริง"""
     subdomain = get_subdomain()
+
+    # 1. ตรวจสอบ Honeypot
+    honeypot_fields = ['website', 'url']
+    for field in honeypot_fields:
+        if request.form.get(field):
+            # Bot detected - แสดงหน้าสำเร็จปลอมๆ
+            print(f"🤖 Bot detected: filled honeypot field '{field}'")
+            fake_ref = f"BK-{datetime.now().strftime('%H%M%S')}"
+            return redirect(url_for('booking.success', 
+                                  reference=fake_ref,
+                                  subdomain=subdomain))
+        
+    # 2. ตรวจสอบ Time-based Token
+    from .utils.security import verify_booking_token
+    
+    token = request.form.get('booking_token')
+    if not token:
+        flash('ข้อมูลการจองไม่ถูกต้อง', 'error')
+        return redirect(url_for('booking.booking_home'))
+    
+    valid, message = verify_booking_token(token)
+    if not valid:
+        flash(message, 'error')
+        return redirect(url_for('booking.booking_home'))
+    
+    # ตรวจสอบว่า token นี้เคยใช้แล้วหรือไม่
+    if 'used_tokens' not in session:
+        session['used_tokens'] = []
+    
+    if token in session['used_tokens']:
+        flash('ข้อมูลการจองนี้ถูกใช้แล้ว', 'error')
+        return redirect(url_for('booking.booking_home'))
+    
+    # 3. ตรวจสอบ Session Rate Limit
+    if 'booking_history' not in session:
+        session['booking_history'] = []
+    
+    # ลบประวัติเก่า (เกิน 1 ชั่วโมง)
+    cutoff = (datetime.now() - timedelta(hours=1)).isoformat()
+    session['booking_history'] = [
+        b for b in session['booking_history'] 
+        if b['time'] > cutoff
+    ]
+    
+    # ตรวจสอบจำนวนการจอง
+    if len(session['booking_history']) >= 3:
+        remaining_time = 60 - int((datetime.now() - datetime.fromisoformat(session['booking_history'][0]['time'])).seconds / 60)
+        flash(f'คุณจองบ่อยเกินไป กรุณารออีก {remaining_time} นาที', 'error')
+        return redirect(url_for('booking.booking_home'))
     
     # รับข้อมูลจาก form
     guest_email = request.form.get('guest_email', '').strip()
@@ -185,6 +248,17 @@ def create_booking():
     if not booking_data['guest_email'] and not booking_data['guest_phone']:
         flash('กรุณากรอก email หรือเบอร์โทรอย่างน้อย 1 อย่าง', 'error')
         return redirect(request.referrer)
+    
+    # เก็บประวัติการจอง
+    session['booking_history'].append({
+        'time': datetime.now().isoformat(),
+        'email': request.form.get('guest_email'),
+        'phone': request.form.get('guest_phone')
+    })
+    
+    # เก็บ token ที่ใช้แล้ว
+    session['used_tokens'].append(token)
+    session['used_tokens'] = session['used_tokens'][-20:]  # เก็บแค่ 20 อันล่าสุด
     
     # Send to API
     try:

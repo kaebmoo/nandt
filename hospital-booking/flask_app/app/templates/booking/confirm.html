@@ -68,6 +68,15 @@
                     <form method="POST" action="/book/create?subdomain={{ subdomain }}" id="booking-form">
                         <!-- CSRF Token -->
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        
+                        <div style="position: absolute; left: -5000px;" aria-hidden="true">
+                            <input type="text" name="website" tabindex="-1" autocomplete="off">
+                            <input type="text" name="url" tabindex="-1" autocomplete="off">
+                        </div>
+
+                        <!-- Time-based token -->
+                        <input type="hidden" name="booking_token" value="{{ booking_token }}">
                         
                         <!-- Hidden Fields -->
                         <input type="hidden" name="event_type_id" value="{{ event_type_id }}">
@@ -108,7 +117,9 @@
                                 </label>
                                 <input type="tel" 
                                        id="guest_phone" 
-                                       name="guest_phone"
+                                       name="guest_phone" 
+                                       pattern="[0][0-9]{8,9}" 
+                                       title="เบอร์โทรต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก" 
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                                        placeholder="08x-xxx-xxxx">
                                 <p class="text-xs text-gray-500 mt-1">กรุณากรอกอย่างน้อย 1 ช่องทาง (อีเมลหรือเบอร์โทร)</p>
@@ -191,8 +202,64 @@
     </div>
 
     <script>
+        // บันทึกเวลาที่โหลดหน้า
+        window.pageLoadTime = Date.now();
+        
+        // ป้องกันการ submit ซ้ำ
+        let isSubmitting = false;
+
+        // ฟังก์ชันตรวจสอบ format email
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        // ฟังก์ชันตรวจสอบ format เบอร์โทร (ไทย) - ปรับปรุงใหม่
+        function validatePhone(phone) {
+            // ลบ - และช่องว่างออก
+            const cleaned = phone.replace(/[- ]/g, '');
+            
+            // ตรวจสอบว่าเป็นตัวเลขทั้งหมด
+            if (!/^\d+$/.test(cleaned)) {
+                return false;
+            }
+            
+            // ตรวจสอบความยาว (9-10 หลัก)
+            if (cleaned.length < 9 || cleaned.length > 10) {
+                return false;
+            }
+            
+            // ต้องขึ้นต้นด้วย 0
+            if (!cleaned.startsWith('0')) {
+                return false;
+            }
+            
+            // ตรวจสอบ pattern ที่ถูกต้อง
+            // มือถือ: 06, 08, 09 (10 หลัก)
+            // บ้าน: 02, 03, 04, 05, 07 (9 หลัก)
+            const mobilePattern = /^0[689]\d{8}$/;  // 10 หลัก
+            const landlinePattern = /^0[2-5,7]\d{7}$/;  // 9 หลัก
+            
+            return mobilePattern.test(cleaned) || landlinePattern.test(cleaned);
+        }
+
+        document.getElementById('guest_phone').addEventListener('keypress', function(e) {
+            // อนุญาตเฉพาะตัวเลข, -, และ backspace
+            const char = String.fromCharCode(e.which);
+            if (!/[0-9-]/.test(char) && e.which !== 8) {
+                e.preventDefault();
+            }
+        });
+
         // Validate form
         document.getElementById('booking-form').addEventListener('submit', function(e) {
+            // ตรวจสอบว่ากำลัง submit อยู่หรือไม่
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+            
+            // ตรวจสอบ email/phone
             const email = document.getElementById('guest_email').value;
             const phone = document.getElementById('guest_phone').value;
             
@@ -201,14 +268,118 @@
                 alert('กรุณากรอกอีเมลหรือเบอร์โทรอย่างน้อย 1 อย่าง');
                 return false;
             }
+
+            // ตรวจสอบ format email
+            if (email && email.length > 0) {
+                if (!validateEmail(email)) {
+                    e.preventDefault();
+                    alert('รูปแบบอีเมลไม่ถูกต้อง');
+                    document.getElementById('guest_email').focus();
+                    return false;
+                }
+            }
             
+            // ตรวจสอบ format เบอร์โทร
+            if (phone && phone.length > 0) {
+                // ตรวจสอบว่ามีตัวเลขหรือไม่
+                const phoneDigitsOnly = phone.replace(/[- ]/g, '');
+                
+                // ตรวจสอบว่าเป็นตัวเลขทั้งหมด
+                if (!/^\d+$/.test(phoneDigitsOnly)) {
+                    e.preventDefault();
+                    alert('เบอร์โทรต้องเป็นตัวเลขเท่านั้น');
+                    document.getElementById('guest_phone').focus();
+                    return false;
+                }
+                
+                // ตรวจสอบ format ที่ถูกต้อง
+                if (!validatePhone(phone)) {
+                    e.preventDefault();
+                    alert('รูปแบบเบอร์โทรไม่ถูกต้อง\nต้องเริ่มด้วย 0 และมี 9-10 หลัก\nตัวอย่าง: 081-234-5678 หรือ 02-123-4567');
+                    document.getElementById('guest_phone').focus();
+                    return false;
+                }
+            }
+            
+            // ตรวจสอบ terms
             const terms = document.getElementById('terms').checked;
             if (!terms) {
                 e.preventDefault();
                 alert('กรุณายอมรับเงื่อนไขการใช้บริการ');
                 return false;
             }
+            
+            // ป้องกัน double submit
+            isSubmitting = true;
+            
+            // Disable submit button และเปลี่ยนข้อความ
+            const submitBtn = this.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `
+                <svg class="animate-spin h-5 w-5 mr-2 inline" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                กำลังดำเนินการ...
+            `;
+            
+            // เก็บเวลาที่ใช้กรอกฟอร์ม
+            const timeSpent = Math.floor((Date.now() - window.pageLoadTime) / 1000);
+            
+            // เพิ่ม hidden field สำหรับเวลาที่ใช้
+            const timeInput = document.createElement('input');
+            timeInput.type = 'hidden';
+            timeInput.name = 'time_spent';
+            timeInput.value = timeSpent;
+            this.appendChild(timeInput);
+            
+            // Log สำหรับ debug (ลบได้ในภายหลัง)
+            console.log('Form submitted:', {
+                timeSpent: timeSpent + ' seconds',
+                hasEmail: !!email,
+                hasPhone: !!phone
+            });
         });
+        
+        // ป้องกันการกด Enter โดยไม่ตั้งใจ
+        document.getElementById('booking-form').addEventListener('keypress', function(e) {
+            // ถ้ากด Enter ใน textarea ไม่ต้องทำอะไร
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // เตือนถ้าจะออกจากหน้าขณะกรอกข้อมูล
+        let formChanged = false;
+        const formInputs = document.querySelectorAll('#booking-form input:not([type="hidden"]), #booking-form textarea');
+        
+        formInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                formChanged = true;
+            });
+        });
+        
+        window.addEventListener('beforeunload', function(e) {
+            if (formChanged && !isSubmitting) {
+                e.preventDefault();
+                e.returnValue = 'คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?';
+                return e.returnValue;
+            }
+        });
+    </script>
+
+    <!-- เพิ่ม Tailwind Animation Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'spin': 'spin 1s linear infinite',
+                    }
+                }
+            }
+        }
     </script>
 </body>
 </html>

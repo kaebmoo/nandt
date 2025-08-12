@@ -167,3 +167,4 @@ multi-tenant/dump.rdb
 clinic_scheduler_saas/alembic.ini
 multi-tenant/dump.rdb
 multi-tenant/dump.rdb
+/flask_session

@@ -284,7 +284,7 @@ Base = PublicBase
 def generate_booking_reference():
     letters = ''.join(random.choices(string.ascii_uppercase, k=3))
     numbers = ''.join(random.choices(string.digits, k=3))
-    return f"BK-{letters[0]}{numbers[0]}{letters[1]}{numbers[1]}{letters[2]}{numbers[2]}"
+    return f"VN-{letters[0]}{numbers[0]}{letters[1]}{numbers[1]}{letters[2]}{numbers[2]}"
 
 # Event to create schema for a new hospital
 @event.listens_for(Hospital, 'after_insert')

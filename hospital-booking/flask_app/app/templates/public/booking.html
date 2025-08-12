@@ -355,7 +355,7 @@
                             <div class="space-y-3 text-sm">
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">รหัสการจอง:</span>
-                                    <span class="font-medium" id="bookingReference">BK-A1B2C3</span>
+                                    <span class="font-medium" id="bookingReference">VN-A1B2C3</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">วันที่:</span>
@@ -693,7 +693,7 @@
         });
 
         function showConfirmation(bookingData) {
-            document.getElementById('bookingReference').textContent = bookingData.booking_reference || 'BK-A1B2C3';
+            document.getElementById('bookingReference').textContent = bookingData.booking_reference || 'VN-A1B2C3';
             
             const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
             const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',

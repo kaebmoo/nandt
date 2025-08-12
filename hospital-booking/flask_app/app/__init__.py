@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
+from flask_session import Session
+from datetime import timedelta 
 
 # โหลด .env ก่อนเสมอ
 load_dotenv()
@@ -80,7 +82,9 @@ def create_app() -> Flask:
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "a-dev-secret-key"),
         # เพิ่มการตั้งค่าสำหรับ session
-        PERMANENT_SESSION_LIFETIME=3600 * 24 * 7,  # 7 วัน
+        SESSION_TYPE='filesystem',
+        SESSION_FILE_DIR='./flask_session/',
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=2),  # 2 ชั่วโมง
         SESSION_COOKIE_SECURE=False,  # True สำหรับ HTTPS
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
@@ -100,6 +104,7 @@ def create_app() -> Flask:
     # Initialize CSRF Protection
     csrf = CSRFProtect()
     csrf.init_app(app)
+    Session(app)
 
     # --- Middleware สำหรับ Multi-Tenancy ---
     @app.before_request
