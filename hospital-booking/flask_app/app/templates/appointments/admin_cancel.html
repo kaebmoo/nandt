@@ -1,0 +1,55 @@
+<!-- templates/appointments/admin_cancel.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ยกเลิกนัดหมาย - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-4xl mx-auto py-8 px-4">
+        <div class="bg-white shadow rounded-lg p-6">
+            <h1 class="text-2xl font-bold mb-6 text-red-600">ยกเลิกนัดหมาย</h1>
+            
+            <!-- Appointment Info -->
+            <div class="bg-red-50 p-4 rounded-lg mb-6">
+                <h3 class="font-semibold mb-2">ข้อมูลนัดหมาย:</h3>
+                <p>รหัส: {{ appointment.booking_reference }}</p>
+                <p>ชื่อ: {{ appointment.guest_name }}</p>
+                <p>วันที่: {{ appointment.start_time.strftime('%d/%m/%Y %H:%M') }}</p>
+            </div>
+            
+            <!-- Cancel Form -->
+            <form method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        เหตุผลในการยกเลิก <span class="text-red-500">*</span>
+                    </label>
+                    <textarea name="reason" rows="4" required
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                              placeholder="ระบุเหตุผลในการยกเลิกนัด..."></textarea>
+                </div>
+                
+                <div class="mt-6 flex justify-end space-x-3">
+                    <a href="{{ url_for('main.dashboard', subdomain=subdomain) }}"
+                       class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                        ยกเลิก
+                    </a>
+                    <button type="submit"
+                            onclick="return confirm('คุณแน่ใจหรือไม่ที่จะยกเลิกนัดหมายนี้?')"
+                            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        ยืนยันการยกเลิก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

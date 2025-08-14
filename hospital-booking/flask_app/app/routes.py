@@ -1,8 +1,12 @@
 # flask_app/app/routes.py - ปรับปรุงให้รองรับ Authentication
 
-from datetime import datetime
 import os
-from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash, send_from_directory
+import requests
+from datetime import datetime, timedelta
+from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash, jsonify
+from sqlalchemy import text
+# from sqlalchemy.orm import joinedload
+import logging
 
 from .models import (Appointment, User, Hospital, 
                     Provider, EventType, Patient, 
@@ -11,14 +15,16 @@ from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
 from . import SessionLocal
 from .core.tenant_manager import with_tenant, TenantManager
-from sqlalchemy import text
 from flask import current_app
-import logging
 
 # สร้าง logger สำหรับ module นี้
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
+
+def get_fastapi_url():
+    """Get FastAPI base URL"""
+    return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
 def get_tenant_info():
     """
@@ -115,167 +121,672 @@ def index():
 @login_required
 @with_tenant(require_access=True, redirect_on_missing=True)
 def dashboard():
-    """Dashboard - ต้อง login และมีสิทธิ์เข้าถึง"""
+    """Dashboard - ดึงข้อมูลจาก Database โดยตรง (ไม่ผ่าน API)"""
     
     current_app.logger.debug("Dashboard route called")
-
-    # tenant_schema, subdomain = get_tenant_info()
+    
     current_user = get_current_user()
     tenant_schema = g.tenant_schema
     subdomain = g.subdomain
-    current_app.logger.debug(f"Dashboard - Tenant: {tenant_schema}, Subdomain: {subdomain}")
     
-    # ตรวจสอบ tenant
+    # เพิ่มการ log เพื่อ debug
+    current_app.logger.debug(f"Dashboard - Tenant: {tenant_schema}, Subdomain: {subdomain}")
+
     if not tenant_schema:
-        current_app.logger.warning("No tenant schema found in dashboard")
         flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
         return redirect(url_for('main.index'))
     
-    # ตรวจสอบ login
-    current_user = get_current_user()
     if not current_user:
         flash('กรุณาเข้าสู่ระบบ', 'error')
         return redirect(url_for('auth.login'))
     
-    # ตรวจสอบสิทธิ์เข้าถึง
     if not check_tenant_access(subdomain):
         flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
         return redirect(url_for('auth.logout'))
     
-    # ตั้งค่า database session สำหรับ tenant นี้
     db = None
     appointments = []
     
     try:
-        # ใช้ g.db ที่ setup ไว้ใน middleware หรือสร้างใหม่
         if hasattr(g, 'db') and g.db:
             db = g.db
         else:
-            # สร้าง db session ใหม่ถ้าไม่มี
             from . import SessionLocal
             db = SessionLocal()
             g.db = db
         
-        # ตั้งค่า search_path สำหรับ tenant นี้
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
-        # ตรวจสอบว่า table appointments มีอยู่และมี columns ที่จำเป็น
-        try:
-            # ตรวจสอบ table structure ก่อน
-            result = db.execute(text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'appointments' 
-                AND table_schema = :schema_name
-            """), {'schema_name': tenant_schema}).fetchall()
-            
-            existing_columns = [row[0] for row in result]
-            
-            if not existing_columns:
-                # ไม่มี table appointments
-                flash('ระบบกำลังตั้งค่าฐานข้อมูล กรุณารอสักครู่', 'info')
-                appointments = []
-            elif 'provider_id' not in existing_columns:
-                # table เก่า ยังไม่ได้ migrate
-                flash('ระบบกำลังอัปเดต กรุณารอสักครู่หรือติดต่อผู้ดูแลระบบ', 'warning')
-                # ดึงข้อมูลแบบเก่า (เฉพาะ columns ที่มี)
-                old_appointments = db.execute(text("""
-                    SELECT id, patient_id, start_time, end_time, notes, created_at
-                    FROM appointments 
-                    ORDER BY start_time ASC
-                """)).fetchall()
-                
-                # แปลงเป็น format ที่ template เข้าใจได้
-                appointments = []
-                for apt in old_appointments:
-                    appointments.append({
-                        'id': apt[0],
-                        'patient_id': apt[1],
-                        'start_time': apt[2],
-                        'end_time': apt[3],
-                        'notes': apt[4],
-                        'created_at': apt[5],
-                        'patient': None,  # ไม่มีข้อมูล patient
-                        'provider_id': None,
-                        'event_type_id': None,
-                        'guest_name': 'ผู้ป่วย (ข้อมูลเก่า)',
-                        'status': 'confirmed'
-                    })
-            else:
-                # table ใหม่ ครบถ้วน
-                appointments = db.query(Appointment).order_by(Appointment.start_time.asc()).all()
-                
-        except Exception as db_error:
-            print(f"Database query error: {db_error}")
-            # ถ้า query ล้มเหลว แต่ connection ยังใช้ได้
-            try:
-                db.rollback()  # rollback transaction ที่ล้มเหลว
-                appointments = []
-                flash('เกิดข้อผิดพลาดในการดึงข้อมูล', 'warning')
-            except:
-                # connection เสีย
-                appointments = []
-                flash('ไม่สามารถเชื่อมต่อฐานข้อมูลได้', 'error')
+        # Query appointments พร้อม relationships
+        appointments = db.query(Appointment)\
+             .order_by(Appointment.start_time.asc())\
+             .all()
         
-        # ชื่อโรงพยาบาลจาก database
         hospital_display_name = current_user.hospital.name
-
-        # คำนวณ statistics ก่อนส่งไป template
-        from datetime import datetime
-
-        today = datetime.now().date()
-        today_appointments = []
-        upcoming_appointments = []
         
-        for appointment in appointments:
-            if hasattr(appointment, 'start_time') and appointment.start_time:
-                if appointment.start_time.date() == today:
-                    today_appointments.append(appointment)
-                elif appointment.start_time.date() > today:
-                    upcoming_appointments.append(appointment)
+        # คำนวณ statistics และแบ่งหมวดหมู่
+        today = datetime.now().date()
+        now = datetime.now()
+        
+        # แบ่งนัดหมายตามสถานะ
+        upcoming_appointments = []
+        past_appointments = []
+        canceled_appointments = []
+        
+        for apt in appointments:
+            if apt.status and apt.status.lower() == 'cancelled':
+                canceled_appointments.append(apt)
+            elif apt.start_time and apt.start_time >= now:
+                upcoming_appointments.append(apt)
+            elif apt.start_time:
+                past_appointments.append(apt)
+        
+        # เรียงลำดับ
+        upcoming_appointments.sort(key=lambda x: x.start_time)
+        past_appointments.sort(key=lambda x: x.start_time, reverse=True)
+        canceled_appointments.sort(key=lambda x: x.cancelled_at if x.cancelled_at else x.start_time, reverse=True)
+        
+        today_count = sum(1 for apt in upcoming_appointments 
+                         if apt.start_time.date() == today)
         
         return render_template('dashboard.html', 
-                         hospital_name=hospital_display_name,
-                         subdomain=subdomain,
-                         current_user=current_user,
-                         appointments=appointments,
-                         today_count=len(today_appointments), 
-                         upcoming_count=len(upcoming_appointments))
-        
+                             hospital_name=hospital_display_name,
+                             subdomain=subdomain,
+                             current_user=current_user,
+                             appointments=appointments,
+                             upcoming_appointments=upcoming_appointments,
+                             past_appointments=past_appointments,
+                             canceled_appointments=canceled_appointments,
+                             today_count=today_count,
+                             now=now,
+                             nav_url=lambda x: url_for(x, subdomain=subdomain))
                              
     except Exception as e:
-        current_app.logger.error(f"Dashboard error for {tenant_schema}: {str(e)}", exc_info=True)
-        # ป้องกัน redirect loop
-        if request.referrer and '/dashboard' in request.referrer:
-            current_app.logger.critical("Redirect loop detected in dashboard")
-            return render_template('errors/500.html', 
-                                 error="Dashboard loading error"), 500
+        current_app.logger.error(f"Dashboard error: {str(e)}", exc_info=True)
         
-        # ถ้าเกิด error ระดับ connection หรือ schema
-        print(f"Error accessing tenant '{tenant_schema}': {e}")
-        
-        # ปิด connection ที่เสีย
         if db:
             try:
                 db.rollback()
                 db.close()
             except:
                 pass
-            
-        # ลบ g.db ที่เสีย
-        if hasattr(g, 'db'):
-            g.pop('db', None)
         
-        # ตรวจสอบว่าเป็น error แบบไหน
-        error_msg = str(e).lower()
-        if 'does not exist' in error_msg and 'schema' in error_msg:
-            flash(f'ไม่พบฐานข้อมูลสำหรับ {subdomain} กรุณาติดต่อผู้ดูแลระบบ', 'error')
-        elif 'column' in error_msg and 'does not exist' in error_msg:
-            flash('ระบบกำลังอัปเดต กรุณาลองใหม่อีกครั้งในอีกสักครู่', 'warning')
-        else:
-            flash('เกิดข้อผิดพลาดในการเข้าถึงข้อมูล กรุณาลองใหม่อีกครั้ง', 'error')
-        
+        flash('เกิดข้อผิดพลาดในการเข้าถึงข้อมูล', 'error')
         return redirect(url_for('main.index'))
+    
+@bp.route('/appointments/<int:appointment_id>')
+@login_required
+@with_tenant(require_access=True)
+def view_appointment(appointment_id):
+    """ดูรายละเอียดนัดหมายสำหรับ Admin"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        subdomain = g.subdomain
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        # Query appointment พร้อม relationships
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            flash('ไม่พบนัดหมาย', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        # Load relationships
+        patient = db.query(Patient).filter_by(id=appointment.patient_id).first() if appointment.patient_id else None
+        event_type = db.query(EventType).filter_by(id=appointment.event_type_id).first() if appointment.event_type_id else None
+        provider = db.query(Provider).filter_by(id=appointment.provider_id).first() if appointment.provider_id else None
+        
+        # ตรวจสอบว่าสามารถ reschedule/cancel ได้หรือไม่
+        can_reschedule = appointment.start_time > datetime.now() + timedelta(hours=4)
+        can_cancel = appointment.start_time > datetime.now() + timedelta(hours=2)
+        
+        current_user = get_current_user()
+        hospital_name = current_user.hospital.name if current_user else 'Hospital'
+        
+        return render_template('appointments/view.html',
+                             appointment=appointment,
+                             patient=patient,
+                             event_type=event_type,
+                             provider=provider,
+                             can_reschedule=can_reschedule,
+                             can_cancel=can_cancel,
+                             hospital_name=hospital_name,
+                             subdomain=subdomain,
+                             current_user=current_user)
+                             
+    except Exception as e:
+        current_app.logger.error(f"Error viewing appointment: {str(e)}")
+        flash('เกิดข้อผิดพลาด', 'error')
+        return redirect(url_for('main.dashboard'))
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/<int:appointment_id>/admin-reschedule', methods=['GET', 'POST'])
+@login_required
+@with_tenant(require_access=True)
+def admin_reschedule_appointment(appointment_id):
+    """Admin เลื่อนนัดหมาย (มีสิทธิ์มากกว่า public)"""
+    
+    db = g.db if hasattr(g, 'db') else SessionLocal()
+    tenant_schema = g.tenant_schema
+    subdomain = g.subdomain
+    
+    try:
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            flash('ไม่พบนัดหมาย', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        if request.method == 'POST':
+            # Process reschedule
+            new_date = request.form.get('new_date')
+            new_time = request.form.get('new_time')
+            reason = request.form.get('reason', 'เลื่อนโดยเจ้าหน้าที่')
+            
+            # สร้าง reschedule request ผ่าน FastAPI
+            reschedule_data = {
+                'booking_reference': appointment.booking_reference,
+                'new_date': new_date,
+                'new_time': new_time,
+                'reason': f"[Admin] {reason}"
+            }
+            
+            response = requests.post(
+                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/reschedule",
+                json=reschedule_data
+            )
+            
+            if response.ok:
+                result = response.json()
+                flash(f'เลื่อนนัดเรียบร้อยแล้ว - รหัสใหม่: {result["new_booking_reference"]}', 'success')
+                
+                # ส่ง notification ถ้ามี email/phone
+                if appointment.guest_email or appointment.guest_phone:
+                    # TODO: Send notification
+                    pass
+                
+                return redirect(url_for('main.dashboard', subdomain=subdomain))
+            else:
+                error = response.json()
+                flash(error.get('detail', 'ไม่สามารถเลื่อนนัดได้'), 'error')
+        
+        # GET - แสดง form
+        event_type = db.query(EventType).filter_by(id=appointment.event_type_id).first()
+        
+        # ดึง availability สำหรับ calendar
+        availability_schedule = {}
+        if event_type and event_type.template_id:
+            avail_response = requests.get(
+                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{event_type.template_id}/details"
+            )
+            if avail_response.ok:
+                availability_data = avail_response.json()
+                availability_schedule = availability_data.get('schedule', {})
+        
+        current_user = get_current_user()
+        hospital_name = current_user.hospital.name
+        
+        return render_template('appointments/admin_reschedule.html',
+                             appointment=appointment,
+                             event_type=event_type,
+                             availability_schedule=availability_schedule,
+                             hospital_name=hospital_name,
+                             subdomain=subdomain,
+                             current_user=current_user)
+                             
+    except Exception as e:
+        current_app.logger.error(f"Error in admin reschedule: {str(e)}")
+        flash('เกิดข้อผิดพลาด', 'error')
+        return redirect(url_for('main.dashboard'))
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/<int:appointment_id>/edit', methods=['GET', 'POST'])
+@login_required
+@with_tenant(require_access=True)
+def edit_appointment(appointment_id):
+    """แก้ไขนัดหมาย - Redirect ไปหน้า admin reschedule"""
+    subdomain = g.subdomain
+    # Redirect ไปหน้า admin reschedule แทน เพราะเป็น logic เดียวกัน
+    return redirect(url_for('main.admin_reschedule_appointment', 
+                          appointment_id=appointment_id,
+                          subdomain=subdomain))
+
+@bp.route('/appointments/<int:appointment_id>/request-reschedule', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def request_reschedule(appointment_id):
+    """Admin ส่งคำขอเลื่อนนัดให้ผู้ป่วย"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+        
+        reason = request.json.get('reason', '')
+        suggested_dates = request.json.get('suggested_dates', [])
+        
+        # บันทึก request ใน database
+        # TODO: สร้าง table reschedule_requests ถ้ายังไม่มี
+        
+        # ส่ง notification
+        if appointment.guest_email:
+            # TODO: Send email with reschedule link
+            reschedule_link = f"{request.host_url}book/reschedule/{appointment.booking_reference}?subdomain={g.subdomain}"
+            
+            # Mock email sending
+            current_app.logger.info(f"Sending reschedule request to {appointment.guest_email}")
+            current_app.logger.info(f"Link: {reschedule_link}")
+            current_app.logger.info(f"Reason: {reason}")
+        
+        if appointment.guest_phone:
+            # TODO: Send SMS
+            pass
+        
+        # Update appointment status
+        appointment.status = 'pending_reschedule'
+        db.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'ส่งคำขอเลื่อนนัดเรียบร้อยแล้ว'
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error requesting reschedule: {str(e)}")
+        if db:
+            db.rollback()
+        return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/<int:appointment_id>/admin-cancel', methods=['GET', 'POST'])
+@login_required
+@with_tenant(require_access=True)
+def admin_cancel_appointment(appointment_id):
+    """Admin ยกเลิกนัดหมาย พร้อมระบุเหตุผล"""
+    
+    db = g.db if hasattr(g, 'db') else SessionLocal()
+    tenant_schema = g.tenant_schema
+    subdomain = g.subdomain
+    
+    try:
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            flash('ไม่พบนัดหมาย', 'error')
+            return redirect(url_for('main.dashboard', subdomain=subdomain))
+        
+        if request.method == 'POST':
+            reason = request.form.get('reason')
+            
+            if not reason:
+                flash('กรุณาระบุเหตุผลในการยกเลิก', 'error')
+                return redirect(request.url)
+            
+            # อัพเดต appointment
+            appointment.status = 'cancelled'
+            appointment.cancelled_at = datetime.utcnow()
+            appointment.cancelled_by = 'admin'
+            appointment.cancellation_reason = f"[Admin] {reason}"
+            
+            db.commit()
+            
+            # ส่ง notification
+            if appointment.guest_email:
+                current_app.logger.info(f"Sending cancellation notice to {appointment.guest_email}")
+                current_app.logger.info(f"Reason: {reason}")
+            
+            if appointment.guest_phone:
+                pass
+            
+            flash('ยกเลิกนัดหมายเรียบร้อยแล้ว', 'success')
+            # แก้ไขตรงนี้ - เพิ่ม subdomain parameter
+            return redirect(url_for('main.dashboard', subdomain=subdomain))
+        
+        # GET - แสดง form
+        current_user = get_current_user()
+        hospital_name = current_user.hospital.name
+        
+        return render_template('appointments/admin_cancel.html',
+                             appointment=appointment,
+                             hospital_name=hospital_name,
+                             subdomain=subdomain,
+                             current_user=current_user)
+                             
+    except Exception as e:
+        current_app.logger.error(f"Error in admin cancel: {str(e)}")
+        flash('เกิดข้อผิดพลาด', 'error')
+        # แก้ไขตรงนี้ด้วย
+        return redirect(url_for('main.dashboard', subdomain=subdomain))
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+    
+# ==================== Appointment Management via FastAPI ====================
+
+@bp.route('/appointments/<int:appointment_id>/cancel', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def cancel_appointment(appointment_id):
+    """ยกเลิกนัดหมายผ่าน Database โดยตรง (ไม่ผ่าน API)"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+        
+        # อัพเดต status เหมือนกับที่ FastAPI ทำ
+        appointment.status = 'cancelled'  # ใช้ 'cancelled' ตาม database
+        appointment.cancelled_at = datetime.utcnow()
+        appointment.cancelled_by = 'admin'
+        
+        db.commit()
+        
+        current_app.logger.info(f"Appointment {appointment_id} cancelled by admin")
+        
+        return jsonify({'success': True, 'message': 'ยกเลิกนัดหมายเรียบร้อยแล้ว'})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error cancelling appointment: {str(e)}")
+        if db:
+            db.rollback()
+        return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/<int:appointment_id>/restore', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def restore_appointment(appointment_id):
+    """กู้คืนนัดหมายที่ถูกยกเลิก"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        subdomain = g.subdomain
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            flash('ไม่พบนัดหมาย', 'error')
+            return redirect(url_for('main.dashboard', subdomain=subdomain))
+        
+        # กู้คืน status
+        appointment.status = 'confirmed'
+        appointment.cancelled_at = None
+        appointment.cancelled_by = None
+        appointment.cancellation_reason = None
+        
+        db.commit()
+        
+        flash('กู้คืนนัดหมายเรียบร้อยแล้ว', 'success')
+        return redirect(url_for('main.dashboard', subdomain=subdomain))
+        
+    except Exception as e:
+        current_app.logger.error(f"Error restoring appointment: {str(e)}")
+        if db:
+            db.rollback()
+        flash('เกิดข้อผิดพลาดในการกู้คืนนัดหมาย', 'error')
+        return redirect(url_for('main.dashboard', subdomain=subdomain))
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/<int:appointment_id>/delete', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def delete_appointment(appointment_id):
+    """ลบนัดหมายถาวร"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+        
+        db.delete(appointment)
+        db.commit()
+        
+        return jsonify({'success': True, 'message': 'ลบนัดหมายเรียบร้อยแล้ว'})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error deleting appointment: {str(e)}")
+        if db:
+            db.rollback()
+        return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/appointments/create')
+@login_required
+@with_tenant(require_access=True)
+def create_appointment():
+    """สร้างนัดหมายใหม่ - แสดง form"""
+    try:
+        subdomain = g.subdomain
+        
+        # ดึง event types จาก FastAPI
+        response = requests.get(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types"
+        )
+        
+        if response.ok:
+            data = response.json()
+            event_types = data.get('event_types', [])
+        else:
+            event_types = []
+            flash('ไม่สามารถโหลดประเภทการนัดได้', 'warning')
+        
+        current_user = get_current_user()
+        hospital_name = current_user.hospital.name if current_user else 'Hospital'
+        
+        # ดึงข้อมูลอื่นๆ จาก database
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        patients = db.query(Patient).all()
+        providers = db.query(Provider).filter_by(is_active=True).all()
+        
+        return render_template('appointments/create.html',
+                             event_types=event_types,
+                             patients=patients,
+                             providers=providers,
+                             hospital_name=hospital_name,
+                             subdomain=subdomain,
+                             current_user=current_user)
+                             
+    except Exception as e:
+        current_app.logger.error(f"Error in create appointment: {str(e)}")
+        flash('เกิดข้อผิดพลาด', 'error')
+        return redirect(url_for('main.dashboard'))
+
+@bp.route('/appointments/store', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def store_appointment():
+    """บันทึกนัดหมายใหม่ - ใช้ FastAPI"""
+    try:
+        subdomain = g.subdomain
+        
+        # เตรียมข้อมูลสำหรับ API
+        booking_data = {
+            'event_type_id': int(request.form.get('event_type_id')),
+            'date': request.form.get('date'),
+            'time': request.form.get('time'),
+            'guest_name': request.form.get('guest_name'),
+            'guest_email': request.form.get('guest_email'),
+            'guest_phone': request.form.get('guest_phone'),
+            'notes': request.form.get('notes', '')
+        }
+        
+        # ถ้ามี provider_id
+        if request.form.get('provider_id'):
+            booking_data['provider_id'] = int(request.form.get('provider_id'))
+        
+        # เรียก FastAPI
+        response = requests.post(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/create",
+            json=booking_data
+        )
+        
+        if response.ok:
+            result = response.json()
+            flash(f'สร้างนัดหมายเรียบร้อยแล้ว (Ref: {result["booking_reference"]})', 'success')
+        else:
+            error_data = response.json()
+            flash(error_data.get('detail', 'ไม่สามารถสร้างนัดหมายได้'), 'error')
+        
+        return redirect(url_for('main.dashboard'))
+        
+    except Exception as e:
+        current_app.logger.error(f"Error storing appointment: {str(e)}")
+        flash('เกิดข้อผิดพลาด', 'error')
+        return redirect(url_for('main.dashboard'))
+    
+# ==================== AJAX Endpoints for Calendar ====================
+
+@bp.route('/appointments/<int:appointment_id>/quick-cancel', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def quick_cancel_appointment(appointment_id):
+    """ยกเลิกนัดหมายแบบเร็ว (AJAX)"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        
+        if not appointment:
+            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+        
+        # Default reason for quick cancel
+        reason = request.json.get('reason', 'ยกเลิกโดยเจ้าหน้าที่')
+        
+        appointment.status = 'cancelled'
+        appointment.cancelled_at = datetime.utcnow()
+        appointment.cancelled_by = 'admin'
+        appointment.cancellation_reason = reason
+        
+        db.commit()
+        
+        return jsonify({'success': True, 'message': 'ยกเลิกนัดหมายเรียบร้อยแล้ว'})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in quick cancel: {str(e)}")
+        if db:
+            db.rollback()
+        return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
+
+@bp.route('/api/appointments/availability/<int:event_type_id>/<date>')
+@login_required
+def get_appointment_availability(event_type_id, date):
+    """ดึง available slots สำหรับ admin (proxy ไปยัง FastAPI)"""
+    try:
+        subdomain = g.subdomain
+        
+        response = requests.get(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/availability/{event_type_id}",
+            params={'date': date}
+        )
+        
+        if response.ok:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to get availability'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+# ==================== Quick Actions ====================
+
+@bp.route('/appointments/quick-add', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def quick_add_appointment():
+    """เพิ่มนัดหมายแบบเร็ว (Walk-in)"""
+    try:
+        db = g.db if hasattr(g, 'db') else SessionLocal()
+        tenant_schema = g.tenant_schema
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        # สร้าง patient ใหม่หรือหาที่มีอยู่
+        patient_name = request.json.get('name')
+        patient_phone = request.json.get('phone')
+        
+        patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+        if not patient:
+            patient = Patient(
+                name=patient_name,
+                phone_number=patient_phone
+            )
+            db.add(patient)
+            db.flush()
+        
+        # สร้าง appointment
+        from .models import generate_booking_reference
+        
+        appointment = Appointment(
+            patient_id=patient.id,
+            start_time=datetime.now(),
+            end_time=datetime.now() + timedelta(minutes=30),
+            booking_reference=generate_booking_reference(),
+            status='confirmed',
+            guest_name=patient_name,
+            guest_phone=patient_phone,
+            notes='Walk-in'
+        )
+        
+        db.add(appointment)
+        db.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'เพิ่มนัดหมายเรียบร้อยแล้ว',
+            'booking_reference': appointment.booking_reference
+        })
+        
+    except Exception as e:
+        if db:
+            db.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if db and not hasattr(g, 'db'):
+            db.close()
 
 # เพิ่ม helper function สำหรับตรวจสอบ database health
 def check_tenant_database_health(tenant_schema):

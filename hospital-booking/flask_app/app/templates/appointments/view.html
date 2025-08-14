@@ -1,0 +1,146 @@
+<!-- templates/appointments/view.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รายละเอียดนัดหมาย - {{ appointment.booking_reference }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <a href="{{ url_for('main.dashboard', subdomain=subdomain) }}" class="text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </a>
+                    <h1 class="text-xl font-bold text-gray-900">รายละเอียดนัดหมาย</h1>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-4xl mx-auto py-8 px-4">
+        <div class="bg-white shadow rounded-lg p-6">
+            <!-- Header -->
+            <div class="border-b pb-4 mb-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">
+                            {{ appointment.booking_reference }}
+                        </h2>
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium 
+                                     {% if appointment.status == 'confirmed' %}bg-green-100 text-green-800
+                                     {% elif appointment.status == 'cancelled' %}bg-red-100 text-red-800
+                                     {% else %}bg-yellow-100 text-yellow-800{% endif %} mt-2">
+                            {{ appointment.status|upper }}
+                        </span>
+                    </div>
+                    <div class="text-right text-sm text-gray-500">
+                        <p>สร้างเมื่อ: {{ appointment.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        {% if appointment.updated_at %}
+                        <p>แก้ไขล่าสุด: {{ appointment.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Details Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Patient Info -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">ข้อมูลผู้นัด</h3>
+                    <div class="space-y-2">
+                        <div>
+                            <span class="text-gray-600">ชื่อ:</span>
+                            <span class="ml-2 font-medium">
+                                {{ appointment.guest_name or (patient.name if patient else 'ไม่ระบุ') }}
+                            </span>
+                        </div>
+                        {% if appointment.guest_email or (patient and patient.email) %}
+                        <div>
+                            <span class="text-gray-600">อีเมล:</span>
+                            <span class="ml-2">{{ appointment.guest_email or patient.email }}</span>
+                        </div>
+                        {% endif %}
+                        {% if appointment.guest_phone or (patient and patient.phone_number) %}
+                        <div>
+                            <span class="text-gray-600">โทรศัพท์:</span>
+                            <span class="ml-2">{{ appointment.guest_phone or patient.phone_number }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Appointment Info -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">รายละเอียดนัด</h3>
+                    <div class="space-y-2">
+                        <div>
+                            <span class="text-gray-600">ประเภท:</span>
+                            <span class="ml-2 font-medium">
+                                {{ event_type.name if event_type else 'ทั่วไป' }}
+                            </span>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">วันที่:</span>
+                            <span class="ml-2">{{ appointment.start_time.strftime('%d/%m/%Y') }}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">เวลา:</span>
+                            <span class="ml-2">
+                                {{ appointment.start_time.strftime('%H:%M') }} - {{ appointment.end_time.strftime('%H:%M') }}
+                            </span>
+                        </div>
+                        {% if provider %}
+                        <div>
+                            <span class="text-gray-600">แพทย์:</span>
+                            <span class="ml-2">{{ provider.name }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            {% if appointment.notes %}
+            <div class="mt-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-3">หมายเหตุ</h3>
+                <p class="text-gray-700 bg-gray-50 p-3 rounded">{{ appointment.notes }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="mt-8 flex justify-end space-x-3">
+                {% if appointment.status != 'cancelled' and can_reschedule %}
+                <a href="{{ url_for('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain) }}"
+                   class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    เลื่อนนัด
+                </a>
+                {% endif %}
+                
+                {% if appointment.status != 'cancelled' and can_cancel %}
+                <a href="{{ url_for('main.admin_cancel_appointment', appointment_id=appointment.id, subdomain=subdomain) }}"
+                   class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    ยกเลิกนัด
+                </a>
+                {% endif %}
+                
+                <a href="{{ url_for('main.dashboard', subdomain=subdomain) }}"
+                   class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                    กลับ
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
