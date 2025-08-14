@@ -6,6 +6,7 @@ from sqlalchemy import text
 from .models import User, Hospital
 from . import SessionLocal
 from .core.tenant_manager import TenantManager
+from .utils.url_helper import get_dashboard_url
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -36,7 +37,7 @@ def login():
                 
                 if hospital:
                     # Redirect ไปยัง dashboard ของโรงพยาบาล
-                    dashboard_url = f"/dashboard?subdomain={hospital.subdomain}"
+                    dashboard_url = get_dashboard_url(hospital.subdomain)
                     return redirect(dashboard_url)
                 else:
                     flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
@@ -92,6 +93,28 @@ def login_required(f):
 def check_tenant_access(subdomain):
     """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""
     return TenantManager.validate_tenant_access(subdomain)
+
+def get_current_user():
+    """ดึงข้อมูลผู้ใช้ปัจจุบัน (Centralized Function)"""
+    if 'user_id' not in session:
+        return None
+    
+    # ใช้ g.db ถ้ามีอยู่แล้ว เพื่อประสิทธิภาพ
+    db = g.get('db')
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
+        
+    try:
+        user = db.query(User).filter_by(id=session['user_id']).first()
+        if user:
+            user.hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
+        return user
+    finally:
+        if close_db:
+            db.close()
+            
 '''
 def check_tenant_access(subdomain):
     """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""

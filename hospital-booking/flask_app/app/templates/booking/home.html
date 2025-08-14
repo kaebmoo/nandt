@@ -1,27 +1,25 @@
 <!-- templates/booking/home.html -->
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>จองนัดหมาย - NudDee</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Sarabun', sans-serif; }
-        .event-card {
-            transition: all 0.3s ease;
-        }
-        .event-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-    </style>
-</head>
-<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen">
+ {% extends "base.html" %}
+
+{% block title %}จองนัดหมาย - NudDee{% endblock %}
+
+{% block extra_css %}
+<style>
+    body { font-family: 'Sarabun', sans-serif; }
+    .event-type-card {
+        transition: all 0.2s ease;
+    }
+    .event-type-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
     
     <!-- Header -->
-    <div class="bg-white shadow-sm">
+    <div class="">
         <div class="max-w-6xl mx-auto px-4 py-6">
             <h1 class="text-3xl font-bold text-gray-800">จองนัดหมายออนไลน์</h1>
             <p class="text-gray-600 mt-1">เลือกประเภทการนัดหมายที่ต้องการ</p>
@@ -29,7 +27,7 @@
     </div>
 
     <!-- Main Content -->
-    <div class="max-w-6xl mx-auto px-4 py-12">
+    <div class="max-w-6xl mx-auto px-4 py-6">
         
         {% if event_types %}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -105,9 +103,9 @@
     </div>
 
     <!-- Footer -->
-    <div class="mt-20 py-8 border-t bg-white">
+    <div class="mt-20 py-6">
         <div class="max-w-6xl mx-auto px-4 text-center text-gray-500 text-sm">
-            <p>ระบบจองนัดหมายออนไลน์ &copy; 2025 NudDee</p>
+            
             <p class="mt-2">
                 หากมีปัญหาในการจอง กรุณาติดต่อ: 
                 <a href="tel:021234567" class="text-purple-600 hover:underline">02-123-4567</a>
@@ -123,5 +121,5 @@
             window.location.href = `/book/service/${eventTypeId}${params}`;
         }
     </script>
-</body>
-</html>
+{% endblock %}
+

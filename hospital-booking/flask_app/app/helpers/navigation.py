@@ -20,7 +20,7 @@ class NavigationHelper:
         
         # Fallback to user's hospital if logged in
         if not subdomain and 'user_id' in session:
-            from .. import get_current_user
+            from ..auth import get_current_user
             user = get_current_user()
             if user and user.hospital:
                 subdomain = user.hospital.subdomain

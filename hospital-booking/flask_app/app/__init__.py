@@ -119,6 +119,7 @@ def create_app() -> Flask:
         # ตรวจสอบ subdomain จาก URL parameter ก่อน (สำหรับ development)
         subdomain_param = request.args.get('subdomain')
         subdomain = None
+        g.subdomain_from_host = False
         
         if subdomain_param:
             subdomain = subdomain_param
@@ -128,6 +129,7 @@ def create_app() -> Flask:
             parts = hostname.split('.')
             if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api']:
                 subdomain = parts[0]
+                g.subdomain_from_host = True
         
         hospital_schema = None
         if subdomain:
@@ -180,46 +182,14 @@ def create_app() -> Flask:
         """Get navigation parameters for templates"""
         return NavigationHelper.get_nav_params()
 
-    def get_current_user():
-        """ดึงข้อมูลผู้ใช้ปัจจุบัน"""
-        from flask import session
-        if 'user_id' not in session:
-            return None
-        
-        db = SessionLocal()
-        try:
-            user = db.query(models.User).filter_by(id=session['user_id']).first()
-            if user:
-                user.hospital = db.query(models.Hospital).filter_by(id=user.hospital_id).first()
-            return user
-        finally:
-            db.close()
-
-    def get_tenant_info():
-        """ดึงข้อมูล tenant ปัจจุบัน"""
-        return getattr(g, 'tenant', None), getattr(g, 'subdomain', None)
 
     # --- Template Functions ---
     @app.template_global()
-    def get_current_user():
-        """Template function สำหรับดึงข้อมูลผู้ใช้ปัจจุบัน"""
-        from flask import session
-        if 'user_id' not in session:
-            return None
-        
-        db = SessionLocal()
-        try:
-            user = db.query(models.User).filter_by(id=session['user_id']).first()
-            if user:
-                user.hospital = db.query(models.Hospital).filter_by(id=user.hospital_id).first()
-            return user
-        finally:
-            db.close()
+    def smart_url_for(endpoint, **kwargs):
+        """Smart URL generator that handles subdomain correctly"""
+        from .utils.url_helper import build_url_with_context
+        return build_url_with_context(endpoint, **kwargs)
 
-    @app.template_global()
-    def get_tenant_info():
-        """Template function สำหรับดึงข้อมูล tenant"""
-        return getattr(g, 'tenant', None), getattr(g, 'subdomain', None)
 
     # --- Template Filters ---
     @app.template_filter('day_name_th')
@@ -339,10 +309,12 @@ def create_app() -> Flask:
     # Exempt the specific view from CSRF protection
     # csrf.exempt('booking.get_availability')
 
+    # --- ลงทะเบียน Template Globals จากไฟล์อื่น ---
+    # ทำให้ template สามารถเรียกใช้ {{ get_current_user() }} ได้
+    app.add_template_global(auth.get_current_user, 'get_current_user')
+
     # 5. เริ่มต้น Celery
     celery_init_app(app)
 
     return app
 
-# สำหรับ backward compatibility
-from .routes import get_current_user, get_tenant_info

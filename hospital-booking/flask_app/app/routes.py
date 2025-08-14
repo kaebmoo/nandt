@@ -13,7 +13,9 @@ from .models import (Appointment, User, Hospital,
                     ServiceType, AvailabilityTemplate)
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
+from .utils.url_helper import get_dashboard_url, build_url_with_context
 from . import SessionLocal
+from .auth import get_current_user
 from .core.tenant_manager import with_tenant, TenantManager
 from flask import current_app
 
@@ -26,54 +28,6 @@ def get_fastapi_url():
     """Get FastAPI base URL"""
     return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
-def get_tenant_info():
-    """
-    ดึงข้อมูล tenant จากทั้ง subdomain และ query parameter
-    แนวทางเดียวใช้ได้ทั้ง dev และ production
-    """
-    tenant_schema = None
-    subdomain = None
-    
-    # วิธีที่ 1: จาก query parameter (สำหรับ development และ fallback)
-    subdomain_param = request.args.get('subdomain') or request.args.get('tenant')
-    if subdomain_param:
-        subdomain = subdomain_param
-        tenant_schema = f"tenant_{subdomain}"
-        return tenant_schema, subdomain
-    
-    # วิธีที่ 2: จาก subdomain ใน URL (สำหรับ production)
-    hostname = request.host.split(':')[0]
-    parts = hostname.split('.')
-    
-    # ตรวจสอบ subdomain patterns
-    if len(parts) >= 2:
-        potential_subdomain = parts[0]
-        
-        # ไม่ใช่ subdomain หลัก
-        if potential_subdomain not in ['localhost', 'www', 'api']:
-            subdomain = potential_subdomain
-            tenant_schema = f"tenant_{subdomain}"
-            return tenant_schema, subdomain
-    
-    # วิธีที่ 3: จาก g.tenant ที่ set ไว้ใน middleware
-    if hasattr(g, 'tenant') and g.tenant:
-        return g.tenant, g.tenant.replace('tenant_', '')
-    
-    return None, None
-
-def get_current_user():
-    """ดึงข้อมูลผู้ใช้ปัจจุบัน"""
-    if 'user_id' not in session:
-        return None
-    
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter_by(id=session['user_id']).first()
-        if user:
-            user.hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
-        return user
-    finally:
-        db.close()
 
 @bp.route('/')
 def index():
@@ -85,7 +39,7 @@ def index():
     current_user = get_current_user()
     current_app.logger.debug(f"Current user: {current_user.email if current_user else 'None'}")
     
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     current_app.logger.debug(f"Tenant: {tenant_schema}, Subdomain: {subdomain}")
     
     # ถ้ามี tenant และผู้ใช้ login แล้ว
@@ -108,7 +62,7 @@ def index():
     # ถ้าผู้ใช้ login แล้วแต่ไม่ได้ระบุ tenant
     elif current_user and not tenant_schema:
         # Redirect ไปยัง dashboard ของโรงพยาบาลตัวเอง
-        return redirect(f"/dashboard?subdomain={current_user.hospital.subdomain}")
+        return redirect(get_dashboard_url(current_user.hospital.subdomain))
     
     # แสดง landing page สำหรับผู้ใช้ที่ยังไม่ login
     fastapi_url = os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
@@ -198,8 +152,7 @@ def dashboard():
                              past_appointments=past_appointments,
                              canceled_appointments=canceled_appointments,
                              today_count=today_count,
-                             now=now,
-                             nav_url=lambda x: url_for(x, subdomain=subdomain))
+                             now=now)
                              
     except Exception as e:
         current_app.logger.error(f"Dashboard error: {str(e)}", exc_info=True)
@@ -844,7 +797,7 @@ def admin_check_database():
     if not current_user:
         return {"error": "Unauthorized"}, 401
     
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     if not tenant_schema:
         return {"error": "No tenant found"}, 400
     
@@ -893,7 +846,7 @@ def event_types_settings():
 def public_booking(provider_url, event_slug=None):
     """หน้าจองสาธารณะ (ไม่ต้อง login)"""
     
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not tenant_schema:
         flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
@@ -942,7 +895,7 @@ def public_booking(provider_url, event_slug=None):
 def booking_success(booking_reference):
     """หน้าแสดงผลการจองสำเร็จ"""
     
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not tenant_schema:
         return redirect(url_for('main.index'))
@@ -977,7 +930,7 @@ def booking_success(booking_reference):
 def health():
     """Health check endpoint"""
     
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     current_user = get_current_user()
     
     return {

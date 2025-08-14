@@ -30,9 +30,18 @@ class TenantManager:
         parts = hostname.split('.')
         
         # Check for actual subdomain (not www, api, localhost)
-        if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api', '127', '192']:
-            subdomain = parts[0]
-            return f"tenant_{subdomain}", subdomain
+        if len(parts) > 1:
+            potential_subdomain = parts[0]
+            # Check if it's a valid subdomain (not reserved words or IPs)
+            if potential_subdomain not in ['www', 'api'] and not potential_subdomain.isdigit():
+                # Special case for *.localhost - treat as valid subdomain
+                if len(parts) == 2 and parts[1] == 'localhost':
+                    subdomain = potential_subdomain
+                    return f"tenant_{subdomain}", subdomain
+                # Normal subdomain for production
+                elif potential_subdomain not in ['localhost', '127', '192']:
+                    subdomain = potential_subdomain
+                    return f"tenant_{subdomain}", subdomain
         
         # Priority 4: User's default hospital (for logged-in users)
         if 'user_id' in session:
@@ -122,7 +131,7 @@ def with_tenant(require_access=True, redirect_on_missing=True):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from .. import get_current_user
+            from ..auth import get_current_user
             
             # Get tenant context
             tenant_schema, subdomain = TenantManager.get_tenant_context()

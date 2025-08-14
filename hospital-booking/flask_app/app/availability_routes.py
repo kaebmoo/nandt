@@ -9,7 +9,8 @@ from .forms import (
     AvailabilityTemplateForm, QuickSetupForm,
     populate_availability_form_from_api_data, create_default_template_form
 )
-from . import get_current_user, get_tenant_info
+from .auth import get_current_user 
+from .core.tenant_manager import TenantManager
 
 
 # สร้าง Blueprint สำหรับ availability
@@ -21,7 +22,7 @@ def get_fastapi_url():
 
 def make_api_request(method, endpoint, data=None, params=None):
     """Helper function สำหรับ API calls ไป FastAPI"""
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     if not subdomain:
         return None, "ไม่พบข้อมูล tenant"
     
@@ -58,7 +59,7 @@ def availability_settings():
     """หน้าหลักแสดงรายการ availability templates"""
     current_user = get_current_user()
     subdomain = g.subdomain 
-    # tenant_schema, subdomain = get_tenant_info()
+    # tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user:
         flash('กรุณาเข้าสู่ระบบ', 'error')
@@ -114,7 +115,7 @@ def create_template():
     """สร้าง availability template ใหม่"""
 
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
@@ -172,7 +173,7 @@ def create_template():
 def edit_template(template_id):
     """แก้ไข availability template (ฉบับแก้ไขสมบูรณ์)"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
 
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
@@ -253,7 +254,7 @@ def edit_template(template_id):
 def delete_template(template_id):
     """ลบ availability template"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
@@ -280,7 +281,7 @@ def delete_template(template_id):
 def create_date_override():
     """สร้าง date override ใหม่"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
@@ -331,7 +332,7 @@ def create_date_override():
 def delete_date_override(override_id):
     """ลบ date override"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
@@ -353,7 +354,7 @@ def delete_date_override(override_id):
 def get_template_overrides(template_id):
     """AJAX endpoint สำหรับดึง date overrides ของ template"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         return jsonify({'error': 'Unauthorized'}), 401
@@ -378,7 +379,7 @@ def get_template_overrides(template_id):
 def get_template_details(template_id):
     """AJAX endpoint สำหรับดึงรายละเอียด template"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         return jsonify({'error': 'Unauthorized'}), 401
@@ -400,7 +401,7 @@ def get_template_details(template_id):
 def quick_setup():
     """AJAX endpoint สำหรับ quick setup"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         return jsonify({'error': 'Unauthorized'}), 401
@@ -436,7 +437,7 @@ def quick_setup():
 def validate_template_name():
     """AJAX endpoint สำหรับตรวจสอบชื่อ template ซ้ำ"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not current_user or not check_tenant_access(subdomain):
         return jsonify({'error': 'Unauthorized'}), 401
