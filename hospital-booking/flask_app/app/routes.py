@@ -10,6 +10,7 @@ from .models import (Appointment, User, Hospital,
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
 from . import SessionLocal
+from .core.tenant_manager import with_tenant, TenantManager
 from sqlalchemy import text
 from flask import current_app
 import logging
@@ -111,12 +112,17 @@ def index():
 
 @bp.route('/dashboard')
 @log_route_access
+@login_required
+@with_tenant(require_access=True, redirect_on_missing=True)
 def dashboard():
     """Dashboard - ต้อง login และมีสิทธิ์เข้าถึง"""
     
     current_app.logger.debug("Dashboard route called")
 
-    tenant_schema, subdomain = get_tenant_info()
+    # tenant_schema, subdomain = get_tenant_info()
+    current_user = get_current_user()
+    tenant_schema = g.tenant_schema
+    subdomain = g.subdomain
     current_app.logger.debug(f"Dashboard - Tenant: {tenant_schema}, Subdomain: {subdomain}")
     
     # ตรวจสอบ tenant

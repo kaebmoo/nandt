@@ -11,6 +11,7 @@ from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
 from datetime import timedelta 
+from .helpers.navigation import NavigationHelper
 
 # โหลด .env ก่อนเสมอ
 load_dotenv()
@@ -168,6 +169,17 @@ def create_app() -> Flask:
                 db.close()
 
     # --- Helper Functions ---
+    # Register navigation helper
+    @app.template_global('nav_url')
+    def nav_url(endpoint, **kwargs):
+        """Template function for generating URLs with subdomain"""
+        return NavigationHelper.url_for_with_subdomain(endpoint, **kwargs)
+
+    @app.template_global('get_nav_params')
+    def get_nav_params():
+        """Get navigation parameters for templates"""
+        return NavigationHelper.get_nav_params()
+
     def get_current_user():
         """ดึงข้อมูลผู้ใช้ปัจจุบัน"""
         from flask import session

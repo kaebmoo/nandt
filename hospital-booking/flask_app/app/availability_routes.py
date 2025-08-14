@@ -2,13 +2,15 @@
 
 import os
 import requests
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, abort
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, abort, g
 from .auth import login_required, check_tenant_access
+from .core.tenant_manager import with_tenant  # import decorator
 from .forms import (
     AvailabilityTemplateForm, QuickSetupForm,
     populate_availability_form_from_api_data, create_default_template_form
 )
 from . import get_current_user, get_tenant_info
+
 
 # สร้าง Blueprint สำหรับ availability
 availability_bp = Blueprint('availability', __name__, url_prefix='/settings')
@@ -51,14 +53,21 @@ def make_api_request(method, endpoint, data=None, params=None):
 # ===== MAIN AVAILABILITY PAGE =====
 @availability_bp.route('/availability')
 @login_required
+@with_tenant(require_access=True, redirect_on_missing=True)
 def availability_settings():
     """หน้าหลักแสดงรายการ availability templates"""
     current_user = get_current_user()
-    tenant_schema, subdomain = get_tenant_info()
+    subdomain = g.subdomain 
+    # tenant_schema, subdomain = get_tenant_info()
     
-    if not current_user or not check_tenant_access(subdomain):
-        flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+    if not current_user:
+        flash('กรุณาเข้าสู่ระบบ', 'error')
+        return redirect(url_for('auth.login'))
+    
+    # if not current_user or not check_tenant_access(subdomain):
+    #     flash('ไม่สามารถเข้าถึงได้', 'error')
+    #     return redirect(url_for('main.index'))
+
     
     # ดึงข้อมูล templates จาก endpoint ใหม่
     templates_data, error = make_api_request('GET', '/availability/templates')

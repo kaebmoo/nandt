@@ -51,13 +51,13 @@
                                 <p class="text-sm font-medium text-gray-900">{{ current_user.name if current_user else 'ผู้ใช้' }}</p>
                                 <p class="text-xs text-gray-500">{{ current_user.email if current_user else '' }}</p>
                             </div>
-                            <a href="{{ url_for('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <a href="{{ nav_url('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 👤 โปรไฟล์
                             </a>
-                            <a href="{{ url_for('availability.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <a href="{{ nav_url('availability.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 🕐 ตั้งค่าเวลาทำการ
                             </a>
-                            <a href="{{ url_for('main.event_types_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <a href="{{ nav_url('main.event_types_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 📅 ประเภทการนัดหมาย
                             </a>
                             <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
@@ -198,11 +198,12 @@
                 <span class="font-medium">ผู้ป่วยใหม่</span>
             </button>
             
-            <a href="{{ url_for('availability.availability_settings') }}" class="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg flex items-center space-x-3 transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span class="font-medium">ตั้งค่าเวลาทำการ</span>
+            <a href="{{ nav_url('availability.availability_settings') }}" 
+                class="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg flex items-center space-x-3 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-medium">ตั้งค่าเวลาทำการ</span>
             </a>
             
             <button class="bg-gray-600 hover:bg-gray-700 text-white p-4 rounded-lg flex items-center space-x-3 transition-colors">

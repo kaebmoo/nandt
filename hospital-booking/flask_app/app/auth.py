@@ -5,6 +5,7 @@ from werkzeug.security import check_password_hash
 from sqlalchemy import text
 from .models import User, Hospital
 from . import SessionLocal
+from .core.tenant_manager import TenantManager
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -87,6 +88,11 @@ def login_required(f):
     return decorated_function
 
 # Helper function สำหรับตรวจสอบสิทธิ์เข้าถึง tenant
+# แก้ไข check_tenant_access ให้ใช้ TenantManager
+def check_tenant_access(subdomain):
+    """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""
+    return TenantManager.validate_tenant_access(subdomain)
+'''
 def check_tenant_access(subdomain):
     """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""
     
@@ -106,3 +112,4 @@ def check_tenant_access(subdomain):
         return hospital.subdomain == subdomain
     finally:
         db.close()
+'''
