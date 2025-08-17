@@ -38,7 +38,7 @@
                 <p class="mt-2 text-gray-600">จัดการเทมเพลตเวลาทำการและวันพิเศษสำหรับการจองนัดหมาย</p>
             </div>
             <div class="flex space-x-3">
-                <a href="{{ url_for('availability.create_template') }}" 
+                <a href="{{ url('availability.create_template') }}" 
                    class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                     <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -78,7 +78,7 @@
                                         </div>
                                     </div>
                                     <div class="flex items-center space-x-1 ml-3">
-                                        <a href="{{ url_for('availability.edit_template', template_id=template.id) }}" 
+                                        <a href="{{ url('availability.edit_template', template_id=template.id) }}" 
                                            class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
                                            title="แก้ไข"
                                            onclick="event.stopPropagation()">
@@ -87,7 +87,7 @@
                                             </svg>
                                         </a>
                                         <!-- 
-                                        <form method="POST" action="{{ url_for('availability.delete_template', template_id=template.id) }}" 
+                                        <form method="POST" action="{{ url('availability.delete_template', template_id=template.id) }}" 
                                               style="display: inline;" 
                                               onsubmit="event.stopPropagation(); return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลตนี้?\n\nหมายเหตุ: หาก Event Type ใดใช้เทมเพลตนี้อยู่ ระบบจะย้ายไปใช้เทมเพลตเริ่มต้นอัตโนมัติ')">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -121,7 +121,7 @@
                         </svg>
                         <h3 class="text-lg font-medium text-gray-900 mb-2">ยังไม่มีเทมเพลต</h3>
                         <p class="text-sm mb-4">เริ่มต้นสร้างเทมเพลตเวลาทำการแรกของคุณ</p>
-                        <a href="{{ url_for('availability.create_template') }}" 
+                        <a href="{{ url('availability.create_template') }}" 
                            class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                             สร้างเทมเพลตใหม่
                         </a>
@@ -194,7 +194,7 @@
                                     <div class="flex items-center space-x-3">
                                         <span class="text-sm font-medium text-gray-700">📅 {{ override.date | thai_date }}</span>
                                     </div>
-                                    <form method="POST" action="{{ url_for('availability.delete_date_override', override_id=override.id) }}" 
+                                    <form method="POST" action="{{ url('availability.delete_date_override', override_id=override.id) }}" 
                                           style="display: inline;" 
                                           onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -268,7 +268,7 @@
             </button>
         </div>
         
-        <form id="date-override-form" method="POST" action="{{ url_for('availability.create_date_override') }}">
+        <form id="date-override-form" method="POST" action="{{ url('availability.create_date_override') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="template_id" id="modal-template-id" value="">
             <input type="hidden" name="scope" id="modal-scope" value="global">

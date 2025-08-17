@@ -17,7 +17,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-4">
-                    <a href="{{ url_for('main.dashboard', subdomain=subdomain) }}" class="text-gray-600 hover:text-gray-900">
+                    <a href="{{ url('main.dashboard') }}" class="text-gray-600 hover:text-gray-900">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
@@ -122,20 +122,20 @@
             <!-- Actions -->
             <div class="mt-8 flex justify-end space-x-3">
                 {% if appointment.status != 'cancelled' and can_reschedule %}
-                <a href="{{ url_for('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain) }}"
+                <a href="{{ url('main.admin_reschedule_appointment', appointment_id=appointment.id) }}"
                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                     เลื่อนนัด
                 </a>
                 {% endif %}
                 
                 {% if appointment.status != 'cancelled' and can_cancel %}
-                <a href="{{ url_for('main.admin_cancel_appointment', appointment_id=appointment.id, subdomain=subdomain) }}"
+                <a href="{{ url('main.admin_cancel_appointment', appointment_id=appointment.id) }}"
                    class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                     ยกเลิกนัด
                 </a>
                 {% endif %}
                 
-                <a href="{{ url_for('main.dashboard', subdomain=subdomain) }}"
+                <a href="{{ url('main.dashboard') }}"
                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                     กลับ
                 </a>

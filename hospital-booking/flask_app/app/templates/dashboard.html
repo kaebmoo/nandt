@@ -116,7 +116,7 @@
                         <h3 class="text-lg leading-6 font-medium text-gray-900">รายการนัดหมาย</h3>
                         <p class="mt-1 max-w-2xl text-sm text-gray-500">จัดการนัดหมายผู้ป่วย</p>
                     </div>
-                    <a href="{{ url_for('booking.booking_home', subdomain=subdomain) }}" 
+                    <a href="{{ url('booking.booking_home') }}" 
                        class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 flex items-center space-x-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -198,20 +198,20 @@
 
                                 <!-- Actions -->
                                 <div class="flex items-center space-x-2">
-                                    <a href="{{ url_for('main.view_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
                                        class="text-gray-600 hover:text-gray-900 p-2" title="ดูรายละเอียด">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
                                     </a>
-                                    <a href="{{ url_for('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <a href="{{ url('main.admin_reschedule_appointment', appointment_id=appointment.id) }}" 
                                        class="text-blue-600 hover:text-blue-900 p-2" title="เลื่อนนัด">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                         </svg>
                                     </a>
-                                    <a href="{{ url_for('main.admin_cancel_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <a href="{{ url('main.admin_cancel_appointment', appointment_id=appointment.id) }}" 
                                        class="text-red-600 hover:text-red-900 p-2" title="ยกเลิกนัด">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -280,7 +280,7 @@
 
                                 <!-- Actions -->
                                 <div class="flex items-center space-x-2">
-                                    <a href="{{ url_for('main.view_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
                                        class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -356,14 +356,14 @@
 
                                 <!-- Actions -->
                                 <div class="flex items-center space-x-2">
-                                    <a href="{{ url_for('main.view_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
                                        class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
                                     </a>
-                                    <form method="POST" action="{{ url_for('main.restore_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" style="display: inline;">
+                                    <form method="POST" action="{{ url('main.restore_appointment', appointment_id=appointment.id) }}" style="display: inline;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" 
                                                 onclick="return confirm('คุณต้องการกู้คืนนัดหมายนี้ใช่หรือไม่?')"
@@ -373,7 +373,7 @@
                                             </svg>
                                         </button>
                                     </form>
-                                    <form method="POST" action="{{ url_for('main.delete_appointment', appointment_id=appointment.id, subdomain=subdomain) }}" 
+                                    <form method="POST" action="{{ url('main.delete_appointment', appointment_id=appointment.id) }}" 
                           onsubmit="return confirm('คุณต้องการลบนัดหมายนี้ถาวรใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้');" 
                           style="display: inline;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

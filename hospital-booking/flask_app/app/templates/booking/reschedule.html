@@ -52,7 +52,7 @@
     <div class="bg-white shadow-sm">
         <div class="max-w-6xl mx-auto px-4 py-6">
             <div class="flex items-center space-x-4">
-                <a href="{{ url_for('booking.manage_booking', reference=booking.booking_reference, subdomain=subdomain) }}" 
+                <a href="{{ url('booking.manage_booking', reference=booking.booking_reference) }}" 
                    class="text-gray-600 hover:text-gray-900">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -84,7 +84,7 @@
 
     <!-- Main Content -->
     <div class="max-w-6xl mx-auto px-4 py-8">
-        <form method="POST" action="{{ url_for('booking.reschedule_booking', reference=booking.booking_reference, subdomain=subdomain) }}">
+        <form method="POST" action="{{ url('booking.reschedule_booking', reference=booking.booking_reference) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="new_date" id="selected-date">
             <input type="hidden" name="new_time" id="selected-time">
@@ -180,7 +180,7 @@
             
             <!-- Continue Button -->
             <div class="mt-8 flex justify-end gap-4">
-                <a href="{{ url_for('booking.manage_booking', reference=booking.booking_reference, subdomain=subdomain) }}"
+                <a href="{{ url('booking.manage_booking', reference=booking.booking_reference) }}"
                    class="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                     ยกเลิก
                 </a>

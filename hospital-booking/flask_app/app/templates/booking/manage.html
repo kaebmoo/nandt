@@ -43,14 +43,14 @@
             
             <div class="space-y-3">
                 {% if booking.can_reschedule %}
-                <a href="{{ url_for('booking.reschedule_booking', reference=booking.booking_reference, subdomain=subdomain) }}" 
+                <a href="{{ url('booking.reschedule_booking', reference=booking.booking_reference) }}" 
                    class="block w-full text-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                     เลื่อนนัด
                 </a>
                 {% endif %}
                 
                 {% if booking.can_cancel %}
-                <form method="POST" action="{{ url_for('booking.cancel_booking', reference=booking.booking_reference, subdomain=subdomain) }}">
+                <form method="POST" action="{{ url('booking.cancel_booking', reference=booking.booking_reference) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" 
                             onclick="return confirm('คุณต้องการยกเลิกการนัดหมายนี้ใช่หรือไม่?')"
@@ -60,7 +60,7 @@
                 </form>
                 {% endif %}
                 
-                <a href="{{ url_for('booking.booking_home', subdomain=subdomain) }}" 
+                <a href="{{ url('booking.booking_home') }}" 
                    class="block w-full text-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                     กลับหน้าหลัก
                 </a>

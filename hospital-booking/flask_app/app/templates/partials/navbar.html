@@ -55,7 +55,7 @@
                         <!-- Public Booking Link -->
                         {% if nav_params.subdomain %}
                         <div class="border-t mt-2 pt-2">
-                            <a href="{{ url_for('booking.booking_home', subdomain=nav_params.subdomain) }}" 
+                            <a href="{{ url('booking.booking_home') }}" 
                                target="_blank"
                                class="block px-4 py-2 text-sm text-purple-600 hover:bg-purple-50">
                                 🔗 หน้าจองสาธารณะ

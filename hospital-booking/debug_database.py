@@ -190,9 +190,9 @@ def create_sample_data(subdomain):
             
         # สร้างนัดหมายตัวอย่าง
         sample_appointments = [
-            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (1, '2024-08-11 09:00:00', '2024-08-11 09:30:00', 'ตรวจสุขภาพประจำปี') ON CONFLICT DO NOTHING",
-            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (2, '2024-08-11 10:00:00', '2024-08-11 10:30:00', 'รักษาฟัน') ON CONFLICT DO NOTHING",
-            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (3, '2024-08-11 14:00:00', '2024-08-11 14:30:00', 'ติดตามผล') ON CONFLICT DO NOTHING"
+            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (1, '2025-08-11 09:00:00', '2025-08-11 09:30:00', 'ตรวจสุขภาพประจำปี') ON CONFLICT DO NOTHING",
+            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (2, '2025-08-11 10:00:00', '2025-08-11 10:30:00', 'รักษาฟัน') ON CONFLICT DO NOTHING",
+            "INSERT INTO appointments (patient_id, start_time, end_time, notes) VALUES (3, '2025-08-11 14:00:00', '2025-08-11 14:30:00', 'ติดตามผล') ON CONFLICT DO NOTHING"
         ]
         
         for sql in sample_appointments:

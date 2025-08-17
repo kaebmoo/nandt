@@ -11,7 +11,7 @@ from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
 from datetime import timedelta 
-from .helpers.navigation import NavigationHelper
+from .utils.url_helper import build_url_with_context
 
 # โหลด .env ก่อนเสมอ
 load_dotenv()
@@ -172,15 +172,17 @@ def create_app() -> Flask:
 
     # --- Helper Functions ---
     # Register navigation helper
-    @app.template_global('nav_url')
-    def nav_url(endpoint, **kwargs):
-        """Template function for generating URLs with subdomain"""
-        return NavigationHelper.url_for_with_subdomain(endpoint, **kwargs)
 
-    @app.template_global('get_nav_params')
-    def get_nav_params():
-        """Get navigation parameters for templates"""
-        return NavigationHelper.get_nav_params()
+    from .utils.url_helper import get_nav_params
+    app.add_template_global(get_nav_params, 'get_nav_params')
+    
+    # Register universal URL generator
+    @app.template_global('url')
+    @app.template_global('nav_url')  # alias สำหรับ backward compatibility
+    @app.template_global('smart_url_for')  # alias สำหรับ backward compatibility
+    def universal_url_generator(endpoint, **kwargs):
+        """Universal URL generator ที่จัดการ subdomain อัตโนมัติ"""
+        return build_url_with_context(endpoint, **kwargs)
 
 
     # --- Template Functions ---

@@ -44,7 +44,7 @@
     <!-- Header -->
     <div class="mb-8">
         <div class="flex items-center space-x-4 mb-4">
-            <a href="{{ url_for('availability.availability_settings') }}" 
+            <a href="{{ url('availability.availability_settings') }}" 
                class="text-gray-600 hover:text-gray-900 transition-colors">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -215,7 +215,7 @@
                                     <div class="flex items-center space-x-3">
                                         <span class="text-sm font-medium text-gray-700">📅 {{ override.date | thai_date }}</span>
                                     </div>
-                                    <form method="POST" action="{{ url_for('availability.delete_date_override', override_id=override.id) }}" 
+                                    <form method="POST" action="{{ url('availability.delete_date_override', override_id=override.id) }}" 
                                           style="display: inline;" 
                                           onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -260,7 +260,7 @@
 
             <!-- Action Buttons -->
             <div class="flex justify-between pt-6 border-t">
-                <a href="{{ url_for('availability.availability_settings') }}" 
+                <a href="{{ url('availability.availability_settings') }}" 
                 class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
                     ยกเลิก
                 </a>
@@ -307,7 +307,7 @@
             </button>
         </div>
         
-        <form id="date-override-form" method="POST" action="{{ url_for('availability.create_date_override') }}">
+        <form id="date-override-form" method="POST" action="{{ url('availability.create_date_override') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="template_id" value="{{ template_id }}">
             <input type="hidden" name="scope" value="template">

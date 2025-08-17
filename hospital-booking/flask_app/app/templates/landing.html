@@ -202,13 +202,13 @@
                             <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                             </svg>
-                            หมอ 5 คน
+                            หมอ 1 คน
                         </li>
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                             </svg>
-                            นัดหมาย 100 ครั้ง/เดือน
+                            นัดหมาย 10 ครั้ง/เดือน
                         </li>
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -379,7 +379,7 @@
                             <label class="block text-sm font-medium mb-1">ชื่อย่อ (URL)</label>
                             <div class="flex">
                                 <input type="text" name="subdomain" required pattern="[a-z0-9-]+" class="flex-1 px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="bangkok-hospital">
-                                <span class="bg-gray-100 px-3 py-2 border border-l-0 rounded-r-lg">.medbook.com</span>
+                                <span class="bg-gray-100 px-3 py-2 border border-l-0 rounded-r-lg">.nuddee.com</span>
                             </div>
                             <p class="text-xs text-gray-500 mt-1">ใช้ตัวอักษรภาษาอังกฤษตัวเล็ก, ตัวเลข และ - เท่านั้น</p>
                         </div>
@@ -529,15 +529,15 @@
                 <div>
                     <h4 class="font-semibold mb-4">ติดต่อ</h4>
                     <ul class="space-y-2 text-gray-400">
-                        <li>📧 support@medbook.com</li>
-                        <li>📞 02-123-4567</li>
-                        <li>📍 กรุงเทพมหานคร</li>
+                        <li>support@nuddee.com</li>
+                        <li>02-123-4567</li>
+                        <li>กรุงเทพมหานคร</li>
                     </ul>
                 </div>
             </div>
             
             <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
-                <p>&copy; 2024 NudDee. สงวนลิขสิทธิ์.</p>
+                <p>&copy; 2025 NudDee. สงวนลิขสิทธิ์.</p>
             </div>
         </div>
     </footer>
@@ -594,14 +594,14 @@
         
         function requestDemo() {
             {% if current_user %}
-                alert('📞 สำหรับความช่วยเหลือ กรุณาติดต่อ: support@medbook.com หรือ 02-123-4567');
+                alert('📞 สำหรับความช่วยเหลือ กรุณาติดต่อ: support@nuddee.com หรือ 02-123-4567');
             {% else %}
-                alert('📞 ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง กรุณาโทร 02-123-4567 หรือ email: sales@medbook.com');
+                alert('📞 ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง กรุณาโทร 02-123-4567 หรือ email: sales@nuddee.com');
             {% endif %}
         }
         
         function contactSales() {
-            alert('📞 ติดต่อฝ่ายขาย: 02-123-4567 หรือ Email: sales@medbook.com');
+            alert('ติดต่อฝ่ายขาย: 02-123-4567 หรือ \nEmail: sales@nuddee.com');
         }
         
         {% if not current_user %}
