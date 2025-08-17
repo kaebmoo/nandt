@@ -5,7 +5,7 @@
         <div class="flex justify-between items-center h-16">
             <div class="flex items-center">
                 <div class="flex-shrink-0">
-                    <a href="{{ nav_url('main.dashboard') }}" class="flex items-center space-x-3">
+                    <a href="{{ url('main.dashboard') }}" class="flex items-center space-x-3">
                         <svg class="w-8 h-8 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
                         </svg>
@@ -39,16 +39,16 @@
                             <p class="text-sm font-medium text-gray-900">{{ get_current_user().name }}</p>
                             <p class="text-xs text-gray-500">{{ get_current_user().email }}</p>
                         </div>
-                        <a href="{{ nav_url('main.dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <a href="{{ url('main.dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             🏠 หน้าหลัก
                         </a>
-                        <a href="{{ nav_url('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <a href="{{ url('auth.profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             👤 โปรไฟล์
                         </a>
-                        <a href="{{ nav_url('availability.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <a href="{{ url('availability.availability_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             🕐 ตั้งค่าเวลาทำการ
                         </a>
-                        <a href="{{ nav_url('main.event_types_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <a href="{{ url('main.event_types_settings') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             📅 ประเภทการนัดหมาย
                         </a>
                         
