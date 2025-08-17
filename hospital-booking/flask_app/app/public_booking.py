@@ -2,7 +2,7 @@
 
 import os
 import requests
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, g
 from datetime import datetime, timedelta
 import calendar
 import json
@@ -15,22 +15,32 @@ def get_fastapi_url():
     return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
 def get_subdomain():
-    """Get subdomain from g object or request"""
-    # ตรวจสอบจาก g object ก่อน (จาก middleware)
+    """Get subdomain from request - ปรับปรุงให้ดีขึ้น"""
+    # 1. ตรวจสอบจาก g object ก่อน (จาก middleware)
     if hasattr(g, 'subdomain') and g.subdomain:
         return g.subdomain
     
-    # Fallback to manual check
+    # 2. ตรวจสอบจาก query parameter
     subdomain = request.args.get('subdomain')
     if subdomain:
         return subdomain
     
+    # 3. ตรวจสอบจาก hostname
     hostname = request.host.split(':')[0]
     parts = hostname.split('.')
-    if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api']:
-        return parts[0]
     
-    return None  # ไม่ควร return default
+    # ตรวจสอบ subdomain pattern
+    if len(parts) > 1:
+        potential_subdomain = parts[0]
+        # Check for *.localhost pattern
+        if len(parts) == 2 and parts[1] == 'localhost':
+            return potential_subdomain
+        # Check for normal subdomain (not www, api, localhost, etc.)
+        elif potential_subdomain not in ['localhost', 'www', 'api', '127', '192']:
+            return potential_subdomain
+    
+    # 4. ถ้าไม่พบ subdomain ให้ return None แทน default
+    return None
 
 # --- Public Booking Pages (No Login Required) ---
 
@@ -38,6 +48,10 @@ def get_subdomain():
 def booking_home():
     """หน้าแรก - เลือกประเภทการนัด"""
     subdomain = get_subdomain()
+    
+    if not subdomain:
+        flash('กรุณาระบุโรงพยาบาล', 'error')
+        return redirect(url_for('main.index'))  # กลับไปหน้าหลัก
     
     # Get event types from API
     try:
