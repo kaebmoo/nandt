@@ -11,6 +11,7 @@ from .forms import (
 )
 from .auth import get_current_user 
 from .core.tenant_manager import TenantManager
+from .utils.url_helper import build_url_with_context
 
 
 # สร้าง Blueprint สำหรับ availability
@@ -67,7 +68,7 @@ def availability_settings():
     
     # if not current_user or not check_tenant_access(subdomain):
     #     flash('ไม่สามารถเข้าถึงได้', 'error')
-    #     return redirect(url_for('main.index'))
+    #     return redirect(build_url_with_context('main.index'))
 
     
     # ดึงข้อมูล templates จาก endpoint ใหม่
@@ -119,7 +120,7 @@ def create_template():
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(build_url_with_context('main.index'))
     
     # Handle quick setup
     quick_form = QuickSetupForm()
@@ -135,7 +136,7 @@ def create_template():
                     flash(f'เกิดข้อผิดพลาดในการสร้างเทมเพลต: {error}', 'error')
                 else:
                     flash('สร้างเทมเพลตจาก preset เรียบร้อยแล้ว!', 'success')
-                    return redirect(url_for('availability.availability_settings'))
+                    return redirect(build_url_with_context('availability.availability_settings'))
     
     # Handle manual form
     if request.method == 'GET' or (request.method == 'POST' and 'quick_setup' not in request.form):
@@ -151,9 +152,9 @@ def create_template():
                 flash('สร้างเทมเพลตเรียบร้อยแล้ว!', 'success')
                 template_id = api_data.get('template_id') if api_data else None
                 if template_id:
-                    return redirect(url_for('availability.availability_settings', selected_template=template_id))
+                    return redirect(build_url_with_context('availability.availability_settings', selected_template=template_id))
                 else:
-                    return redirect(url_for('availability.availability_settings'))
+                    return redirect(build_url_with_context('availability.availability_settings'))
                 
         
         # ถ้าเป็น GET หรือ validation fail
@@ -177,13 +178,13 @@ def edit_template(template_id):
 
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(build_url_with_context('main.index'))
 
     # 1. ดึงข้อมูลต้นฉบับของ Template จาก API
     template_details, error = make_api_request('GET', f'/availability/template/{template_id}/details')
     if error or not template_details:
         flash(f'ไม่สามารถโหลดข้อมูลเทมเพลตได้: {error}', 'error')
-        return redirect(url_for('availability.availability_settings'))
+        return redirect(build_url_with_context('availability.availability_settings'))
 
     # 2. สร้าง Instance ของ Form
     form = AvailabilityTemplateForm(request.form)
@@ -195,7 +196,7 @@ def edit_template(template_id):
 
         if not error:
             flash('แก้ไขเทมเพลตเรียบร้อยแล้ว!', 'success')
-            return redirect(url_for('availability.availability_settings', selected_template=template_id))
+            return redirect(build_url_with_context('availability.availability_settings', selected_template=template_id))
         else:
             flash(f'เกิดข้อผิดพลาดในการบันทึก: {error}', 'error')
 
@@ -258,7 +259,7 @@ def delete_template(template_id):
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(build_url_with_context('main.index'))
     
     # ส่งคำขอลบไป API
     api_data, error = make_api_request('DELETE', f'/availability/templates/{template_id}')
@@ -273,7 +274,7 @@ def delete_template(template_id):
             moved_events = ', '.join(api_data['moved_events'])
             flash(f'Event Types ที่ถูกย้ายไปใช้เทมเพลตเริ่มต้น: {moved_events}', 'info')
     
-    return redirect(url_for('availability.availability_settings'))
+    return redirect(build_url_with_context('availability.availability_settings'))
 
 # ===== DATE OVERRIDES =====
 @availability_bp.route('/availability/date-override/new', methods=['POST'])
@@ -285,7 +286,7 @@ def create_date_override():
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(build_url_with_context('main.index'))
     
     # รับข้อมูลจาก form
     date_str = request.form.get('date')
@@ -300,7 +301,7 @@ def create_date_override():
     # ไม่ต้องแปลงอีก
     if not date_str:
         flash('กรุณาเลือกวันที่', 'error')
-        return redirect(request.referrer or url_for('availability.availability_settings'))
+        return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
     
     # สร้าง data สำหรับส่งไป API
     api_data = {
@@ -325,7 +326,7 @@ def create_date_override():
     else:
         flash('เพิ่มวันพิเศษเรียบร้อยแล้ว!', 'success')
     
-    return redirect(request.referrer or url_for('availability.availability_settings'))
+    return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
 
 @availability_bp.route('/availability/date-override/<int:override_id>/delete', methods=['POST'])
 @login_required
@@ -336,7 +337,7 @@ def delete_date_override(override_id):
     
     if not current_user or not check_tenant_access(subdomain):
         flash('ไม่สามารถเข้าถึงได้', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(build_url_with_context('main.index'))
     
     # ส่งคำขอลบไป API
     api_data, error = make_api_request('DELETE', f'/date-overrides/{override_id}')
@@ -346,7 +347,7 @@ def delete_date_override(override_id):
     else:
         flash('ลบวันพิเศษเรียบร้อยแล้ว!', 'success')
     
-    return redirect(request.referrer or url_for('availability.availability_settings'))
+    return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
 
 # ===== AJAX API ENDPOINTS =====
 @availability_bp.route('/api/template/<int:template_id>/overrides')
@@ -467,12 +468,12 @@ def validate_template_name():
 @availability_bp.errorhandler(404)
 def not_found_error(error):
     flash('ไม่พบหน้าที่ต้องการ', 'error')
-    return redirect(url_for('availability.availability_settings'))
+    return redirect(build_url_with_context('availability.availability_settings'))
 
 @availability_bp.errorhandler(500)
 def internal_error(error):
     flash('เกิดข้อผิดพลาดภายในระบบ', 'error')
-    return redirect(url_for('availability.availability_settings'))
+    return redirect(build_url_with_context('availability.availability_settings'))
 
 # ===== TEMPLATE FILTERS =====
 @availability_bp.app_template_filter('day_name_th')

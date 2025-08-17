@@ -48,7 +48,7 @@ def index():
         # ตรวจสอบสิทธิ์เข้าถึง
         if check_tenant_access(subdomain):
             current_app.logger.info(f"User {current_user.email} accessing dashboard for {subdomain}")
-            return redirect(url_for('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard'))
         else:
             current_app.logger.warning(f"Access denied for user {current_user.email} to {subdomain}")
             flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
@@ -184,7 +184,7 @@ def view_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(url_for('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard'))
         
         # Load relationships
         patient = db.query(Patient).filter_by(id=appointment.patient_id).first() if appointment.patient_id else None
@@ -212,7 +212,7 @@ def view_appointment(appointment_id):
     except Exception as e:
         current_app.logger.error(f"Error viewing appointment: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard'))
     finally:
         if db and not hasattr(g, 'db'):
             db.close()
@@ -234,7 +234,7 @@ def admin_reschedule_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(url_for('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard'))
         
         if request.method == 'POST':
             # Process reschedule
@@ -264,7 +264,7 @@ def admin_reschedule_appointment(appointment_id):
                     # TODO: Send notification
                     pass
                 
-                return redirect(url_for('main.dashboard', subdomain=subdomain))
+                return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
             else:
                 error = response.json()
                 flash(error.get('detail', 'ไม่สามารถเลื่อนนัดได้'), 'error')
@@ -296,7 +296,7 @@ def admin_reschedule_appointment(appointment_id):
     except Exception as e:
         current_app.logger.error(f"Error in admin reschedule: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard'))
     finally:
         if db and not hasattr(g, 'db'):
             db.close()
@@ -308,9 +308,8 @@ def edit_appointment(appointment_id):
     """แก้ไขนัดหมาย - Redirect ไปหน้า admin reschedule"""
     subdomain = g.subdomain
     # Redirect ไปหน้า admin reschedule แทน เพราะเป็น logic เดียวกัน
-    return redirect(url_for('main.admin_reschedule_appointment', 
-                          appointment_id=appointment_id,
-                          subdomain=subdomain))
+    return redirect(build_url_with_context('main.admin_reschedule_appointment', 
+                          appointment_id=appointment_id))
 
 @bp.route('/appointments/<int:appointment_id>/request-reschedule', methods=['POST'])
 @login_required
@@ -383,7 +382,7 @@ def admin_cancel_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(url_for('main.dashboard', subdomain=subdomain))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         if request.method == 'POST':
             reason = request.form.get('reason')
@@ -410,7 +409,7 @@ def admin_cancel_appointment(appointment_id):
             
             flash('ยกเลิกนัดหมายเรียบร้อยแล้ว', 'success')
             # แก้ไขตรงนี้ - เพิ่ม subdomain parameter
-            return redirect(url_for('main.dashboard', subdomain=subdomain))
+            return redirect(build_url_with_context('main.dashboard'))
         
         # GET - แสดง form
         current_user = get_current_user()
@@ -426,7 +425,7 @@ def admin_cancel_appointment(appointment_id):
         current_app.logger.error(f"Error in admin cancel: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
         # แก้ไขตรงนี้ด้วย
-        return redirect(url_for('main.dashboard', subdomain=subdomain))
+        return redirect(build_url_with_context('main.dashboard'))
     finally:
         if db and not hasattr(g, 'db'):
             db.close()
@@ -485,7 +484,7 @@ def restore_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(url_for('main.dashboard', subdomain=subdomain))
+            return redirect(build_url_with_context('main.dashboard'))
         
         # กู้คืน status
         appointment.status = 'confirmed'
@@ -496,14 +495,14 @@ def restore_appointment(appointment_id):
         db.commit()
         
         flash('กู้คืนนัดหมายเรียบร้อยแล้ว', 'success')
-        return redirect(url_for('main.dashboard', subdomain=subdomain))
+        return redirect(build_url_with_context('main.dashboard'))
         
     except Exception as e:
         current_app.logger.error(f"Error restoring appointment: {str(e)}")
         if db:
             db.rollback()
         flash('เกิดข้อผิดพลาดในการกู้คืนนัดหมาย', 'error')
-        return redirect(url_for('main.dashboard', subdomain=subdomain))
+        return redirect(build_url_with_context('main.dashboard'))
     finally:
         if db and not hasattr(g, 'db'):
             db.close()
@@ -580,7 +579,7 @@ def create_appointment():
     except Exception as e:
         current_app.logger.error(f"Error in create appointment: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard'))
 
 @bp.route('/appointments/store', methods=['POST'])
 @login_required
@@ -618,12 +617,12 @@ def store_appointment():
             error_data = response.json()
             flash(error_data.get('detail', 'ไม่สามารถสร้างนัดหมายได้'), 'error')
         
-        return redirect(url_for('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard'))
         
     except Exception as e:
         current_app.logger.error(f"Error storing appointment: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard'))
     
 # ==================== AJAX Endpoints for Calendar ====================
 
@@ -815,14 +814,14 @@ def admin_check_database():
 @login_required
 def working_hours():
     """หน้าตั้งค่าเวลาทำการ (เก่า - redirect ไปใหม่)"""
-    return redirect(url_for('availability.availability_settings'))
+    return redirect(build_url_with_context('availability.availability_settings'))
 
 # @bp.route('/settings/availability')
 # @login_required  
 # def availability_settings():
 #     """หน้าตั้งค่าเวลาทำการ (Availability) - ถูกย้ายไป availability_routes.py"""
 #     # Redirect ไปยัง availability blueprint
-#     return redirect(url_for('availability.availability_settings'))
+#     return redirect(build_url_with_context('availability.availability_settings'))
 
 @bp.route('/settings/event-types')
 @login_required

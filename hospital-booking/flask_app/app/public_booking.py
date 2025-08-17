@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from datetime import datetime, timedelta
 import calendar
 import json
+from .utils.url_helper import build_url_with_context
 
 # สร้าง Blueprint
 public_bp = Blueprint('booking', __name__, url_prefix='/book')
@@ -14,7 +15,12 @@ def get_fastapi_url():
     return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
 def get_subdomain():
-    """Get subdomain from request"""
+    """Get subdomain from g object or request"""
+    # ตรวจสอบจาก g object ก่อน (จาก middleware)
+    if hasattr(g, 'subdomain') and g.subdomain:
+        return g.subdomain
+    
+    # Fallback to manual check
     subdomain = request.args.get('subdomain')
     if subdomain:
         return subdomain
@@ -24,7 +30,7 @@ def get_subdomain():
     if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api']:
         return parts[0]
     
-    return 'humnoi'  # Default for development
+    return None  # ไม่ควร return default
 
 # --- Public Booking Pages (No Login Required) ---
 
@@ -69,7 +75,7 @@ def book_service(event_type_id):
         )
         if not response.ok:
             flash('ไม่สามารถโหลดข้อมูลได้', 'error')
-            return redirect(url_for('booking.booking_home'))
+            return redirect(build_url_with_context('booking.booking_home'))
             
         data = response.json()
         event_types = data.get('event_types', [])
@@ -77,7 +83,7 @@ def book_service(event_type_id):
         
         if not event_type:
             flash('ไม่พบประเภทการนัดที่เลือก', 'error')
-            return redirect(url_for('booking.booking_home'))
+            return redirect(build_url_with_context('booking.booking_home'))
         
         # 2. Get availability schedule from template
         availability_schedule = {}
@@ -111,7 +117,7 @@ def book_service(event_type_id):
         import traceback
         traceback.print_exc()
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
 
 @public_bp.route('/api/availability/<int:event_type_id>/<date>')
 def get_availability(event_type_id, date):
@@ -184,9 +190,8 @@ def create_booking():
             # Bot detected - แสดงหน้าสำเร็จปลอมๆ
             print(f"🤖 Bot detected: filled honeypot field '{field}'")
             fake_ref = f"BK-{datetime.now().strftime('%H%M%S')}"
-            return redirect(url_for('booking.success', 
-                                  reference=fake_ref,
-                                  subdomain=subdomain))
+            return redirect(build_url_with_context('booking.success', reference=fake_ref))
+            
         
     # 2. ตรวจสอบ Time-based Token
     from .utils.security import verify_booking_token
@@ -194,12 +199,12 @@ def create_booking():
     token = request.form.get('booking_token')
     if not token:
         flash('ข้อมูลการจองไม่ถูกต้อง', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
     
     valid, message = verify_booking_token(token)
     if not valid:
         flash(message, 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
     
     # ตรวจสอบว่า token นี้เคยใช้แล้วหรือไม่
     if 'used_tokens' not in session:
@@ -207,7 +212,7 @@ def create_booking():
     
     if token in session['used_tokens']:
         flash('ข้อมูลการจองนี้ถูกใช้แล้ว', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
     
     # 3. ตรวจสอบ Session Rate Limit
     if 'booking_history' not in session:
@@ -224,7 +229,7 @@ def create_booking():
     if len(session['booking_history']) >= 3:
         remaining_time = 60 - int((datetime.now() - datetime.fromisoformat(session['booking_history'][0]['time'])).seconds / 60)
         flash(f'คุณจองบ่อยเกินไป กรุณารออีก {remaining_time} นาที', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
     
     # รับข้อมูลจาก form
     guest_email = request.form.get('guest_email', '').strip()
@@ -269,9 +274,9 @@ def create_booking():
         
         if response.ok:
             result = response.json()
-            return redirect(url_for('booking.success', 
-                                  reference=result['booking_reference'],
-                                  subdomain=subdomain))  # เพิ่ม subdomain
+            return redirect(build_url_with_context('booking.success', reference=result['booking_reference']))
+            
+        
         else:
             error_data = response.json()
             print(f"API Error: {error_data}")  # เพิ่ม logging
@@ -313,14 +318,14 @@ def success(reference):
                                  subdomain=subdomain)
         else:
             flash('ไม่พบข้อมูลการจอง', 'error')
-            return redirect(url_for('booking.booking_home', subdomain=subdomain))
+            return redirect(build_url_with_context('booking.booking_home'))
             
     except Exception as e:
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.booking_home', subdomain=subdomain))
+        return redirect(build_url_with_context('booking.booking_home'))
 
 @public_bp.route('/manage/<reference>')
 def manage_booking(reference):
@@ -349,11 +354,11 @@ def manage_booking(reference):
                                  subdomain=subdomain)
         else:
             flash('ไม่พบข้อมูลการจอง', 'error')
-            return redirect(url_for('booking.booking_home'))
+            return redirect(build_url_with_context('booking.booking_home'))
             
     except Exception as e:
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
 
 @public_bp.route('/reschedule/<reference>', methods=['GET', 'POST'])
 def reschedule_booking(reference):
@@ -378,7 +383,7 @@ def reschedule_booking(reference):
             if response.ok:
                 result = response.json()
                 flash('เลื่อนนัดเรียบร้อยแล้ว', 'success')
-                return redirect(url_for('booking.success',
+                return redirect(build_url_with_context('booking.success',
                                       reference=result['new_booking_reference']))
             else:
                 error = response.json()
@@ -396,7 +401,7 @@ def reschedule_booking(reference):
         
         if not response.ok:
             flash('ไม่พบข้อมูลการจอง', 'error')
-            return redirect(url_for('booking.booking_home'))
+            return redirect(build_url_with_context('booking.booking_home'))
             
         booking = response.json()
 
@@ -412,7 +417,7 @@ def reschedule_booking(reference):
         
         if not booking.get('can_reschedule'):
             flash('ไม่สามารถเลื่อนนัดได้ (ใกล้เวลานัดเกินไป)', 'error')
-            return redirect(url_for('booking.manage_booking', reference=reference))
+            return redirect(build_url_with_context('booking.manage_booking', reference=reference))
         
         # 2. ดึงข้อมูล event type และ availability
         event_type_id = booking.get('event_type', {}).get('id')
@@ -452,7 +457,7 @@ def reschedule_booking(reference):
     except Exception as e:
         print(f"Error in reschedule: {e}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.booking_home'))
+        return redirect(build_url_with_context('booking.booking_home'))
 
 @public_bp.route('/cancel/<reference>', methods=['POST'])
 def cancel_booking(reference):
@@ -478,11 +483,11 @@ def cancel_booking(reference):
         else:
             error = response.json()
             flash(error.get('detail', 'ไม่สามารถยกเลิกได้'), 'error')
-            return redirect(url_for('booking.manage_booking', reference=reference))
+            return redirect(build_url_with_context('booking.manage_booking', reference=reference))
             
     except Exception as e:
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.manage_booking', reference=reference))
+        return redirect(build_url_with_context('booking.manage_booking', reference=reference))
 
 # --- Helper Functions ---
 def generate_calendar_for_booking(year, month, availability_schedule):
