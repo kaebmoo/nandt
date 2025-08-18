@@ -3,8 +3,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, g
 from werkzeug.security import check_password_hash
 from sqlalchemy import text
-from .models import User, Hospital
-from . import SessionLocal
+from shared_db.models import User, Hospital
+from shared_db.database import SessionLocal, get_db_session 
 from .core.tenant_manager import TenantManager
 from .utils.url_helper import get_dashboard_url
 
@@ -22,7 +22,7 @@ def login():
             flash('กรุณากรอกอีเมลและรหัสผ่าน', 'error')
             return render_template('auth/login.html')
         
-        db = SessionLocal()
+        db = get_db_session()
         try:
             # หาผู้ใช้จากอีเมล
             user = db.query(User).filter_by(email=email).first()
@@ -66,7 +66,7 @@ def profile():
         flash('กรุณาเข้าสู่ระบบ', 'error')
         return redirect(url_for('auth.login'))
     
-    db = SessionLocal()
+    db = get_db_session()
     try:
         user = db.query(User).filter_by(id=session['user_id']).first()
         hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
@@ -103,7 +103,7 @@ def get_current_user():
     db = g.get('db')
     close_db = False
     if db is None:
-        db = SessionLocal()
+        db = get_db_session()
         close_db = True
         
     try:
@@ -122,7 +122,7 @@ def check_tenant_access(subdomain):
     if 'user_id' not in session:
         return False
     
-    db = SessionLocal()
+    db = get_db_session()
     try:
         user = db.query(User).filter_by(id=session['user_id']).first()
         if not user:

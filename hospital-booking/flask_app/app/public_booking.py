@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import calendar
 import json
 from .utils.url_helper import build_url_with_context
+from .core.tenant_manager import TenantManager
 
 # สร้าง Blueprint
 public_bp = Blueprint('booking', __name__, url_prefix='/book')
@@ -15,32 +16,9 @@ def get_fastapi_url():
     return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
 def get_subdomain():
-    """Get subdomain from request - ปรับปรุงให้ดีขึ้น"""
-    # 1. ตรวจสอบจาก g object ก่อน (จาก middleware)
-    if hasattr(g, 'subdomain') and g.subdomain:
-        return g.subdomain
-    
-    # 2. ตรวจสอบจาก query parameter
-    subdomain = request.args.get('subdomain')
-    if subdomain:
-        return subdomain
-    
-    # 3. ตรวจสอบจาก hostname
-    hostname = request.host.split(':')[0]
-    parts = hostname.split('.')
-    
-    # ตรวจสอบ subdomain pattern
-    if len(parts) > 1:
-        potential_subdomain = parts[0]
-        # Check for *.localhost pattern
-        if len(parts) == 2 and parts[1] == 'localhost':
-            return potential_subdomain
-        # Check for normal subdomain (not www, api, localhost, etc.)
-        elif potential_subdomain not in ['localhost', 'www', 'api', '127', '192']:
-            return potential_subdomain
-    
-    # 4. ถ้าไม่พบ subdomain ให้ return None แทน default
-    return None
+    """Get subdomain from TenantManager"""
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+    return subdomain
 
 # --- Public Booking Pages (No Login Required) ---
 
@@ -50,8 +28,21 @@ def booking_home():
     subdomain = get_subdomain()
     
     if not subdomain:
-        flash('กรุณาระบุโรงพยาบาล', 'error')
-        return redirect(url_for('main.index'))  # กลับไปหน้าหลัก
+        # ลองดูจาก session
+        subdomain = session.get('last_subdomain')
+        
+        if not subdomain:
+            # แสดงหน้าให้เลือกโรงพยาบาล หรือ error
+            flash('กรุณาเลือกโรงพยาบาล', 'info')
+            
+            # Option 1: กลับไปหน้าหลัก
+            return redirect(url_for('main.index'))
+            
+            # Option 2: แสดงหน้าเลือกโรงพยาบาล (ถ้ามี)
+            # return render_template('booking/select_hospital.html')
+    
+    # บันทึก subdomain ล่าสุดใน session
+    session['last_subdomain'] = subdomain
     
     # Get event types from API
     try:
@@ -70,12 +61,12 @@ def booking_home():
                                  subdomain=subdomain)
         else:
             flash('ไม่สามารถโหลดประเภทการนัดได้', 'error')
-            return render_template('booking/error.html')
+            return render_template('booking/error.html', subdomain=subdomain)
             
     except Exception as e:
         print(f"Error loading event types: {e}")
         flash('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error')
-        return render_template('booking/error.html')
+        return render_template('booking/error.html', subdomain=subdomain)
 
 @public_bp.route('/service/<int:event_type_id>')
 def book_service(event_type_id):
@@ -581,9 +572,15 @@ def generate_calendar_for_booking(year, month, availability_schedule):
     }
 
 # เพิ่ม AJAX endpoint สำหรับ calendar navigation
-@public_bp.route('/api/calendar/<int:year>/<int:month>')
+@public_bp.route('/api/calendar/<year>/<month>')
 def get_calendar(year, month):
     """AJAX endpoint สำหรับดึง calendar data"""
+    try:
+        year = int(year)
+        month = int(month)
+    except ValueError:
+        return jsonify({'error': 'Invalid year or month format'}), 400
+    
     subdomain = get_subdomain()
     event_type_id = request.args.get('event_type_id', type=int)
     

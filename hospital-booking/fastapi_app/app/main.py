@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, constr
 from typing import Literal
 from dotenv import load_dotenv
+from datetime import time
 
 load_dotenv()
 
@@ -16,9 +17,8 @@ load_dotenv()
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'flask_app', 'app'))
-import models 
-
-from .database import SessionLocal, engine
+from shared_db import models
+from shared_db.database import SessionLocal, engine
 
 # Import routers
 from .event_types import router as event_types_router
@@ -132,153 +132,94 @@ def get_universal_url(subdomain: str, path: str = "/dashboard", params: dict = N
         return f"{base_url}{path}?{query_string}" if query_string else f"{base_url}{path}"
 
 def create_tenant_setup(schema_name: str, db: Session):
-    """สร้าง tenant schema, tables และข้อมูลเริ่มต้น"""
+    """สร้าง tenant schema, tables และข้อมูลเริ่มต้นด้วย SQLAlchemy Objects"""
     
     try:
-        # สร้าง schema
+        # 1. สร้าง Schema
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
         
-        # ตั้งค่า search_path
+        # 2. ตั้งค่า Search Path ชั่วคราว
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
         
-        # สร้าง tables ด้วย SQL แทน SQLAlchemy (เพื่อให้ schema ถูกต้อง)
-        db.execute(text('''
-            CREATE TABLE availabilities (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                description TEXT,
-                day_of_week VARCHAR(20) NOT NULL,
-                start_time TIME NOT NULL,
-                end_time TIME NOT NULL,
-                timezone VARCHAR(50) DEFAULT 'Asia/Bangkok',
-                is_active BOOLEAN DEFAULT true,
-                created_at TIMESTAMP DEFAULT NOW()
+        # 3. สร้างตารางทั้งหมดจาก models.py (วิธีที่ถูกต้องและยั่งยืน)
+        models.TenantBase.metadata.create_all(bind=db.get_bind())
+        
+        # 4. สร้างข้อมูลเริ่มต้นด้วย SQLAlchemy Objects (แทนที่ SQL INSERT)
+        
+        # --- สร้าง Availability Template เริ่มต้น ---
+        default_template = models.AvailabilityTemplate(
+            name="เวลาทำการเริ่มต้น",
+            description="จันทร์-ศุกร์ (08:30-16:30)",
+            timezone="Asia/Bangkok"
+        )
+        db.add(default_template)
+        db.flush() # ส่งข้อมูลไป DB เพื่อให้ได้ template ID
+
+        # --- สร้าง Availability (วันและเวลา) สำหรับ Template นั้น ---
+        working_days = [
+            models.DayOfWeek.MONDAY, models.DayOfWeek.TUESDAY, 
+            models.DayOfWeek.WEDNESDAY, models.DayOfWeek.THURSDAY, 
+            models.DayOfWeek.FRIDAY
+        ]
+        for day in working_days:
+            availability = models.Availability(
+                template_id=default_template.id,
+                day_of_week=day,
+                start_time=time(8, 30),
+                end_time=time(16, 30)
             )
-        '''))
-        
-        db.execute(text('''
-            CREATE TABLE event_types (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                slug VARCHAR(50) NOT NULL UNIQUE,
-                description TEXT,
-                duration_minutes INTEGER NOT NULL DEFAULT 30,
-                color VARCHAR(7) DEFAULT '#6366f1',
-                is_active BOOLEAN DEFAULT true,
-                availability_id INTEGER REFERENCES availabilities(id),
-                buffer_before_minutes INTEGER DEFAULT 0,
-                buffer_after_minutes INTEGER DEFAULT 0,
-                max_bookings_per_day INTEGER,
-                min_notice_hours INTEGER DEFAULT 4,
-                max_advance_days INTEGER DEFAULT 60,
-                created_at TIMESTAMP DEFAULT NOW()
+            db.add(availability)
+
+        # --- สร้าง Event Types เริ่มต้น โดยอ้างอิงถึง Template ID ---
+        event_types_data = [
+            {'name': 'ตรวจสุขภาพทั่วไป', 'slug': 'general-checkup', 'duration_minutes': 30, 'color': '#6366f1'},
+            {'name': 'ปรึกษาแพทย์เฉพาะทาง', 'slug': 'specialist-consult', 'duration_minutes': 45, 'color': '#10b981'},
+            {'name': 'ฉีดวัคซีน', 'slug': 'vaccination', 'duration_minutes': 15, 'color': '#f59e0b'},
+            {'name': 'ตรวจประจำปี', 'slug': 'annual-checkup', 'duration_minutes': 60, 'color': '#ef4444'}
+        ]
+        for data in event_types_data:
+            event_type = models.EventType(
+                name=data['name'],
+                slug=data['slug'],
+                duration_minutes=data['duration_minutes'],
+                color=data['color'],
+                template_id=default_template.id # อ้างอิงถึง Template ที่สร้าง
             )
-        '''))
-        
-        db.execute(text('''
-            CREATE TABLE providers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                title VARCHAR(20),
-                department VARCHAR(100),
-                is_active BOOLEAN DEFAULT true,
-                public_booking_url VARCHAR(100),
-                bio TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        '''))
-        
-        db.execute(text('''
-            CREATE TABLE patients (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                phone_number VARCHAR(20),
-                email VARCHAR(120),
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        '''))
-        
-        db.execute(text('''
-            CREATE TABLE date_overrides (
-                id SERIAL PRIMARY KEY,
-                date DATE NOT NULL,
-                is_unavailable BOOLEAN DEFAULT false,
-                custom_start_time TIME,
-                custom_end_time TIME,
-                reason VARCHAR(255),
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        '''))
-        
-        db.execute(text('''
-            CREATE TABLE appointments (
-                id SERIAL PRIMARY KEY,
-                patient_id INTEGER REFERENCES patients(id),
-                event_type_id INTEGER REFERENCES event_types(id),
-                start_time TIMESTAMP NOT NULL,
-                end_time TIMESTAMP NOT NULL,
-                status VARCHAR(20) DEFAULT 'confirmed',
-                guest_name VARCHAR(100),
-                guest_email VARCHAR(120), 
-                guest_phone VARCHAR(20),
-                notes VARCHAR(500),
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        '''))
-        
-        # สร้างข้อมูลเริ่มต้น
-        # 1. สร้าง availability templates (รูปแบบเวลาทำงาน)
-        db.execute(text("""
-            INSERT INTO availabilities (name, description, day_of_week, start_time, end_time, timezone, is_active, created_at)
-            VALUES 
-                ('จันทร์-ศุกร์ (08:30-16:30)', 'เวลาทำการปกติวันธรรมดา', 'MONDAY', '08:30', '16:30', 'Asia/Bangkok', true, NOW()),
-                ('จันทร์-ศุกร์ (08:30-16:30)', 'เวลาทำการปกติวันธรรมดา', 'TUESDAY', '08:30', '16:30', 'Asia/Bangkok', true, NOW()),
-                ('จันทร์-ศุกร์ (08:30-16:30)', 'เวลาทำการปกติวันธรรมดา', 'WEDNESDAY', '08:30', '16:30', 'Asia/Bangkok', true, NOW()),
-                ('จันทร์-ศุกร์ (08:30-16:30)', 'เวลาทำการปกติวันธรรมดา', 'THURSDAY', '08:30', '16:30', 'Asia/Bangkok', true, NOW()),
-                ('จันทร์-ศุกร์ (08:30-16:30)', 'เวลาทำการปกติวันธรรมดา', 'FRIDAY', '08:30', '16:30', 'Asia/Bangkok', true, NOW()),
-                ('เสาร์-อาทิตย์ (09:00-12:00)', 'เวลาทำการวันหยุด', 'SATURDAY', '09:00', '12:00', 'Asia/Bangkok', true, NOW()),
-                ('เสาร์-อาทิตย์ (09:00-12:00)', 'เวลาทำการวันหยุด', 'SUNDAY', '09:00', '12:00', 'Asia/Bangkok', true, NOW())
-        """))
-        
-        db.commit()
-        
-        # 2. หา availability_id แรกที่สร้าง
-        first_availability_id = db.execute(text("SELECT id FROM availabilities ORDER BY id LIMIT 1")).scalar()
-        
-        # 3. สร้าง event types ที่อ้างอิงไปยัง availability
-        db.execute(text(f"""
-            INSERT INTO event_types (name, slug, description, duration_minutes, color, is_active, buffer_before_minutes, buffer_after_minutes, min_notice_hours, max_advance_days, availability_id)
-            VALUES 
-                ('ตรวจสุขภาพทั่วไป', 'general-checkup', 'การตรวจสุขภาพพื้นฐานและให้คำปรึกษา', 30, '#6366f1', true, 10, 10, 4, 60, {first_availability_id}),
-                ('ปรึกษาแพทย์เฉพาะทาง', 'specialist-consult', 'การปรึกษาแพทย์ผู้เชี่ยวชาญ', 45, '#10b981', true, 15, 15, 24, 90, {first_availability_id}),
-                ('ฉีดวัคซีน', 'vaccination', 'บริการฉีดวัคซีนป้องกันโรค', 15, '#f59e0b', true, 5, 5, 4, 30, {first_availability_id}),
-                ('ตรวจประจำปี', 'annual-checkup', 'การตรวจสุขภาพประจำปีแบบครบถ้วน', 60, '#ef4444', true, 15, 15, 48, 120, {first_availability_id})
-        """))
-        
-        # 4. สร้าง providers (ถ้าจำเป็นในอนาคต)
-        db.execute(text("""
-            INSERT INTO providers (name, title, department, is_active, public_booking_url, bio)
-            VALUES 
-                ('นพ.สมชาย ใจดี', 'นพ.', 'แพทย์ทั่วไป', true, 'dr-somchai', 'แพทย์ผู้เชี่ยวชาญด้านการดูแลสุขภาพทั่วไป')
-        """))
-        
-        # 5. สร้างผู้ป่วยตัวอย่าง
-        db.execute(text("""
-            INSERT INTO patients (name, phone_number, email)
-            VALUES 
-                ('สมชาย ใจดี', '0812345678', 'somchai@email.com'),
-                ('สมหญิง สวยงาม', '0823456789', 'somying@email.com'),
-                ('น้องมินิ สุขใจ', '0834567890', 'mini@email.com')
-        """))
-        
+            db.add(event_type)
+
+        # --- สร้าง Provider ตัวอย่าง ---
+        provider = models.Provider(
+            name='นพ.สมชาย ใจดี',
+            title='นพ.',
+            department='แพทย์ทั่วไป',
+            public_booking_url='dr-somchai',
+            bio='แพทย์ผู้เชี่ยวชาญด้านการดูแลสุขภาพทั่วไป'
+        )
+        db.add(provider)
+
+        # --- สร้าง Patient ตัวอย่าง ---
+        patients_data = [
+            {'name': 'สมชาย ใจดี', 'phone_number': '0812345678', 'email': 'somchai@email.com'},
+            {'name': 'สมหญิง สวยงาม', 'phone_number': '0823456789', 'email': 'somying@email.com'}
+        ]
+        for data in patients_data:
+            patient = models.Patient(**data)
+            db.add(patient)
+
+        # 5. Commit ข้อมูลทั้งหมดในครั้งเดียว
         db.commit()
         
     except Exception as e:
         db.rollback()
+        # เพิ่มการแสดง Error ที่ละเอียดขึ้นเพื่อช่วยในการ Debug
+        import traceback
+        traceback.print_exc()
         raise Exception(f"Failed to create tenant setup: {str(e)}")
     finally:
-        # Reset search path
+        # 6. Reset search path กลับเป็นปกติเสมอ
         db.execute(text('SET search_path TO public'))
+        db.commit()
+
 
 # --- API Endpoints ---
 @app.post("/api/register")

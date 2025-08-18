@@ -7,14 +7,13 @@ from flask import Blueprint, render_template, redirect, url_for, g, request, ses
 from sqlalchemy import text
 # from sqlalchemy.orm import joinedload
 import logging
-
-from .models import (Appointment, User, Hospital, 
-                    Provider, EventType, Patient, 
-                    ServiceType, AvailabilityTemplate)
+from shared_db.models import (Appointment, User, Hospital, 
+                              Provider, EventType, Patient, 
+                              ServiceType, AvailabilityTemplate)
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
 from .utils.url_helper import get_dashboard_url, build_url_with_context
-from . import SessionLocal
+from shared_db.database import SessionLocal, get_db_session
 from .auth import get_current_user
 from .core.tenant_manager import with_tenant, TenantManager
 from flask import current_app
@@ -102,12 +101,7 @@ def dashboard():
     appointments = []
     
     try:
-        if hasattr(g, 'db') and g.db:
-            db = g.db
-        else:
-            from . import SessionLocal
-            db = SessionLocal()
-            g.db = db
+        db = get_db_session()
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
@@ -173,7 +167,7 @@ def dashboard():
 def view_appointment(appointment_id):
     """ดูรายละเอียดนัดหมายสำหรับ Admin"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         subdomain = g.subdomain
         
@@ -213,9 +207,6 @@ def view_appointment(appointment_id):
         current_app.logger.error(f"Error viewing appointment: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
         return redirect(build_url_with_context('main.dashboard'))
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/<int:appointment_id>/admin-reschedule', methods=['GET', 'POST'])
 @login_required
@@ -223,7 +214,7 @@ def view_appointment(appointment_id):
 def admin_reschedule_appointment(appointment_id):
     """Admin เลื่อนนัดหมาย (มีสิทธิ์มากกว่า public)"""
     
-    db = g.db if hasattr(g, 'db') else SessionLocal()
+    db = get_db_session()
     tenant_schema = g.tenant_schema
     subdomain = g.subdomain
     
@@ -297,9 +288,6 @@ def admin_reschedule_appointment(appointment_id):
         current_app.logger.error(f"Error in admin reschedule: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
         return redirect(build_url_with_context('main.dashboard'))
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/<int:appointment_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -317,7 +305,7 @@ def edit_appointment(appointment_id):
 def request_reschedule(appointment_id):
     """Admin ส่งคำขอเลื่อนนัดให้ผู้ป่วย"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -361,9 +349,6 @@ def request_reschedule(appointment_id):
         if db:
             db.rollback()
         return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/<int:appointment_id>/admin-cancel', methods=['GET', 'POST'])
 @login_required
@@ -371,7 +356,7 @@ def request_reschedule(appointment_id):
 def admin_cancel_appointment(appointment_id):
     """Admin ยกเลิกนัดหมาย พร้อมระบุเหตุผล"""
     
-    db = g.db if hasattr(g, 'db') else SessionLocal()
+    db = get_db_session()
     tenant_schema = g.tenant_schema
     subdomain = g.subdomain
     
@@ -426,9 +411,6 @@ def admin_cancel_appointment(appointment_id):
         flash('เกิดข้อผิดพลาด', 'error')
         # แก้ไขตรงนี้ด้วย
         return redirect(build_url_with_context('main.dashboard'))
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
     
 # ==================== Appointment Management via FastAPI ====================
 
@@ -438,7 +420,7 @@ def admin_cancel_appointment(appointment_id):
 def cancel_appointment(appointment_id):
     """ยกเลิกนัดหมายผ่าน Database โดยตรง (ไม่ผ่าน API)"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -464,9 +446,6 @@ def cancel_appointment(appointment_id):
         if db:
             db.rollback()
         return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/<int:appointment_id>/restore', methods=['POST'])
 @login_required
@@ -474,7 +453,7 @@ def cancel_appointment(appointment_id):
 def restore_appointment(appointment_id):
     """กู้คืนนัดหมายที่ถูกยกเลิก"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         subdomain = g.subdomain
         
@@ -503,9 +482,6 @@ def restore_appointment(appointment_id):
             db.rollback()
         flash('เกิดข้อผิดพลาดในการกู้คืนนัดหมาย', 'error')
         return redirect(build_url_with_context('main.dashboard'))
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/<int:appointment_id>/delete', methods=['POST'])
 @login_required
@@ -513,7 +489,7 @@ def restore_appointment(appointment_id):
 def delete_appointment(appointment_id):
     """ลบนัดหมายถาวร"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -533,9 +509,6 @@ def delete_appointment(appointment_id):
         if db:
             db.rollback()
         return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/appointments/create')
 @login_required
@@ -561,7 +534,7 @@ def create_appointment():
         hospital_name = current_user.hospital.name if current_user else 'Hospital'
         
         # ดึงข้อมูลอื่นๆ จาก database
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
@@ -632,7 +605,7 @@ def store_appointment():
 def quick_cancel_appointment(appointment_id):
     """ยกเลิกนัดหมายแบบเร็ว (AJAX)"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -659,9 +632,6 @@ def quick_cancel_appointment(appointment_id):
         if db:
             db.rollback()
         return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 @bp.route('/api/appointments/availability/<int:event_type_id>/<date>')
 @login_required
@@ -691,7 +661,7 @@ def get_appointment_availability(event_type_id, date):
 def quick_add_appointment():
     """เพิ่มนัดหมายแบบเร็ว (Walk-in)"""
     try:
-        db = g.db if hasattr(g, 'db') else SessionLocal()
+        db = get_db_session()
         tenant_schema = g.tenant_schema
         
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -736,16 +706,13 @@ def quick_add_appointment():
         if db:
             db.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        if db and not hasattr(g, 'db'):
-            db.close()
 
 # เพิ่ม helper function สำหรับตรวจสอบ database health
 def check_tenant_database_health(tenant_schema):
     """ตรวจสอบสุขภาพของ database tenant"""
     try:
-        from . import SessionLocal
-        db = SessionLocal()
+        # from . import SessionLocal
+        db = get_db_session()
         
         # ตั้งค่า search_path
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
@@ -853,7 +820,7 @@ def public_booking(provider_url, event_slug=None):
     
     try:
         # ตั้งค่า database session สำหรับ tenant นี้
-        db = SessionLocal()
+        db = get_db_session()
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
         # ค้นหา provider จาก URL
@@ -900,7 +867,7 @@ def booking_success(booking_reference):
         return redirect(url_for('main.index'))
     
     try:
-        db = SessionLocal()
+        db = get_db_session()
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
         appointment = db.query(Appointment).filter_by(

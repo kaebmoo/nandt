@@ -33,7 +33,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {% for event_type in event_types %}
             <div class="event-card bg-white rounded-xl shadow-md hover:shadow-xl cursor-pointer" 
-                 onclick="selectEventType({{ event_type.id }})">
+                 onclick="window.location.href='{{ url('booking.book_service', event_type_id=event_type.id) }}'">
                 <div class="p-6">
                     <!-- Icon/Color Bar -->
                     <div class="h-2 rounded-full mb-4" 
@@ -113,13 +113,5 @@
         </div>
     </div>
 
-    <script>
-        function selectEventType(eventTypeId) {
-            // Redirect to time selection page
-            const subdomain = '{{ subdomain }}';
-            const params = subdomain ? `?subdomain=${subdomain}` : '';
-            window.location.href = `/book/service/${eventTypeId}${params}`;
-        }
-    </script>
 {% endblock %}
 

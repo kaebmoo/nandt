@@ -52,7 +52,7 @@
     <div class="bg-white shadow-sm">
         <div class="max-w-6xl mx-auto px-4 py-6">
             <div class="flex items-center space-x-4">
-                <a href="{{ url('booking.manage_booking', reference=booking.booking_reference) }}" 
+                <a href="{{ url('booking.manage_booking', reference=booking.booking_reference) }}"
                    class="text-gray-600 hover:text-gray-900">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -201,6 +201,14 @@
         const subdomain = '{{ subdomain }}';
         const today = '{{ today }}';
         const availabilitySchedule = {{ availability_schedule|tojson|safe }};
+
+        const getApiPath = (path) => {
+            {% if subdomain %}
+                return path + '?subdomain={{ subdomain }}';
+            {% else %}
+                return path;
+            {% endif %}
+        };
         
         function selectDate(element) {
             const date = element.dataset.date;
@@ -243,7 +251,9 @@
             
             try {
                 // Call FastAPI through Flask proxy
-                const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
+                // const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
+                const response = await fetch(getApiPath(`/book/api/calendar/${currentYear}/${currentMonth}`) + 
+                            `${subdomain ? '&' : '?'}event_type_id=${eventTypeId}`);
                 const data = await response.json();
                 
                 if (data.slots && data.slots.length > 0) {

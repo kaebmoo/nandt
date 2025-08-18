@@ -4,6 +4,7 @@ from flask import request, session, g, redirect, url_for
 from functools import wraps
 from typing import Optional, Tuple
 import logging
+from shared_db.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,8 @@ class TenantManager:
     @staticmethod
     def _get_user_default_subdomain() -> Optional[str]:
         """Get subdomain from logged-in user's hospital"""
-        from .. import SessionLocal
-        from ..models import User, Hospital
+        from shared_db.database import SessionLocal
+        from shared_db.models import User, Hospital
         
         db = SessionLocal()
         try:
@@ -97,8 +98,8 @@ class TenantManager:
         if not subdomain or 'user_id' not in session:
             return False
         
-        from .. import SessionLocal
-        from ..models import User, Hospital
+        from shared_db.database import SessionLocal
+        from shared_db.models import User, Hospital
         
         db = SessionLocal()
         try:

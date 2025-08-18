@@ -11,9 +11,8 @@ from datetime import time
 import uuid
 
 # Import database and models
-from .database import SessionLocal
-sys.path.append('flask_app/app')
-import models
+from shared_db.database import SessionLocal
+from shared_db import models
 
 router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["availability"])
 

@@ -6,30 +6,27 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, g, request, redirect, url_for
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
 from datetime import timedelta 
+
 from .utils.url_helper import build_url_with_context
+from shared_db.database import engine, PublicBase, TenantBase, get_db_session
+# Import models (จะใช้ PublicBase แทน Base)
+from shared_db import models
 
 # โหลด .env ก่อนเสมอ
-load_dotenv()
-
-# Import models (จะใช้ PublicBase แทน Base)
-import sys
-sys.path.append('.')
-from . import models
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 
 # --- ส่วนกลาง ---
-DATABASE_URL = os.environ.get("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# DATABASE_URL = os.environ.get("DATABASE_URL")
+# engine = create_engine(DATABASE_URL)
+# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # สร้างเฉพาะ public tables (ไม่สร้าง tenant tables ใน public)
-models.PublicBase.metadata.create_all(bind=engine)
+PublicBase.metadata.create_all(bind=engine)
 
 # --- Factory สำหรับสร้าง Celery App ---
 def celery_init_app(app: Flask) -> Celery:
@@ -114,7 +111,7 @@ def create_app() -> Flask:
         if request.path.startswith('/static') or request.path == '/favicon.ico':
             return
 
-        db = SessionLocal()
+        db = get_db_session()
         
         # ตรวจสอบ subdomain จาก URL parameter ก่อน (สำหรับ development)
         subdomain_param = request.args.get('subdomain')
@@ -157,17 +154,13 @@ def create_app() -> Flask:
             try:
                 if exception:
                     db.rollback()  # Rollback ถ้ามี error
+                # Reset search path ก่อนคืน connection กลับไปที่ pool
                 db.execute(text('SET search_path TO public'))
             except Exception as e:
-                print(f"Error in teardown: {e}")
-                # ถ้า transaction abort แล้ว ให้ปิดแล้วเปิดใหม่
-                try:
-                    db.close()
-                    db = SessionLocal()
-                    db.execute(text('SET search_path TO public'))
-                except:
-                    pass
+                # ใช้ app.logger จะดีกว่า print()
+                app.logger.error(f"Error during session teardown: {e}")
             finally:
+                # ปิด session เสมอ
                 db.close()
 
     # --- Helper Functions ---

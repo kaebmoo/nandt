@@ -3,17 +3,19 @@
 from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
                         create_engine, event, Boolean, 
                         Time, Text, Enum as SQLEnum, JSON, Date)
-from sqlalchemy.orm import relationship, declarative_base
+# from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.schema import CreateSchema
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
 import enum
 import random
 import string
+from .database import PublicBase, TenantBase
 
 # สร้าง Base แยกสำหรับ public schema และ tenant schemas
-PublicBase = declarative_base()
-TenantBase = declarative_base()
+# PublicBase = declarative_base()
+# TenantBase = declarative_base()
 
 # --- Enum Definitions ---
 class DayOfWeek(enum.Enum):

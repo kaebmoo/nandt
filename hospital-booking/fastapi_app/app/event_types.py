@@ -10,9 +10,8 @@ import re
 import datetime
 
 # Import database and models
-from .database import SessionLocal
-sys.path.append('flask_app/app')
-import models
+from shared_db.database import SessionLocal
+from shared_db import models
 
 # Import the new default template creator from availability.py
 from .availability import get_or_create_default_template

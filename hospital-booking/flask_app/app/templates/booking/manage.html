@@ -43,7 +43,7 @@
             
             <div class="space-y-3">
                 {% if booking.can_reschedule %}
-                <a href="{{ url('booking.reschedule_booking', reference=booking.booking_reference) }}" 
+                <a href="{{ url('booking.reschedule_booking', reference=booking.booking_reference) }}"
                    class="block w-full text-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                     เลื่อนนัด
                 </a>
@@ -60,7 +60,7 @@
                 </form>
                 {% endif %}
                 
-                <a href="{{ url('booking.booking_home') }}" 
+                <a href="{{ url('booking.booking_home') }}"
                    class="block w-full text-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                     กลับหน้าหลัก
                 </a>

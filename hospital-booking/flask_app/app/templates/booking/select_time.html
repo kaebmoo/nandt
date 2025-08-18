@@ -55,7 +55,7 @@
         <div class="max-w-6xl mx-auto px-4 py-6">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
-                    <a href="/book?subdomain={{ subdomain }}" class="text-gray-600 hover:text-gray-900">
+                    <a href="{{ url('booking.booking_home') }}" class="text-gray-600 hover:text-gray-900">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
@@ -180,7 +180,7 @@
         
         <!-- Continue Button -->
         <div class="mt-8 flex justify-end">
-            <form id="booking-form" method="POST" action="/book/confirm?subdomain={{ subdomain }}">
+            <form id="booking-form" method="POST" action="{{ url('booking.confirm_booking') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="event_type_id" value="{{ event_type.id }}">
                 <input type="hidden" name="event_type_name" value="{{ event_type.name }}">
@@ -205,6 +205,16 @@
         const availabilitySchedule = {{ availability_schedule|tojson|safe }};
         let currentMonth = {{ current_month }};
         let currentYear = {{ current_year }};
+
+        // 🔥 1. สร้าง URL ต้นแบบจาก Python (วิธีแก้ปัญหา URL ซ้ำซ้อน)
+        //    เราจะให้ Flask สร้าง URL ที่ถูกต้องให้ แล้วใช้ .replace() ใน JS
+        const getApiPath = (path) => {
+            {% if subdomain %}
+                return path + '?subdomain={{ subdomain }}';
+            {% else %}
+                return path;
+            {% endif %}
+        };
         
         function selectDate(element) {
             const date = element.dataset.date;
@@ -251,7 +261,9 @@
             loading.classList.remove('hidden');
             
             try {
-                const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
+                const apiUrl = getApiPath(`/book/api/availability/${eventTypeId}/${date}`);
+                const response = await fetch(apiUrl);
+                // const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
                 const data = await response.json();
                 
                 if (data.slots && data.slots.length > 0) {
@@ -314,7 +326,11 @@
             
             // Load new calendar via AJAX
             try {
-                const response = await fetch(`/book/api/calendar/${currentYear}/${currentMonth}?event_type_id=${eventTypeId}&subdomain=${subdomain}`);
+                // ✅ สร้าง URL ที่ถูกต้องด้วยการแทนที่ placeholder
+                const apiUrl = getApiPath(`/book/api/calendar/${currentYear}/${currentMonth}`) + 
+                                    `${subdomain ? '&' : '?'}event_type_id=${eventTypeId}`;
+                const response = await fetch(apiUrl);
+                // const response = await fetch(`/book/api/calendar/${currentYear}/${currentMonth}?event_type_id=${eventTypeId}&subdomain=${subdomain}`);
                 const data = await response.json();
                 
                 // Update month display
@@ -378,6 +394,17 @@
                 });
             });
         }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // ค้นหา element ของวันแรกที่สามารถจองได้ (ไม่ใช่วันที่ผ่านมาแล้ว)
+            const firstAvailableDay = document.querySelector('.calendar-day.available:not(.past)');
+
+            // ถ้าเจอปฏิทินในมุมมองแรก...
+            if (firstAvailableDay) {
+                // ...สั่งให้ฟังก์ชัน selectDate ทำงานเหมือนกับว่าผู้ใช้คลิกเองเลย
+                selectDate(firstAvailableDay);
+            }
+        });
     </script>
 </body>
 </html>

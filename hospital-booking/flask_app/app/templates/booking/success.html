@@ -121,13 +121,13 @@
                 </button>
                 
                 <!-- Manage Booking -->
-                <a href="/book/manage/{{ booking.booking_reference }}?subdomain={{ subdomain }}" 
+                <a href="{{ url('booking.manage_booking', reference=booking.booking_reference) }}"
                    class="block w-full text-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all">
                     จัดการการนัดหมาย (เลื่อน/ยกเลิก)
                 </a>
                 
                 <!-- New Booking -->
-                <a href="/book?subdomain={{ subdomain }}" 
+                <a href="{{ url('booking.booking_home') }}"
                    class="block w-full text-center px-6 py-3 text-purple-600 hover:underline">
                     จองนัดหมายใหม่
                 </a>
