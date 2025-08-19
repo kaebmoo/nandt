@@ -168,3 +168,6 @@ clinic_scheduler_saas/alembic.ini
 multi-tenant/dump.rdb
 multi-tenant/dump.rdb
 /flask_session
+dump.rdb
+hospital-booking/subdomain_fixed.md
+hospital-booking/suggest.md
