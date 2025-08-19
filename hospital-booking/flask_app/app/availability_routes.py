@@ -166,6 +166,7 @@ def create_template():
                          quick_form=quick_form,
                          current_user=current_user,
                          action='create',
+                         template_overrides=[],
                          page_title='สร้างเทมเพลตใหม่')
 
 # ===== EDIT TEMPLATE (FINAL CORRECTED VERSION) =====

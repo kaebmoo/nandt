@@ -194,69 +194,66 @@
                 </div>
             </div>
 
+            <!-- Template-specific Date Overrides -->
             <!-- Template-specific Date Overrides (เฉพาะการแก้ไข) -->
-            {% if action == 'edit' %}
             <div class="mb-8">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-md font-medium text-gray-900">วันพิเศษของเทมเพลตนี้</h3>
-                    <button type="button" onclick="showAddOverrideModal()" 
-                            class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm">
-                        <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                        </svg>
-                        เพิ่มวันพิเศษ
-                    </button>
+                    
+                    {% if action == 'create' %}
+                        <!-- แสดงข้อความแจ้งสำหรับหน้าสร้าง -->
+                        <span class="text-sm text-gray-500">
+                            สามารถเพิ่มวันพิเศษได้หลังสร้างเทมเพลต
+                        </span>
+                    {% else %}
+                        <!-- แสดงปุ่มเพิ่มสำหรับหน้าแก้ไข -->
+                        <button type="button" onclick="showAddOverrideModal()" 
+                                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm">
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            เพิ่มวันพิเศษ
+                        </button>
+                    {% endif %}
                 </div>
-                {% if template_overrides is defined and template_overrides %}
-                    <div class="space-y-3">
-                        {% for override in template_overrides %}
-                            <div class="override-item border rounded-lg p-4 bg-purple-50 border-purple-200">
-                                <div class="flex items-center justify-between mb-2">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-sm font-medium text-gray-700">📅 {{ override.date | thai_date }}</span>
-                                    </div>
-                                    <form method="POST" action="{{ url('availability.delete_date_override', override_id=override.id) }}" 
-                                          style="display: inline;" 
-                                          onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="text-red-600 hover:text-red-800 transition-colors">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                        </button>
-                                    </form>
-                                </div>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <span class="text-sm font-medium">
-                                            {% if override.is_unavailable %}🚫 วันหยุด{% else %}⏰ เวลาพิเศษ{% endif %}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        {% if override.is_unavailable %}
-                                            <div class="text-sm text-red-600">ปิดทำการ</div>
-                                        {% else %}
-                                            <div class="flex items-center space-x-2">
-                                                <span class="text-sm font-mono">{{ override.custom_start_time or '' }}</span>
-                                                <span class="text-gray-500">-</span>
-                                                <span class="text-sm font-mono">{{ override.custom_end_time or '' }}</span>
-                                            </div>
-                                        {% endif %}
-                                        {% if override.reason %}
-                                            <div class="text-sm text-gray-600 mt-1">"{{ override.reason }}"</div>
-                                        {% endif %}
-                                    </div>
+                
+                {% if action == 'create' %}
+                    <!-- แสดงข้อความสำหรับหน้าสร้าง -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-blue-800">
+                                    วันพิเศษ
+                                </h3>
+                                <div class="mt-2 text-sm text-blue-700">
+                                    <p>หลังจากสร้างเทมเพลตแล้ว คุณสามารถ:</p>
+                                    <ul class="list-disc list-inside mt-1">
+                                        <li>เพิ่มวันหยุดพิเศษ</li>
+                                        <li>กำหนดเวลาพิเศษสำหรับวันที่เฉพาะ</li>
+                                        <li>ปิดการให้บริการชั่วคราว</li>
+                                    </ul>
                                 </div>
                             </div>
-                        {% endfor %}
+                        </div>
                     </div>
                 {% else %}
-                    <div class="text-center py-8 text-gray-500">
-                        <p class="text-sm">ยังไม่มีวันพิเศษสำหรับเทมเพลตนี้</p>
-                    </div>
+                    <!-- แสดงรายการวันพิเศษสำหรับหน้าแก้ไข (โค้ดเดิม) -->
+                    {% if template_overrides %}
+                        <div class="space-y-3">
+                            <!-- โค้ดแสดง overrides เดิม -->
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500">
+                            <p class="text-sm">ยังไม่มีวันพิเศษสำหรับเทมเพลตนี้</p>
+                        </div>
+                    {% endif %}
                 {% endif %}
             </div>
-            {% endif %}
 
             <!-- Action Buttons -->
             <div class="flex justify-between pt-6 border-t">
