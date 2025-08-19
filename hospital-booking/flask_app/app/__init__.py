@@ -162,6 +162,10 @@ def create_app() -> Flask:
             finally:
                 # ปิด session เสมอ
                 db.close()
+    # --- Template Helpers ---
+    from .core.template_helpers import register_template_filters, register_template_context
+    register_template_filters(app)
+    register_template_context(app)
 
     # --- Helper Functions ---
     # Register navigation helper
@@ -185,72 +189,6 @@ def create_app() -> Flask:
         from .utils.url_helper import build_url_with_context
         return build_url_with_context(endpoint, **kwargs)
 
-
-    # --- Template Filters ---
-    @app.template_filter('day_name_th')
-    def day_name_th_filter(day_number):
-        """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทย"""
-        day_names = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
-        return day_names[day_number] if 0 <= day_number < 7 else ''
-
-    @app.template_filter('day_name_th_short')
-    def day_name_th_short_filter(day_number):
-        """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทยแบบสั้น"""
-        day_names = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
-        return day_names[day_number] if 0 <= day_number < 7 else ''
-
-    @app.template_filter('format_time_range')
-    def format_time_range_filter(start_time, end_time):
-        """Filter สำหรับ format ช่วงเวลา"""
-        return f"{start_time} - {end_time}"
-
-    @app.template_filter('thai_date')
-    def thai_date_filter(date):
-        """Filter สำหรับแปลงวันที่เป็นรูปแบบ dd/mm/yyyy"""
-        if not date:
-            return ''
-        
-        try:
-            from datetime import datetime
-            
-            # ถ้าเป็น string
-            if isinstance(date, str):
-                # ถ้าเป็น yyyy-mm-dd format
-                if '-' in date and len(date.split('-')[0]) == 4:
-                    parts = date.split('-')
-                    if len(parts) == 3:
-                        return f"{parts[2]}/{parts[1]}/{parts[0]}"
-                # ถ้าเป็น dd/mm/yyyy อยู่แล้ว
-                elif '/' in date:
-                    return date
-                # พยายาม parse
-                else:
-                    try:
-                        dt = datetime.strptime(date[:10], '%Y-%m-%d')
-                        return dt.strftime('%d/%m/%Y')
-                    except:
-                        return date
-            
-            # ถ้าเป็น datetime/date object
-            elif hasattr(date, 'strftime'):
-                return date.strftime('%d/%m/%Y')
-            
-            return str(date)
-        except:
-            return str(date)
-
-    @app.template_filter('thai_time')
-    def thai_time_filter(time):
-        """Filter สำหรับ format เวลา"""
-        if not time:
-            return ''
-        
-        try:
-            if isinstance(time, str):
-                return time[:5]  # HH:MM
-            return time.strftime('%H:%M')
-        except:
-            return str(time)
 
     # --- Context Processors ---
     @app.context_processor

@@ -474,30 +474,3 @@ def not_found_error(error):
 def internal_error(error):
     flash('เกิดข้อผิดพลาดภายในระบบ', 'error')
     return redirect(build_url_with_context('availability.availability_settings'))
-
-# ===== TEMPLATE FILTERS =====
-@availability_bp.app_template_filter('day_name_th')
-def day_name_th(day_number):
-    """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทย"""
-    day_names = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
-    return day_names[day_number] if 0 <= day_number < 7 else ''
-
-@availability_bp.app_template_filter('day_name_th_short')
-def day_name_th_short(day_number):
-    """Filter สำหรับแปลงเลขวันเป็นชื่อวันภาษาไทยแบบสั้น"""
-    day_names = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
-    return day_names[day_number] if 0 <= day_number < 7 else ''
-
-@availability_bp.app_template_filter('format_time_range')
-def format_time_range(start_time, end_time):
-    """Filter สำหรับ format ช่วงเวลา"""
-    return f"{start_time} - {end_time}"
-
-# ===== CONTEXT PROCESSORS =====
-@availability_bp.app_context_processor
-def inject_template_globals():
-    """Context processor สำหรับส่งตัวแปรที่ใช้บ่อยไป template"""
-    return {
-        'day_names_th': ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'],
-        'day_names_th_short': ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
-    }
