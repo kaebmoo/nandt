@@ -1,4 +1,4 @@
-# hospital-booking/flask_app/app/models.py - Updated with new structure
+# hospital-booking/shared_db/models.py
 
 from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
                         create_engine, event, Boolean, 
@@ -69,8 +69,8 @@ class AvailabilityTemplate(TenantBase):
     description = Column(Text)
     timezone = Column(String(50), default='Asia/Bangkok')
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     # Relationships
     availabilities = relationship("Availability", back_populates="template", cascade="all, delete-orphan")
@@ -98,7 +98,7 @@ class Availability(TenantBase):
     end_time = Column(Time, nullable=False)
     
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     # Relationships
     template = relationship("AvailabilityTemplate", back_populates="availabilities")
@@ -139,7 +139,7 @@ class EventType(TenantBase):
     min_notice_hours = Column(Integer, default=4)
     max_advance_days = Column(Integer, default=60)
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     # Relationships
     availability_template = relationship("AvailabilityTemplate", back_populates="event_types")
@@ -167,7 +167,7 @@ class DateOverride(TenantBase):
     
     reason = Column(String(255))
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     # Relationships
     template = relationship("AvailabilityTemplate", back_populates="date_overrides")
@@ -196,8 +196,8 @@ class Patient(TenantBase):
     preferred_language = Column(String(10), default='th')
     communication_preference = Column(String(20), default='sms')
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 class ServiceType(TenantBase):
     __tablename__ = 'service_types'
@@ -231,12 +231,27 @@ class Holiday(TenantBase):
     __tablename__ = 'holidays'
     
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)
-    date = Column(DateTime, nullable=False)
+    name = Column(String(255), nullable=False)
+    date = Column(Date, nullable=False, unique=True)
+    source = Column(String(50), default='manual', nullable=False) # e.g., 'iCal_th', 'manual'
+    is_active = Column(Boolean, default=True, nullable=False)
     is_recurring = Column(Boolean, default=False)
     description = Column(Text)
-    
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # เพิ่มเติม (optional)
+    # holiday_type = Column(String(50))  # 'public', 'bank', 'special'
+    # affects_booking = Column(Boolean, default=True)  # บางวันอาจไม่ปิดจอง
+    # custom_message = Column(Text)  # ข้อความแสดงให้ลูกค้า
+
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(
+        DateTime, 
+        default=lambda: datetime.datetime.now(datetime.timezone.utc), 
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    def __repr__(self):
+        return f"<Holiday(date='{self.date}', name='{self.name}')>"
 
 class Appointment(TenantBase):
     __tablename__ = 'appointments'
@@ -270,8 +285,8 @@ class Appointment(TenantBase):
     rescheduled_from_id = Column(Integer, ForeignKey('appointments.id'))
     reschedule_count = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     patient = relationship("Patient")
     provider = relationship("Provider", back_populates="appointments")

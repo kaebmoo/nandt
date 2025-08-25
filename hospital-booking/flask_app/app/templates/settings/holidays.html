@@ -1,0 +1,502 @@
+<!-- templates/settings/holidays.html -->
+{% extends "base.html" %}
+
+{% block title %}วันหยุด - NudDee{% endblock %}
+
+{% block extra_css %}
+<style>
+    body { font-family: 'Sarabun', sans-serif; }
+    .holiday-card {
+        transition: all 0.2s ease;
+    }
+    .holiday-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .source-badge {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 9999px;
+    }
+    .source-ical { background-color: #dbeafe; color: #1e40af; }
+    .source-manual { background-color: #f3e8ff; color: #6b21a8; }
+    .source-custom { background-color: #fef3c7; color: #92400e; }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 48px;
+        height: 24px;
+    }
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #cbd5e1;
+        transition: .4s;
+        border-radius: 24px;
+    }
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    input:checked + .toggle-slider {
+        background-color: #10b981;
+    }
+    input:checked + .toggle-slider:before {
+        transform: translateX(24px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} {% if category == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif category == 'info' %}bg-blue-100 border border-blue-400 text-blue-700{% else %}bg-green-100 border border-green-400 text-green-700{% endif %} px-4 py-3 rounded relative mb-4">
+                        {{ message }}
+                        <button onclick="this.parentElement.style.display='none'" class="absolute top-0 bottom-0 right-0 px-4 py-3">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">จัดการวันหยุด</h1>
+                <p class="mt-2 text-gray-600">กำหนดวันหยุดสำหรับระบบจองการนัดหมาย</p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <!-- Year Selector -->
+                <select id="yearSelect" onchange="changeYear()" 
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    
+                    {% for year in range(current_year - 1, current_year + 3) %}
+                        <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+                            พ.ศ. {{ year + 543 }}
+                        </option>
+                    {% endfor %}
+                </select>
+                
+                <!-- Sync Button -->
+                <button onclick="showSyncModal()" 
+                        class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
+                    นำเข้าวันหยุดราชการ
+                </button>
+                
+                <!-- Add Custom Holiday Button -->
+                <button onclick="showAddModal()" 
+                        class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                    <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    เพิ่มวันหยุด
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+            <div class="text-2xl font-bold text-gray-900">{{ holidays|length }}</div>
+            <div class="text-sm text-gray-600">วันหยุดทั้งหมด</div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+            <div class="text-2xl font-bold text-green-600">
+                {{ holidays|selectattr('is_active', 'equalto', true)|list|length }}
+            </div>
+            <div class="text-sm text-gray-600">เปิดใช้งาน</div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+            <div class="text-2xl font-bold text-blue-600">
+                {{ holidays|selectattr('source', 'equalto', 'iCal_th')|list|length }}
+            </div>
+            <div class="text-sm text-gray-600">จากปฏิทิน iCal</div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+            <div class="text-2xl font-bold text-purple-600">
+                {{ holidays|selectattr('source', 'equalto', 'manual')|list|length }}
+            </div>
+            <div class="text-sm text-gray-600">กำหนดเอง</div>
+        </div>
+    </div>
+
+    <!-- Holidays List -->
+    <div class="bg-white rounded-xl shadow-sm border">
+        <div class="p-6 border-b">
+            <h2 class="text-lg font-semibold text-gray-900">รายการวันหยุด</h2>
+        </div>
+        
+        {% if holidays %}
+        <div class="divide-y">
+            {% for holiday in holidays|sort(attribute='date') %}
+            <div class="holiday-card p-4 hover:bg-gray-50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <!-- Date Display -->
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-gray-900">
+                                {{ holiday.date.strftime('%-d') }}
+                            </div>
+                            <div class="text-sm text-gray-600">
+                                {{ ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 
+                                   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'][holiday.date.month - 1] }}
+                            </div>
+                        </div>
+                        
+                        <!-- Holiday Info -->
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <h3 class="font-medium text-gray-900">{{ holiday.name }}</h3>
+                                <span class="source-badge source-{{ holiday.source|lower|replace('_', '-') }}">
+                                    {% if holiday.source == 'iCal_th' %}
+                                        📅 ปฏิทิน
+                                    {% elif holiday.source == 'manual' %}
+                                        ✏️ กำหนดเอง
+                                    {% else %}
+                                        🔧 {{ holiday.source }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% if holiday.description %}
+                            <p class="text-sm text-gray-600 mt-1">{{ holiday.description }}</p>
+                            {% endif %}
+                            <div class="text-xs text-gray-500 mt-1">
+                                วัน{{ ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'][holiday.date.weekday()] }}
+                                ที่ {{ holiday.date | thai_date }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex items-center space-x-3">
+                    <!-- Active Toggle -->
+                    <label class="toggle-switch">
+                        <input type="checkbox" 
+                            {% if holiday.is_active %}checked{% endif %}
+                            data-toggle-url="{{ url('holidays.toggle_holiday', holiday_id=holiday.id) }}"
+                            onchange="toggleHoliday(this)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    
+                    <!-- Delete Button (for manual holidays only) -->
+                    {% if holiday.source == 'manual' %}
+                    <button onclick="deleteHoliday(this)" 
+                            data-delete-url="{{ url('holidays.delete_holiday', holiday_id=holiday.id) }}"
+                            class="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="ลบ">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                    {% endif %}
+                </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Empty State -->
+        <div class="p-12 text-center">
+            <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">ยังไม่มีวันหยุด</h3>
+            <p class="text-sm text-gray-500 mb-4">นำเข้าวันหยุดราชการหรือเพิ่มวันหยุดเอง</p>
+            <div class="flex justify-center space-x-3">
+                <button onclick="showSyncModal()" 
+                        class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    นำเข้าวันหยุดราชการ
+                </button>
+                <button onclick="showAddModal()" 
+                        class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                    เพิ่มวันหยุดเอง
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Sync Modal -->
+<div id="syncModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">นำเข้าวันหยุดราชการ</h2>
+        <p class="text-gray-600 mb-6">
+            ระบบจะนำเข้าวันหยุดราชการของประเทศไทยจากปฏิทิน iCloud สำหรับปีที่เลือก
+        </p>
+        
+        <form id="syncForm" onsubmit="handleSync(event)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">เลือกปี</label>
+                <select name="year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                    
+                    {% for year in range(current_year - 1, current_year + 3) %}
+                        <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+                            พ.ศ. {{ year + 543 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="flex justify-end space-x-4">
+                <button type="button" onclick="closeSyncModal()" 
+                        class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit"
+                        class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                    นำเข้า
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add/Edit Holiday Modal -->
+<div id="holidayModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4">
+        <h2 id="modalTitle" class="text-2xl font-bold text-gray-900 mb-6">เพิ่มวันหยุด</h2>
+        
+        <form id="holidayForm" onsubmit="handleSaveHoliday(event)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" id="holidayId" name="id">
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่ *</label>
+                    <input type="date" name="date" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อวันหยุด *</label>
+                    <input type="text" name="name" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="เช่น วันหยุดพิเศษ">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">คำอธิบาย</label>
+                    <textarea name="description" rows="3"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)"></textarea>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" onclick="closeHolidayModal()" 
+                        class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit"
+                        class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    บันทึก
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /**
+     * ดึง Subdomain จาก URL ปัจจุบัน
+     * สามารถดึงได้จากทั้ง hostname (เช่น humnoi.localhost)
+     * และ query parameter (เช่น localhost?subdomain=humnoi)
+     * @returns {string|null} - ชื่อ subdomain หรือ null ถ้าไม่พบ
+     */
+    function getSubdomain() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('subdomain')) {
+            return urlParams.get('subdomain');
+        }
+
+        const hostname = window.location.hostname;
+        const parts = hostname.split('.');
+        // เงื่อนไข: ต้องมีอย่างน้อย 2 ส่วน และส่วนแรกต้องไม่ใช่ 'www' หรือ 'localhost'
+        if (parts.length > 1 && !['www', 'localhost', '127'].includes(parts[0])) {
+            return parts[0];
+        }
+        return null;
+    }
+
+    /**
+     * ตรวจสอบว่า URL ปัจจุบันใช้ subdomain ใน hostname หรือไม่
+     * @returns {boolean} - true ถ้าใช้ (เช่น humnoi.localhost)
+     */
+    function isSubdomainInHost() {
+        const hostname = window.location.hostname;
+        const parts = hostname.split('.');
+        return parts.length > 1 && !['www', 'localhost', '127'].includes(parts[0]);
+    }
+
+    /**
+     * ฟังก์ชันสร้าง URL ที่สมบูรณ์แบบที่สุด
+     * @param {string} basePath - URL พื้นฐานจาก Flask
+     * @param {Object} [params={}] - พารามิเตอร์ที่จะเพิ่มเข้าไป
+     * @returns {string} - URL ที่สมบูรณ์
+     */
+    function buildUrl(basePath, params = {}) {
+        const url = new URL(basePath, window.location.origin);
+        const subdomain = getSubdomain();
+
+        // ถ้า subdomain ไม่อยู่ใน host (เช่น อยู่บน localhost) ให้เพิ่มเป็น query param
+        if (subdomain && !isSubdomainInHost()) {
+            url.searchParams.set('subdomain', subdomain);
+        }
+
+        // เพิ่มพารามิเตอร์อื่นๆ
+        for (const key in params) {
+            url.searchParams.set(key, params[key]);
+        }
+        
+        return url.pathname + url.search;
+    }
+
+    // --- ฟังก์ชันควบคุม UI และการทำงานต่างๆ (ใช้โค้ดเดิมได้เลย แต่เรียกใช้ buildUrl ตัวใหม่) ---
+
+    function changeYear() {
+        const year = document.getElementById('yearSelect').value;
+        window.location.href = buildUrl('{{ url("holidays.holiday_settings") }}', { year: year });
+    }
+
+    function showSyncModal() {
+        document.getElementById('syncModal').classList.remove('hidden');
+    }
+    function closeSyncModal() {
+        document.getElementById('syncModal').classList.add('hidden');
+    }
+
+    function showAddModal() {
+        document.getElementById('modalTitle').textContent = 'เพิ่มวันหยุด';
+        const form = document.getElementById('holidayForm');
+        form.action = buildUrl('{{ url("holidays.add_custom_holiday") }}');
+        form.reset();
+        document.getElementById('holidayId').value = '';
+        document.getElementById('holidayModal').classList.remove('hidden');
+    }
+    function closeHolidayModal() {
+        document.getElementById('holidayModal').classList.add('hidden');
+    }
+
+    async function handleSync(event) {
+        event.preventDefault();
+        const form = document.getElementById('syncForm');
+        const formData = new FormData(form);
+        const actionUrl = buildUrl(form.getAttribute('action') || '{{ url("holidays.sync_holidays") }}');
+
+        try {
+            const response = await fetch(actionUrl, { method: 'POST', body: formData });
+            if (response.ok && response.redirected) {
+                window.location.href = response.url; 
+            } else if(response.ok) {
+                 window.location.reload();
+            }
+            else {
+                alert('เกิดข้อผิดพลาดในการนำเข้าข้อมูล');
+            }
+        } catch (error) {
+            console.error('Sync error:', error);
+            alert('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้');
+        }
+    }
+
+    async function handleSaveHoliday(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        try {
+            const response = await fetch(form.action, { method: 'POST', body: formData });
+            if (response.ok && response.redirected) {
+                window.location.href = response.url;
+            } else if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('เกิดข้อผิดพลาดในการบันทึก');
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+            alert('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้');
+        }
+    }
+
+    async function toggleHoliday(checkbox) {
+        const url = checkbox.dataset.toggleUrl;
+        const isActive = checkbox.checked;
+        
+        const formData = new FormData();
+        formData.append('csrf_token', '{{ csrf_token() }}');
+        formData.append('is_active', isActive);
+        
+        try {
+            const response = await fetch(buildUrl(url), { method: 'POST', body: formData });
+            if (!response.ok) {
+                checkbox.checked = !isActive;
+                alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+            }
+        } catch (error) {
+            checkbox.checked = !isActive;
+            console.error('Toggle error:', error);
+        }
+    }
+
+    async function deleteHoliday(button) {
+        const url = button.dataset.deleteUrl;
+        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันหยุดนี้?')) return;
+        
+        const formData = new FormData();
+        formData.append('csrf_token', '{{ csrf_token() }}');
+        
+        try {
+            const response = await fetch(buildUrl(url), { method: 'POST', body: formData });
+            if (response.ok && response.redirected) {
+                window.location.href = response.url;
+            } else if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('เกิดข้อผิดพลาดในการลบ');
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            alert('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้');
+        }
+    }
+</script>
+{% endblock %}

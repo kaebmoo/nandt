@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, constr
 from typing import Literal
 from dotenv import load_dotenv
 from datetime import time
+from .holidays import router as holidays_router
 
 load_dotenv()
 
@@ -67,6 +68,7 @@ app.add_middleware(
 app.include_router(event_types_router)
 app.include_router(availability_router)
 app.include_router(booking_router)
+app.include_router(holidays_router)
 
 # --- Dependency ---
 def get_db():

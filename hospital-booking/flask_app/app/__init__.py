@@ -9,7 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
-from datetime import timedelta 
+from datetime import datetime, timedelta 
+from celery.schedules import crontab
 
 from .utils.url_helper import build_url_with_context
 from shared_db.database import engine, PublicBase, TenantBase, get_db_session
@@ -95,7 +96,15 @@ def create_app() -> Flask:
             broker_url=os.environ.get("REDIS_URL"),
             result_backend=os.environ.get("REDIS_URL"),
             # เพิ่ม task imports ที่นี่ ถ้ามี
-            # imports=("app.tasks",)
+            imports=("app.tasks",),
+            # ADD the beat schedule
+            beat_schedule={
+                'sync-holidays-annually': {
+                    'task': 'tasks.sync_all_tenant_holidays',
+                    # Runs on January 2nd at 3:15 AM
+                    'schedule': crontab(minute='15', hour='3', day_of_month='2', month_of_year='1'),
+                },
+            }
         ),
     )
 
@@ -231,13 +240,17 @@ def create_app() -> Flask:
     from . import auth
     app.register_blueprint(auth.auth_bp)
 
-    # 3. ลงทะเบียน Availability Routes (ใหม่)
+    # 3. ลงทะเบียน Availability Routes 
     from .availability_routes import availability_bp
     app.register_blueprint(availability_bp)
 
-    # 4. ลงทะเบียน Public Booking Routes (เพิ่มบรรทัดนี้!)
+    # 4. ลงทะเบียน Public Booking Routes
     from .public_booking import public_bp
     app.register_blueprint(public_bp)
+
+    # 5. ลงทะเบียน Holiday Routes
+    from .holiday_routes import holiday_bp
+    app.register_blueprint(holiday_bp)
 
     # Exempt the specific view from CSRF protection
     # csrf.exempt('booking.get_availability')
@@ -246,7 +259,7 @@ def create_app() -> Flask:
     # ทำให้ template สามารถเรียกใช้ {{ get_current_user() }} ได้
     app.add_template_global(auth.get_current_user, 'get_current_user')
 
-    # 5. เริ่มต้น Celery
+    # 6. เริ่มต้น Celery
     celery_init_app(app)
 
     return app

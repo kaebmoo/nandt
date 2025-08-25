@@ -196,6 +196,25 @@ async def get_booking_availability(
         
         # 2. Parse date
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
+
+        # 2.5 NEW: Check for holidays first
+        holiday = db.query(models.Holiday).filter(
+            models.Holiday.date == target_date,
+            models.Holiday.is_active == True
+        ).first()
+
+        if holiday:
+            # It's a holiday, return no slots immediately
+            return AvailabilityResponse(
+                date=date,
+                slots=[],
+                event_type={"name": event_type.name, "duration": event_type.duration_minutes},
+                message=holiday.custom_message or f"ปิดทำการ: {holiday.name}",
+                is_holiday=True
+                # You could optionally include holiday info in the response
+                # "holiday_info": {"name": holiday.name}
+            )
+        
         day_of_week = target_date.weekday()  # 0=Monday, 6=Sunday
         
         # Convert to our DayOfWeek enum (0=Sunday, 6=Saturday)

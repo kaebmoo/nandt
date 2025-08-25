@@ -378,7 +378,7 @@ def admin_cancel_appointment(appointment_id):
             
             # อัพเดต appointment
             appointment.status = 'cancelled'
-            appointment.cancelled_at = datetime.utcnow()
+            appointment.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
             appointment.cancelled_by = 'admin'
             appointment.cancellation_reason = f"[Admin] {reason}"
             
@@ -432,7 +432,7 @@ def cancel_appointment(appointment_id):
         
         # อัพเดต status เหมือนกับที่ FastAPI ทำ
         appointment.status = 'cancelled'  # ใช้ 'cancelled' ตาม database
-        appointment.cancelled_at = datetime.utcnow()
+        appointment.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
         appointment.cancelled_by = 'admin'
         
         db.commit()
@@ -619,7 +619,7 @@ def quick_cancel_appointment(appointment_id):
         reason = request.json.get('reason', 'ยกเลิกโดยเจ้าหน้าที่')
         
         appointment.status = 'cancelled'
-        appointment.cancelled_at = datetime.utcnow()
+        appointment.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
         appointment.cancelled_by = 'admin'
         appointment.cancellation_reason = reason
         
