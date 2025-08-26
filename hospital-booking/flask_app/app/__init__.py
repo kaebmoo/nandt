@@ -76,13 +76,19 @@ def create_app() -> Flask:
         # Development logging
         app.logger.setLevel(logging.DEBUG)
 
+    # --- ได้ตำแหน่งที่แน่นอนของโปรเจกต์ ---
+    # basedir จะได้พาธเต็มของโฟลเดอร์ที่ไฟล์ __init__.py นี้อยู่ (คือ .../flask_app/app/)
+    basedir = os.path.abspath(os.path.dirname(__file__))
+
     # --- โหลด Configuration ---
     # ตั้งค่าหลักๆ สำหรับ Flask และ Celery จาก .env
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "a-dev-secret-key"),
         # เพิ่มการตั้งค่าสำหรับ session
         SESSION_TYPE='filesystem',
-        SESSION_FILE_DIR='./flask_session/',
+        # สร้าง Absolute Path ไปยังโฟลเดอร์ flask_session ที่อยู่นอก flask_app/
+        # จะหมายถึง "จากโฟลเดอร์ app -> ถอยออกมา 2 ขั้น -> แล้วเข้าไปที่ flask_session"
+        SESSION_FILE_DIR=os.path.join(basedir, '..', '..', 'flask_session'),
         PERMANENT_SESSION_LIFETIME=timedelta(hours=2),  # 2 ชั่วโมง
         SESSION_COOKIE_SECURE=False,  # True สำหรับ HTTPS
         SESSION_COOKIE_HTTPONLY=True,

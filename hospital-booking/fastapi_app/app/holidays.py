@@ -10,6 +10,7 @@ import logging
 
 from shared_db.database import SessionLocal
 from shared_db import models
+from .holiday_service import HolidayService
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,17 @@ async def sync_holidays(
     
     logger.info(f"Syncing holidays for {subdomain}, year: {payload.year}")
     logger.info(f"Received {len(payload.holidays)} holidays")
+
+    # ถ้าไม่มี holidays ในpayload ให้ fetch เอง
+    if not payload.holidays:
+        fetched = HolidayService.fetch_from_bot_api(payload.year)
+        payload.holidays = [
+            HolidayBase(
+                date=h['date'],
+                name=h['name'],
+                source=h['source']
+            ) for h in fetched
+        ]
     
     try:
         added_count = 0
@@ -237,3 +249,13 @@ async def delete_holiday(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting: {str(e)}")
+    
+@router.get("/holidays/fetch/{year}")
+async def fetch_holidays_for_year(
+    subdomain: str,
+    year: int,
+    db: Session = Depends(get_db)
+):
+    """Fetch holidays from external API"""
+    holidays = HolidayService.fetch_from_bot_api(year)
+    return {"holidays": holidays}

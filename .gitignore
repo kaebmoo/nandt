@@ -171,3 +171,4 @@ multi-tenant/dump.rdb
 dump.rdb
 hospital-booking/subdomain_fixed.md
 hospital-booking/suggest.md
+/hospital-booking/flask_session

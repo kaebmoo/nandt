@@ -8,7 +8,6 @@ from datetime import datetime
 from .auth import login_required
 from .core.tenant_manager import with_tenant
 from .utils.url_helper import build_url_with_context
-from .services.holiday_service import HolidayFetcher
 
 holiday_bp = Blueprint('holidays', __name__, url_prefix='/settings')
 
@@ -75,27 +74,21 @@ def holiday_settings():
 @login_required
 @with_tenant(require_access=True)
 def sync_holidays():
-    """นำเข้าวันหยุดจาก iCal"""
+    """Manual sync button action - now just passes year to FastAPI"""
     year = request.form.get('year', datetime.now().year, type=int)
     
-    holidays_to_sync = HolidayFetcher.fetch_holidays_from_ical(year)
-    
-    if not holidays_to_sync:
-        flash(f"ไม่สามารถดึงข้อมูลวันหยุดสำหรับปี {year} ได้", "warning")
-        return redirect(build_url_with_context('holidays.holiday_settings'))
-        
-    # แปลง date object เป็น string เพื่อส่งเป็น JSON
-    for h in holidays_to_sync:
-        h['date'] = h['date'].isoformat()
-        
-    payload = { "year": year, "holidays": holidays_to_sync }
+    # ส่งแค่ปี ให้ FastAPI fetch เอง
+    payload = {
+        "year": year,
+        "holidays": []  # ส่งว่างไป FastAPI จะ fetch เอง
+    }
     
     result, error = make_api_request('POST', '/holidays/sync', json_data=payload)
     
     if error:
-        flash(f"เกิดข้อผิดพลาดระหว่างการนำเข้า: {error}", "error")
+        flash(f"เกิดข้อผิดพลาด: {error}", "error")
     else:
-        flash(result.get('message', "นำเข้าข้อมูลสำเร็จ!"), "success")
+        flash(result.get('message', "นำเข้าวันหยุดสำเร็จ!"), "success")
         
     return redirect(build_url_with_context('holidays.holiday_settings', year=year))
 
