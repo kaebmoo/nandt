@@ -1,0 +1,40 @@
+<!-- flask_app/app/templates/emails/otp.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Sarabun', Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .otp-box { 
+            background: #f3f4f6; 
+            padding: 20px; 
+            text-align: center; 
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .otp-code { 
+            font-size: 32px; 
+            font-weight: bold; 
+            color: #6366f1;
+            letter-spacing: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>รหัส OTP สำหรับค้นหานัดหมาย</h2>
+        
+        <div class="otp-box">
+            <p>รหัส OTP ของคุณคือ:</p>
+            <div class="otp-code">{{ otp }}</div>
+            <p><small>รหัสนี้ใช้ได้ภายใน 5 นาที</small></p>
+        </div>
+        
+        <p>หากคุณไม่ได้ขอรหัสนี้ กรุณาเพิกเฉย</p>
+        
+        <hr>
+        <p><small>ข้อความนี้ส่งจากระบบอัตโนมัติ กรุณาอย่าตอบกลับ</small></p>
+    </div>
+</body>
+</html>

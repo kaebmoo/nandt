@@ -21,6 +21,23 @@
             "envFile": "${workspaceFolder}/hospital-booking/.env",
             "jinja": true,
             "justMyCode": true
+        },
+        {
+            "name": "Debug Flask",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/hospital-booking/flask_app/run.py",
+            "cwd": "${workspaceFolder}/hospital-booking",
+            "env": {
+                "FLASK_APP": "flask_app/run.py",
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1"
+            },
+            "envFile": "${workspaceFolder}/hospital-booking/.env",
+            "args": [],
+            "jinja": true,
+            "justMyCode": false,
+            "console": "integratedTerminal"
         }
     ]
 }

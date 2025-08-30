@@ -4,11 +4,19 @@ import os
 import requests
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, g
 import secrets
+import time
 from datetime import datetime, timedelta
 import calendar
 import json
+from redis import Redis
+from rq import Queue
+
 from .utils.url_helper import build_url_with_context
 from .core.tenant_manager import TenantManager
+from .services.otp_service import otp_service
+from .services.email_service import queue_otp_email
+from .services.sms_service import queue_otp_sms
+
 
 # สร้าง Blueprint
 public_bp = Blueprint('booking', __name__, url_prefix='/book')
@@ -511,7 +519,6 @@ def my_appointments():
 
 @public_bp.route('/search-appointments', methods=['POST'])
 def search_appointments():
-    """ค้นหานัดหมาย - ส่ง OTP ก่อนแสดงผล"""
     subdomain = get_subdomain()
     
     search_type = request.form.get('search_type')
@@ -521,122 +528,109 @@ def search_appointments():
         flash('กรุณากรอกข้อมูลที่ต้องการค้นหา', 'error')
         return redirect(request.referrer)
     
-    # Generate OTP
-    otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+    # Generate OTP with pyotp (5 minutes expiration)
+    otp = otp_service.generate_otp(search_value, expiration=300)
     
-    # Store OTP in session with expiry
-    session['search_otp'] = {
-        'code': otp,
-        'search_type': search_type,
-        'search_value': search_value,
-        'created_at': datetime.now().isoformat(),
-        'attempts': 0
-    }
-    
-    # Send OTP based on search type
+    # Send OTP
     if search_type == 'email':
-        # TODO: Send OTP to email
-        print(f"📧 OTP {otp} sent to {search_value}")
+        queue_otp_email(search_value, otp)
         flash(f'รหัส OTP ถูกส่งไปยัง {search_value}', 'info')
         
     elif search_type == 'phone':
-        # TODO: Send OTP via SMS
+        clean_phone = search_value.replace(' ', '').replace('-', '')
+        queue_otp_sms(clean_phone, otp)
         masked_phone = search_value[:3] + '****' + search_value[-3:]
-        print(f"📱 OTP {otp} sent to {masked_phone}")
         flash(f'รหัส OTP ถูกส่งไปยัง {masked_phone}', 'info')
         
     elif search_type == 'reference':
-        # Reference code ไม่ต้อง OTP แต่ต้องมีข้อมูลเพิ่มเติม
         return redirect(url_for('booking.verify_reference', 
                               reference=search_value))
+    
+    # Store search info in session
+    session['pending_search'] = {
+        'type': search_type,
+        'value': search_value
+    }
     
     return render_template('booking/verify_otp.html',
                          search_type=search_type,
                          search_value=search_value,
                          subdomain=subdomain)
 
-# flask_app/app/public_booking.py
-
 @public_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
-    """ตรวจสอบ OTP และแสดงนัดหมาย"""
     subdomain = get_subdomain()
-    
     otp_input = request.form.get('otp')
     
-    # Check session
-    if 'search_otp' not in session:
+    if 'pending_search' not in session:
         flash('ข้อมูลหมดอายุ กรุณาค้นหาใหม่', 'error')
         return redirect(url_for('booking.my_appointments'))
     
-    otp_data = session['search_otp']
+    search_info = session['pending_search']
     
-    # Check expiry (5 minutes)
-    created_at = datetime.fromisoformat(otp_data['created_at'])
-    if datetime.now() - created_at > timedelta(minutes=5):
-        session.pop('search_otp', None)
-        flash('รหัส OTP หมดอายุ', 'error')
-        return redirect(url_for('booking.my_appointments'))
+    # Verify OTP using pyotp
+    success, message = otp_service.verify_otp(search_info['value'], otp_input)
     
-    # Check attempts
-    if otp_data['attempts'] >= 3:
-        session.pop('search_otp', None)
-        flash('พยายามมากเกินไป กรุณาเริ่มใหม่', 'error')
-        return redirect(url_for('booking.my_appointments'))
-    
-    # Verify OTP
-    if otp_input != otp_data['code']:
-        otp_data['attempts'] += 1
-        session['search_otp'] = otp_data
-        flash(f'รหัส OTP ไม่ถูกต้อง (เหลือ {3 - otp_data["attempts"]} ครั้ง)', 'error')
-        
-        # แก้ตรงนี้ - ส่งกลับไปหน้า verify_otp แทน request.referrer
+    if not success:
+        flash(message, 'error')
+        # Check remaining time
+        time_remaining = otp_service.get_time_remaining(search_info['value'])
         return render_template('booking/verify_otp.html',
-                             search_type=otp_data['search_type'],
-                             search_value=otp_data['search_value'],
+                             search_type=search_info['type'],
+                             search_value=search_info['value'],
+                             time_remaining=time_remaining,
                              subdomain=subdomain)
     
-    # OTP correct - fetch appointments
+    # Clear session
+    session.pop('pending_search', None)
+    
+    # Fetch appointments
     try:
         response = requests.post(
             f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/search",
             json={
-                'search_type': otp_data['search_type'],
-                'search_value': otp_data['search_value']
+                'search_type': search_info['type'],
+                'search_value': search_info['value']
             }
         )
         
-        # Clear OTP from session
-        session.pop('search_otp', None)
-        
         if response.ok:
             appointments = response.json()
-            
-            # Process dates for display
-            for apt in appointments:
-                dt = datetime.fromisoformat(apt['appointment_datetime'])
-                thai_day_names = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
-                thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-                                  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-                
-                apt['date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month-1]} {dt.year+543}"
-                apt['time_display'] = dt.strftime('%H:%M')
-                apt['is_upcoming'] = dt > datetime.now()
-                apt['can_manage'] = dt > datetime.now() + timedelta(hours=4)
-            
+            # Process appointments...
             return render_template('booking/appointment_list.html',
                                  appointments=appointments,
-                                 search_type=otp_data['search_type'],
-                                 search_value=otp_data['search_value'],
                                  subdomain=subdomain)
-        else:
-            flash('ไม่พบข้อมูลนัดหมาย', 'info')
-            return redirect(url_for('booking.my_appointments'))
-            
-    except Exception as e:
-        print(f"Error: {e}")
+    except:
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(url_for('booking.my_appointments'))
+    
+    return redirect(url_for('booking.my_appointments'))
+
+@public_bp.route('/resend-otp', methods=['POST'])
+def resend_otp():
+    """Resend OTP"""
+    if 'pending_search' not in session:
+        return jsonify({'error': 'Session expired'}), 400
+    
+    search_info = session['pending_search']
+    
+    # Check if can resend (wait 60 seconds between resends)
+    last_resend = session.get('last_otp_resend', 0)
+    if time.time() - last_resend < 60:
+        wait_time = 60 - int(time.time() - last_resend)
+        return jsonify({'error': f'กรุณารอ {wait_time} วินาที'}), 429
+    
+    # Generate new OTP
+    otp = otp_service.generate_otp(search_info['value'], expiration=300)
+    
+    # Send OTP
+    if search_info['type'] == 'email':
+        queue_otp_email(search_info['value'], otp)
+    elif search_info['type'] == 'phone':
+        queue_otp_sms(search_info['value'], otp)
+    
+    session['last_otp_resend'] = time.time()
+    
+    return jsonify({'success': True, 'message': 'ส่ง OTP ใหม่แล้ว'})
 
 # --- Helper Functions ---
 def generate_calendar_for_booking(year, month, availability_schedule):

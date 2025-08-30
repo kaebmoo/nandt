@@ -35,9 +35,12 @@
                        autofocus
                        class="w-full px-4 py-3 text-center text-2xl font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                        placeholder="000000">
+                       
+                {% if time_remaining %}
                 <p class="text-xs text-gray-500 mt-2">
-                    รหัสจะหมดอายุใน 5 นาที
+                    รหัสจะหมดอายุใน <span id="countdown">{{ time_remaining }}</span> วินาที
                 </p>
+                {% endif %}
             </div>
             
             <button type="submit"
@@ -45,6 +48,16 @@
                 ยืนยัน
             </button>
         </form>
+        
+        <div class="mt-4 text-center">
+            <button type="button" 
+                    id="resend-btn"
+                    onclick="resendOTP()"
+                    class="text-sm text-purple-600 hover:text-purple-700 disabled:text-gray-400"
+                    disabled>
+                ส่ง OTP ใหม่ (<span id="resend-timer">60</span>)
+            </button>
+        </div>
         
         <div class="mt-6 text-center">
             <a href="{{ url('booking.my_appointments') }}" 
@@ -54,4 +67,61 @@
         </div>
     </div>
 </div>
+
+<script>
+// Countdown timer
+{% if time_remaining %}
+let timeRemaining = {{ time_remaining }};
+const countdownEl = document.getElementById('countdown');
+
+const timer = setInterval(() => {
+    timeRemaining--;
+    if (timeRemaining <= 0) {
+        clearInterval(timer);
+        countdownEl.textContent = '0';
+        alert('OTP หมดอายุ กรุณาขอใหม่');
+    } else {
+        countdownEl.textContent = timeRemaining;
+    }
+}, 1000);
+{% endif %}
+
+// Resend timer
+let resendTime = 60;
+const resendBtn = document.getElementById('resend-btn');
+const resendTimerEl = document.getElementById('resend-timer');
+
+const resendTimer = setInterval(() => {
+    resendTime--;
+    if (resendTime <= 0) {
+        clearInterval(resendTimer);
+        resendBtn.disabled = false;
+        resendBtn.innerHTML = 'ส่ง OTP ใหม่';
+    } else {
+        resendTimerEl.textContent = resendTime;
+    }
+}, 1000);
+
+function resendOTP() {
+    fetch('{{ url("booking.resend_otp") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reset timer
+            resendTime = 60;
+            resendBtn.disabled = true;
+            location.reload();
+        } else {
+            alert(data.error);
+        }
+    });
+}
+</script>
 {% endblock %}

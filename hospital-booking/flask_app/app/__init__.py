@@ -9,14 +9,16 @@ from sqlalchemy.orm import sessionmaker
 from celery import Celery, Task
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
+from flask_mail import Mail
 from datetime import datetime, timedelta 
 from celery.schedules import crontab
 
 from .utils.url_helper import build_url_with_context
 from shared_db.database import engine, PublicBase, TenantBase, get_db_session
 # Import models (จะใช้ PublicBase แทน Base)
-from shared_db import models
+from shared_db import models 
 
+from dotenv import load_dotenv
 # โหลด .env ก่อนเสมอ
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
@@ -28,6 +30,8 @@ log_level = os.environ.get('LOG_LEVEL', 'INFO')
 
 # สร้างเฉพาะ public tables (ไม่สร้าง tenant tables ใน public)
 PublicBase.metadata.create_all(bind=engine)
+
+mail = Mail()
 
 # --- Factory สำหรับสร้าง Celery App ---
 def celery_init_app(app: Flask) -> Celery:
@@ -51,6 +55,9 @@ def create_app() -> Flask:
     """
     สร้างและตั้งค่า Flask Application
     """
+    # Load environment variables from .env file at the very beginning
+    load_dotenv()
+
     app = Flask(__name__)
 
     # === Setup Logging ===
@@ -114,10 +121,27 @@ def create_app() -> Flask:
         ),
     )
 
+    # เพิ่ม Mail configuration
+    app.config.update(
+        MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
+        MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
+        MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true',
+        MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
+        MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
+        MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@nuddee.com'),
+
+        NT_SMS_HOST = os.environ.get('NT_SMS_HOST'),
+        NT_SMS_API = os.environ.get('NT_SMS_API'),
+        NT_SMS_USER = os.environ.get('NT_SMS_USER'),
+        NT_SMS_PASS = os.environ.get('NT_SMS_PASS'),
+        NT_SMS_SENDER = os.environ.get('NT_SMS_SENDER')
+    )
+
     # Initialize CSRF Protection
     csrf = CSRFProtect()
     csrf.init_app(app)
     Session(app)
+    mail.init_app(app) 
 
     # --- Middleware สำหรับ Multi-Tenancy ---
     @app.before_request
@@ -269,4 +293,3 @@ def create_app() -> Flask:
     celery_init_app(app)
 
     return app
-
