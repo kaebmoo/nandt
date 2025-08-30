@@ -528,10 +528,15 @@ def search_appointments():
         flash('กรุณากรอกข้อมูลที่ต้องการค้นหา', 'error')
         return redirect(request.referrer)
     
-    # Generate OTP with pyotp (5 minutes expiration)
+    # ถ้าเป็น reference ไปหน้า manage โดยตรง ไม่ต้อง OTP
+    if search_type == 'reference':
+        # ใช้ build_url_with_context แทน url_for
+        return redirect(build_url_with_context('booking.manage_booking', 
+                                              reference=search_value))
+    
+    # Email และ Phone ต้องใช้ OTP
     otp = otp_service.generate_otp(search_value, expiration=300)
     
-    # Send OTP
     if search_type == 'email':
         queue_otp_email(search_value, otp)
         flash(f'รหัส OTP ถูกส่งไปยัง {search_value}', 'info')
@@ -541,12 +546,8 @@ def search_appointments():
         queue_otp_sms(clean_phone, otp)
         masked_phone = search_value[:3] + '****' + search_value[-3:]
         flash(f'รหัส OTP ถูกส่งไปยัง {masked_phone}', 'info')
-        
-    elif search_type == 'reference':
-        return redirect(url_for('booking.verify_reference', 
-                              reference=search_value))
     
-    # Store search info in session
+    # Store search info in session (สำหรับ email/phone เท่านั้น)
     session['pending_search'] = {
         'type': search_type,
         'value': search_value
@@ -603,7 +604,7 @@ def verify_otp():
     except:
         flash('เกิดข้อผิดพลาด', 'error')
     
-    return redirect(url_for('booking.my_appointments'))
+    return redirect(build_url_with_context('booking.my_appointments'))
 
 @public_bp.route('/resend-otp', methods=['POST'])
 def resend_otp():
