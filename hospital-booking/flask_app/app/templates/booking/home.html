@@ -103,10 +103,22 @@
     </div>
 
     <!-- Footer -->
+    <!-- เพิ่มในส่วน Footer ของ templates/booking/home.html -->
     <div class="mt-20 py-6">
-        <div class="max-w-6xl mx-auto px-4 text-center text-gray-500 text-sm">
+        <div class="max-w-6xl mx-auto px-4 text-center">
+            <!-- เพิ่มปุ่มค้นหานัดหมาย -->
+            <div class="mb-4">
+                <a href="{{ url('booking.my_appointments') }}"
+                class="inline-flex items-center px-6 py-3 border-2 border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    ค้นหานัดหมายที่จองไว้
+                </a>
+            </div>
             
-            <p class="mt-2">
+            <p class="text-gray-500 text-sm">
                 หากมีปัญหาในการจอง กรุณาติดต่อ: 
                 <a href="tel:021234567" class="text-purple-600 hover:underline">02-123-4567</a>
             </p>

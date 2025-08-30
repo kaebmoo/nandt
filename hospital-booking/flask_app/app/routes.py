@@ -807,8 +807,8 @@ def event_types_settings():
     return render_template('settings/event-types.html', 
                          current_user=current_user)
 
-@bp.route('/book/<provider_url>')
-@bp.route('/book/<provider_url>/<event_slug>')
+@bp.route('/booking/<provider_url>')
+@bp.route('/booking/<provider_url>/<event_slug>')
 def public_booking(provider_url, event_slug=None):
     """หน้าจองสาธารณะ (ไม่ต้อง login)"""
     
@@ -852,10 +852,9 @@ def public_booking(provider_url, event_slug=None):
                              
     except Exception as e:
         print(f"Error in public booking: {e}")
-        flash('เกิดข้อผิดพลาด', 'error')
+        current_app.logger.error(f"Error in public booking page for provider '{provider_url}': {e}", exc_info=True)
+        flash('เกิดข้อผิดพลาดในการโหลดหน้าจอง', 'error')
         return redirect(url_for('main.index'))
-    finally:
-        db.close()
 
 @bp.route('/booking-success/<booking_reference>')
 def booking_success(booking_reference):
@@ -887,10 +886,9 @@ def booking_success(booking_reference):
                              event_type=event_type)
                              
     except Exception as e:
-        print(f"Error in booking success: {e}")
+        current_app.logger.error(f"Error in booking success page for ref '{booking_reference}': {e}", exc_info=True)
+        flash('เกิดข้อผิดพลาดในการแสดงผลการจอง', 'error')
         return redirect(url_for('main.index'))
-    finally:
-        db.close()
 
 @bp.route('/health')
 def health():
@@ -916,4 +914,3 @@ def favicon():
     # Return a simple 204 No Content response to avoid 404 errors
     from flask import Response
     return Response(status=204)
-

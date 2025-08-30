@@ -493,6 +493,75 @@ def cancel_booking(reference):
     except Exception as e:
         flash('เกิดข้อผิดพลาด', 'error')
         return redirect(build_url_with_context('booking.manage_booking', reference=reference))
+    
+# ค้นหานัดหมายของฉัน
+
+@public_bp.route('/my-appointments')
+def my_appointments():
+    """หน้าค้นหานัดหมายของฉัน"""
+    subdomain = get_subdomain()
+    
+    if not subdomain:
+        flash('กรุณาเลือกโรงพยาบาล', 'info')
+        return redirect(url_for('main.index'))
+    
+    return render_template('booking/my_appointments.html',
+                         subdomain=subdomain)
+
+@public_bp.route('/search-appointments', methods=['POST'])
+def search_appointments():
+    """ค้นหานัดหมายด้วย email/phone และ reference"""
+    subdomain = get_subdomain()
+    
+    search_type = request.form.get('search_type')  # 'email', 'phone', 'reference'
+    search_value = request.form.get('search_value')
+    
+    if not search_value:
+        flash('กรุณากรอกข้อมูลที่ต้องการค้นหา', 'error')
+        return redirect(request.referrer)
+    
+    try:
+        # Call API to search
+        response = requests.post(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/search",
+            json={
+                'search_type': search_type,
+                'search_value': search_value
+            }
+        )
+        
+        if response.ok:
+            appointments = response.json()
+            
+            if not appointments:
+                flash('ไม่พบนัดหมายที่ค้นหา', 'info')
+                return render_template('booking/my_appointments.html',
+                                     subdomain=subdomain)
+            
+            # Process dates for display
+            for apt in appointments:
+                dt = datetime.fromisoformat(apt['appointment_datetime'])
+                thai_day_names = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+                thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                                  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+                
+                apt['date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month-1]} {dt.year+543}"
+                apt['time_display'] = dt.strftime('%H:%M')
+                apt['is_upcoming'] = dt > datetime.now()
+                apt['can_manage'] = dt > datetime.now() + timedelta(hours=4)
+            
+            return render_template('booking/appointment_list.html',
+                                 appointments=appointments,
+                                 search_type=search_type,
+                                 search_value=search_value,
+                                 subdomain=subdomain)
+        else:
+            flash('เกิดข้อผิดพลาดในการค้นหา', 'error')
+            return redirect(request.referrer)
+            
+    except Exception as e:
+        flash('ไม่สามารถเชื่อมต่อระบบได้', 'error')
+        return redirect(request.referrer)
 
 # --- Helper Functions ---
 def generate_calendar_for_booking(year, month, availability_schedule):

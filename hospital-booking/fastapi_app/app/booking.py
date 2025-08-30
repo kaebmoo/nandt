@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import text, and_, or_
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from datetime import datetime, timedelta, date, time
 import string
 import random
@@ -13,6 +13,10 @@ import sys
 # Import database and models
 from shared_db.database import SessionLocal
 from shared_db import models
+
+class AppointmentSearch(BaseModel):
+    search_type: Literal['email', 'phone', 'reference']
+    search_value: str
 
 router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["booking"])
 
@@ -720,6 +724,90 @@ async def cancel_booking(
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error cancelling: {str(e)}")
+    
+@router.post("/booking/search")
+async def search_appointments(
+    subdomain: str,
+    search: AppointmentSearch,
+    db: Session = Depends(get_db)
+):
+    """Search appointments by email, phone, or reference"""
+    
+    # Set search_path
+    schema_name = f"tenant_{subdomain}"
+    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    db.commit()
+    
+    try:
+        # Build query based on search type
+        query = db.query(models.Appointment)
+        
+        if search.search_type == 'email':
+            query = query.filter(
+                models.Appointment.guest_email == search.search_value
+            )
+        elif search.search_type == 'phone':
+            # Clean phone number (remove spaces, dashes)
+            clean_phone = search.search_value.replace(' ', '').replace('-', '')
+            query = query.filter(
+                models.Appointment.guest_phone == clean_phone
+            )
+        elif search.search_type == 'reference':
+            query = query.filter(
+                models.Appointment.booking_reference == search.search_value.upper()
+            )
+        else:
+            raise HTTPException(400, "Invalid search type")
+        
+        # Only show confirmed appointments
+        appointments = query.filter(
+            models.Appointment.status.in_(['confirmed', 'pending'])
+        ).order_by(
+            models.Appointment.start_time.desc()
+        ).limit(20).all()
+        
+        # Format results
+        results = []
+        for apt in appointments:
+            # Get event type
+            event_type = db.query(models.EventType).filter_by(
+                id=apt.event_type_id
+            ).first()
+            
+            # Get provider if exists
+            provider = None
+            if apt.provider_id:
+                provider = db.query(models.Provider).filter_by(
+                    id=apt.provider_id
+                ).first()
+            
+            results.append({
+                "booking_reference": apt.booking_reference,
+                "appointment_datetime": apt.start_time.isoformat(),
+                "end_time": apt.end_time.isoformat(),
+                "guest_name": apt.guest_name,
+                "guest_email": apt.guest_email,
+                "guest_phone": apt.guest_phone,
+                "status": apt.status,
+                "notes": apt.notes,
+                "event_type": {
+                    "id": event_type.id,
+                    "name": event_type.name,
+                    "duration": event_type.duration_minutes
+                } if event_type else None,
+                "provider": {
+                    "name": f"{provider.title} {provider.name}" if provider else None,
+                    "department": provider.department if provider else None
+                } if provider else None,
+                "created_at": apt.created_at.isoformat()
+            })
+        
+        return results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Error searching appointments: {str(e)}")
 
 # --- Email Functions (Mock) ---
 async def send_confirmation_email(email: str, appointment, event_type):

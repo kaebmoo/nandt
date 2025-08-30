@@ -1,0 +1,203 @@
+<!-- templates/booking/my_appointments.html -->
+{% extends "base.html" %}
+
+{% block title %}ค้นหานัดหมายของฉัน - NudDee{% endblock %}
+
+{% block extra_css %}
+<style>
+    body { font-family: 'Sarabun', sans-serif; }
+    .tab-active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- Header -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-4xl mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">ค้นหานัดหมายของฉัน</h1>
+                    <p class="text-gray-600">ค้นหานัดหมายที่จองไว้ด้วย Email, เบอร์โทร หรือรหัสการจอง</p>
+                </div>
+                <a href="{{ url('booking.booking_home') }}" 
+                   class="text-purple-600 hover:text-purple-700">
+                    จองนัดหมายใหม่ →
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-2xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-xl shadow-lg p-8">
+            
+            <!-- Search Type Tabs -->
+            <div class="flex space-x-2 mb-6">
+                <button type="button" onclick="setSearchType('email')" 
+                        class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all tab-active"
+                        data-type="email">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    ค้นด้วย Email
+                </button>
+                <button type="button" onclick="setSearchType('phone')"
+                        class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all"
+                        data-type="phone">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                    </svg>
+                    ค้นด้วยเบอร์โทร
+                </button>
+                <button type="button" onclick="setSearchType('reference')"
+                        class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all"
+                        data-type="reference">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                    </svg>
+                    ค้นด้วยรหัส
+                </button>
+            </div>
+            
+            <!-- Search Form -->
+            <form method="POST" action="{{ url('booking.search_appointments') }}" id="search-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="search_type" id="search_type" value="email">
+                
+                <!-- Email Input -->
+                <div id="email-input" class="search-input">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        อีเมลที่ใช้จอง
+                    </label>
+                    <input type="email" 
+                           name="search_value"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="example@email.com">
+                    <p class="text-xs text-gray-500 mt-1">กรอกอีเมลที่คุณใช้ในการจองนัดหมาย</p>
+                </div>
+                
+                <!-- Phone Input -->
+                <div id="phone-input" class="search-input hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        เบอร์โทรศัพท์ที่ใช้จอง
+                    </label>
+                    <input type="tel" 
+                           name="search_value"
+                           disabled
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="08x-xxx-xxxx">
+                    <p class="text-xs text-gray-500 mt-1">กรอกเบอร์โทรที่คุณใช้ในการจองนัดหมาย</p>
+                </div>
+                
+                <!-- Reference Input -->
+                <div id="reference-input" class="search-input hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        รหัสการจอง
+                    </label>
+                    <input type="text" 
+                           name="search_value"
+                           disabled
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="VN-A1B2C3"
+                           style="text-transform: uppercase;">
+                    <p class="text-xs text-gray-500 mt-1">กรอกรหัสการจอง 8 ตัวที่ได้รับจากระบบ</p>
+                </div>
+                
+                <!-- Submit Button -->
+                <button type="submit"
+                        class="w-full mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all font-medium">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    ค้นหานัดหมาย
+                </button>
+            </form>
+            
+            <!-- Info Box -->
+            <div class="mt-8 p-4 bg-blue-50 rounded-lg">
+                <h3 class="font-semibold text-gray-800 mb-2">ข้อมูลที่จะแสดง:</h3>
+                <ul class="text-sm text-gray-600 space-y-1">
+                    <li>• วันและเวลานัดหมาย</li>
+                    <li>• ประเภทการนัดหมาย</li>
+                    <li>• สถานะการนัด</li>
+                    <li>• ตัวเลือกในการจัดการ (เลื่อน/ยกเลิก)</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Footer Info -->
+        <div class="text-center mt-8 text-gray-600 text-sm">
+            <p>หากมีปัญหาในการค้นหา กรุณาติดต่อ</p>
+            <p class="mt-1">
+                <a href="tel:1888" class="text-purple-600 hover:underline">1888</a> |
+                <a href="mailto:info@nuddee.com" class="text-purple-600 hover:underline">info@nuddee.com</a>
+            </p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function setSearchType(type) {
+        // Update tabs
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('tab-active');
+            if (btn.dataset.type === type) {
+                btn.classList.add('tab-active');
+            }
+        });
+        
+        // Update form
+        document.getElementById('search_type').value = type;
+        
+        // Hide all inputs
+        document.querySelectorAll('.search-input').forEach(input => {
+            input.classList.add('hidden');
+            input.querySelector('input[name="search_value"]').disabled = true;
+        });
+        
+        // Show selected input
+        const selectedInput = document.getElementById(type + '-input');
+        selectedInput.classList.remove('hidden');
+        selectedInput.querySelector('input[name="search_value"]').disabled = false;
+        selectedInput.querySelector('input[name="search_value"]').focus();
+    }
+    
+    // Form validation
+    document.getElementById('search-form').addEventListener('submit', function(e) {
+        const searchType = document.getElementById('search_type').value;
+        const activeInput = document.querySelector(`#${searchType}-input input[name="search_value"]`);
+        
+        if (!activeInput.value.trim()) {
+            e.preventDefault();
+            alert('กรุณากรอกข้อมูลที่ต้องการค้นหา');
+            activeInput.focus();
+            return false;
+        }
+        
+        // Validate based on type
+        if (searchType === 'email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(activeInput.value)) {
+                e.preventDefault();
+                alert('รูปแบบอีเมลไม่ถูกต้อง');
+                return false;
+            }
+        } else if (searchType === 'phone') {
+            const phoneRegex = /^[0-9\-\s]+$/;
+            if (!phoneRegex.test(activeInput.value) || activeInput.value.replace(/\D/g, '').length < 9) {
+                e.preventDefault();
+                alert('รูปแบบเบอร์โทรไม่ถูกต้อง');
+                return false;
+            }
+        }
+    });
+</script>
+{% endblock %}
