@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}เกิดข้อผิดพลาด - NudDee{% endblock %}
+
+{% block content %}
+    <div class="text-center bg-white p-10 rounded-lg shadow-xl max-w-md mx-auto">
+        <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-red-100 mb-6">
+            <svg class="h-12 w-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">สิทธิ์การใช้งานไม่ถูกต้อง</h1>
+        <p class="text-gray-600 mb-6">
+            License Key สำหรับโรงพยาบาลนี้อาจไม่ถูกต้อง, หมดอายุ, หรือถูกระงับการใช้งาน
+            ทำให้คุณไม่สามารถเข้าถึงระบบได้ในขณะนี้
+        </p>
+        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md" role="alert">
+            <p class="font-bold">กรุณาติดต่อผู้ดูแลระบบ</p>
+            <p>โปรดติดต่อผู้ดูแลระบบของท่าน หรือติดต่อผู้ให้บริการซอฟต์แวร์เพื่อดำเนินการต่ออายุหรือแก้ไขสิทธิ์การใช้งาน</p>
+        </div>
+        <div class="mt-8">
+            <a href="{{ url_for('auth.logout') }}" class="text-sm text-gray-500 hover:text-gray-700 hover:underline">
+                ออกจากระบบ
+            </a>
+        </div>
+    </div>
+{% endblock %}
