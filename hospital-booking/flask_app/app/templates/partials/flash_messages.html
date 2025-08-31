@@ -1,14 +1,14 @@
 <!-- templates/partials/flash_messages.html -->
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-        <div class="flash-messages-container fixed top-4 right-4 z-50 space-y-2" style="max-width: 400px;">
+        <div id="flash-messages-container" class="fixed top-4 right-4 z-50 space-y-2" style="max-width: 400px;">
             {% for category, message in messages %}
                 <div class="flash-message flex items-center p-4 rounded-lg shadow-lg border-l-4 {{ 
                     'bg-green-50 border-green-400 text-green-800' if category == 'success' else
                     'bg-red-50 border-red-400 text-red-800' if category == 'error' else
                     'bg-yellow-50 border-yellow-400 text-yellow-800' if category == 'warning' else
                     'bg-blue-50 border-blue-400 text-blue-800'
-                }}" role="alert">
+                }}" role="alert" data-category="{{ category }}">
                     
                     <!-- Icon -->
                     <div class="flex-shrink-0">
@@ -39,8 +39,8 @@
                     <!-- Close Button -->
                     <div class="ml-4 flex-shrink-0">
                         <button type="button" 
-                                class="manual-close inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-                                onclick="this.closest('.flash-message').remove()">
+                                class="close-btn inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+                                onclick="this.closest('.flash-message').style.opacity='0'; setTimeout(() => this.closest('.flash-message').remove(), 300)">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                             </svg>
@@ -49,5 +49,26 @@
                 </div>
             {% endfor %}
         </div>
+        <script>
+            // Auto-hide flash messages
+            (function() {
+                const messages = document.querySelectorAll('#flash-messages-container .flash-message');
+                messages.forEach(msg => {
+                    // Auto hide after 5 seconds
+                    setTimeout(() => {
+                        msg.style.transition = 'opacity 0.3s';
+                        msg.style.opacity = '0';
+                        setTimeout(() => {
+                            msg.remove();
+                            // Remove container if empty
+                            const container = document.getElementById('flash-messages-container');
+                            if (container && container.children.length === 0) {
+                                container.remove();
+                            }
+                        }, 300);
+                    }, 5000);
+                });
+            })();
+        </script>
     {% endif %}
 {% endwith %}

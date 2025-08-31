@@ -30,14 +30,37 @@
         </div>
     </div>
 
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="max-w-2xl mx-auto px-4 mt-4">
+                {% for category, message in messages %}
+                    <div class="p-4 mb-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
     <!-- Main Content -->
     <div class="max-w-2xl mx-auto px-4 py-8">
         <div class="bg-white rounded-xl shadow-lg p-8">
             
             <!-- Search Type Tabs -->
             <div class="flex space-x-2 mb-6">
-                <button type="button" onclick="setSearchType('email')" 
+                <button type="button" onclick="setSearchType('reference')"
                         class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all tab-active"
+                        data-type="reference">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                    </svg>
+                    ค้นด้วยรหัส
+                </button>
+
+                <button type="button" onclick="setSearchType('email')" 
+                        class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all"
                         data-type="email">
                     <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -45,6 +68,7 @@
                     </svg>
                     ค้นด้วย Email
                 </button>
+
                 <button type="button" onclick="setSearchType('phone')"
                         class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all"
                         data-type="phone">
@@ -54,60 +78,58 @@
                     </svg>
                     ค้นด้วยเบอร์โทร
                 </button>
-                <button type="button" onclick="setSearchType('reference')"
-                        class="tab-btn flex-1 px-4 py-2 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all"
-                        data-type="reference">
-                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
-                    </svg>
-                    ค้นด้วยรหัส
-                </button>
+                
             </div>
             
             <!-- Search Form -->
             <form method="POST" action="{{ url('booking.search_appointments') }}" id="search-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="search_type" id="search_type" value="email">
+                <!-- <input type="hidden" name="search_type" id="search_type" value="{% if session.get('last_search_value') %}reference{% else %}email{% endif %}"> -->
                 
-                <!-- Email Input -->
-                <div id="email-input" class="search-input">
+                <!-- Hidden input - default เป็น reference -->
+                <input type="hidden" name="search_type" id="search_type" value="reference">
+                
+                <!-- Reference Input - ควรแสดงเสมอตอนเริ่มต้น หรือเมื่อมี last_search_value -->
+                <div id="reference-input" class="search-input">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        รหัสการจอง
+                    </label>
+                    <input type="text" 
+                        name="search_value"
+                        value="{{ session.pop('last_search_value', '') }}"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="BK-XXXXXX"
+                        style="text-transform: uppercase;">
+                    <p class="text-xs text-gray-500 mt-1">กรอกรหัสการจอง 8 ตัวที่ได้รับจากระบบ</p>
+                </div>
+
+                <!-- Email Input - ซ่อนเสมอตอนเริ่มต้น -->
+                <div id="email-input" class="search-input hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         อีเมลที่ใช้จอง
                     </label>
                     <input type="email" 
-                           name="search_value"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                           placeholder="example@email.com">
+                        name="search_value"
+                        disabled
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="example@email.com">
                     <p class="text-xs text-gray-500 mt-1">กรอกอีเมลที่คุณใช้ในการจองนัดหมาย</p>
                 </div>
-                
-                <!-- Phone Input -->
+
+                <!-- Phone Input - ซ่อนเสมอตอนเริ่มต้น -->
                 <div id="phone-input" class="search-input hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         เบอร์โทรศัพท์ที่ใช้จอง
                     </label>
                     <input type="tel" 
-                           name="search_value"
-                           disabled
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                           placeholder="08x-xxx-xxxx">
+                        name="search_value"
+                        disabled
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="08x-xxx-xxxx">
                     <p class="text-xs text-gray-500 mt-1">กรอกเบอร์โทรที่คุณใช้ในการจองนัดหมาย</p>
                 </div>
                 
-                <!-- Reference Input -->
-                <div id="reference-input" class="search-input hidden">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        รหัสการจอง
-                    </label>
-                    <input type="text" 
-                           name="search_value"
-                           disabled
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                           placeholder="VN-A1B2C3"
-                           style="text-transform: uppercase;">
-                    <p class="text-xs text-gray-500 mt-1">กรอกรหัสการจอง 8 ตัวที่ได้รับจากระบบ</p>
-                </div>
+                
                 
                 <!-- Submit Button -->
                 <button type="submit"
@@ -145,6 +167,18 @@
 
 {% block extra_js %}
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto hide flash messages after 5 seconds
+        const flashMessages = document.querySelectorAll('.bg-red-100, .bg-blue-100');
+        flashMessages.forEach(msg => {
+            setTimeout(() => {
+                msg.style.transition = 'opacity 0.5s';
+                msg.style.opacity = '0';
+                setTimeout(() => msg.remove(), 500);
+            }, 5000);
+        });
+    });
+    
     function setSearchType(type) {
         // Update tabs
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -161,6 +195,10 @@
         document.querySelectorAll('.search-input').forEach(input => {
             input.classList.add('hidden');
             input.querySelector('input[name="search_value"]').disabled = true;
+            // Clear value if not the active one
+            if (!input.id.startsWith(type)) {
+                input.querySelector('input[name="search_value"]').value = '';
+            }
         });
         
         // Show selected input

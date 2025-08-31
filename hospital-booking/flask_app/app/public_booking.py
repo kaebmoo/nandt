@@ -345,6 +345,8 @@ def success(reference):
 def manage_booking(reference):
     """หน้าจัดการการจอง (ดู/เลื่อน/ยกเลิก)"""
     subdomain = get_subdomain()
+
+    reference = reference.upper().strip()
     
     try:
         response = requests.get(
@@ -361,18 +363,20 @@ def manage_booking(reference):
 
             booking['time_display'] = dt.strftime('%H:%M')
             booking['full_date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month - 1]} {dt.year + 543}"
-
             
             return render_template('booking/manage.html',
                                  booking=booking,
                                  subdomain=subdomain)
         else:
-            flash('ไม่พบข้อมูลการจอง', 'error')
-            return redirect(build_url_with_context('booking.booking_home'))
+            # ไม่พบข้อมูล - แสดง error พร้อมกลับไปหน้าค้นหา
+            flash(f'ไม่พบข้อมูลการจองหมายเลข {reference}', 'error')
+            # เก็บ reference ที่ค้นหาไว้ใน session เพื่อใส่ใน form อัตโนมัติ
+            session['last_search_value'] = reference
+            return redirect(build_url_with_context('booking.my_appointments'))
             
     except Exception as e:
-        flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(build_url_with_context('booking.booking_home'))
+        flash('เกิดข้อผิดพลาดในการค้นหา', 'error')
+        return redirect(build_url_with_context('booking.my_appointments'))
 
 @public_bp.route('/reschedule/<reference>', methods=['GET', 'POST'])
 def reschedule_booking(reference):
@@ -530,6 +534,7 @@ def search_appointments():
     
     # ถ้าเป็น reference ไปหน้า manage โดยตรง ไม่ต้อง OTP
     if search_type == 'reference':
+        search_value = search_value.upper().strip()
         # ใช้ build_url_with_context แทน url_for
         return redirect(build_url_with_context('booking.manage_booking', 
                                               reference=search_value))
