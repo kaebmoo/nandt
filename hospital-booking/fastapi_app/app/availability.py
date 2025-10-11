@@ -4,17 +4,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field, validator, model_validator
-from typing import List, Optional, Dict, Tuple, Any
+from typing import List, Optional, Dict, Tuple, Any, Set
 import sys
 import datetime
 from datetime import time
 import uuid
+from threading import Lock
 
 # Import database and models
 from shared_db.database import SessionLocal
 from shared_db import models
 
 router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["availability"])
+
+_date_override_initialized: Set[str] = set()
+_date_override_lock = Lock()
 
 # --- Dependency ---
 def get_db():
@@ -32,6 +36,24 @@ def get_tenant_db(subdomain: str, db: Session):
         return db
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
+
+
+def ensure_date_override_table(subdomain: str, db: Session):
+    schema_key = subdomain or ""
+    with _date_override_lock:
+        if schema_key in _date_override_initialized:
+            return
+
+        try:
+            exists = db.execute(text("SELECT to_regclass('date_overrides')")).scalar()
+            if not exists:
+                models.DateOverride.__table__.create(bind=db.get_bind(), checkfirst=True)
+                db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        else:
+            _date_override_initialized.add(schema_key)
 
 # --- Pydantic Models ---
 class AvailabilityCreate(BaseModel):
@@ -1283,6 +1305,8 @@ async def get_date_overrides(
     """Get date overrides for a tenant, optionally filtered by template_id"""
     try:
         get_tenant_db(subdomain, db)
+
+        ensure_date_override_table(subdomain, db)
         
         query = db.query(models.DateOverride)
         
@@ -1314,6 +1338,8 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
     """Create date override with template support"""
     try:
         get_tenant_db(subdomain, db)
+
+        ensure_date_override_table(subdomain, db)
         
         # Parse date
         override_date = datetime.datetime.strptime(override_data.date, "%Y-%m-%d").date()
@@ -1389,6 +1415,8 @@ async def delete_date_override(subdomain: str, override_id: int, db: Session = D
     """Delete date override"""
     try:
         get_tenant_db(subdomain, db)
+
+        ensure_date_override_table(subdomain, db)
         
         override = db.query(models.DateOverride).filter(
             models.DateOverride.id == override_id
