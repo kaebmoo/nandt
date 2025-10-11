@@ -799,14 +799,6 @@ async def add_template_provider(subdomain: str, template_id: int, payload: Templ
         if not provider or not provider.is_active:
             raise HTTPException(status_code=404, detail="Provider not found or inactive")
 
-        existing_schedule = db.query(models.ProviderSchedule).filter_by(
-            template_id=template_id,
-            provider_id=payload.provider_id
-        ).first()
-
-        if existing_schedule:
-            raise HTTPException(status_code=409, detail="Provider already has a schedule for this template")
-
         existing = db.query(models.TemplateProvider).filter_by(
             template_id=template_id,
             provider_id=payload.provider_id
