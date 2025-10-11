@@ -2,7 +2,7 @@
 
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, render_template, redirect, url_for, g, request, session, flash, jsonify
 from sqlalchemy import text
 # from sqlalchemy.orm import joinedload
@@ -47,7 +47,7 @@ def index():
         # ตรวจสอบสิทธิ์เข้าถึง
         if check_tenant_access(subdomain):
             current_app.logger.info(f"User {current_user.email} accessing dashboard for {subdomain}")
-            return redirect(build_url_with_context('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         else:
             current_app.logger.warning(f"Access denied for user {current_user.email} to {subdomain}")
             flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
@@ -178,7 +178,7 @@ def view_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(build_url_with_context('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         # Load relationships
         patient = db.query(Patient).filter_by(id=appointment.patient_id).first() if appointment.patient_id else None
@@ -206,7 +206,7 @@ def view_appointment(appointment_id):
     except Exception as e:
         current_app.logger.error(f"Error viewing appointment: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(build_url_with_context('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
 
 @bp.route('/appointments/<int:appointment_id>/admin-reschedule', methods=['GET', 'POST'])
 @login_required
@@ -219,13 +219,19 @@ def admin_reschedule_appointment(appointment_id):
     subdomain = g.subdomain
     
     try:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        db.commit()
         
         appointment = db.query(Appointment).filter_by(id=appointment_id).first()
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(build_url_with_context('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         if request.method == 'POST':
             # Process reschedule
@@ -378,7 +384,7 @@ def admin_cancel_appointment(appointment_id):
             
             # อัพเดต appointment
             appointment.status = 'cancelled'
-            appointment.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
+            appointment.cancelled_at = datetime.now(timezone.utc)
             appointment.cancelled_by = 'admin'
             appointment.cancellation_reason = f"[Admin] {reason}"
             
@@ -394,7 +400,7 @@ def admin_cancel_appointment(appointment_id):
             
             flash('ยกเลิกนัดหมายเรียบร้อยแล้ว', 'success')
             # แก้ไขตรงนี้ - เพิ่ม subdomain parameter
-            return redirect(build_url_with_context('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         # GET - แสดง form
         current_user = get_current_user()
@@ -407,10 +413,15 @@ def admin_cancel_appointment(appointment_id):
                              current_user=current_user)
                              
     except Exception as e:
+        if db:
+            try:
+                db.rollback()
+            except Exception:
+                pass
         current_app.logger.error(f"Error in admin cancel: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
         # แก้ไขตรงนี้ด้วย
-        return redirect(build_url_with_context('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
     
 # ==================== Appointment Management via FastAPI ====================
 
@@ -432,7 +443,7 @@ def cancel_appointment(appointment_id):
         
         # อัพเดต status เหมือนกับที่ FastAPI ทำ
         appointment.status = 'cancelled'  # ใช้ 'cancelled' ตาม database
-        appointment.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
+        appointment.cancelled_at = datetime.now(timezone.utc)
         appointment.cancelled_by = 'admin'
         
         db.commit()

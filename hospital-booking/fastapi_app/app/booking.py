@@ -52,6 +52,7 @@ class TimeSlot(BaseModel):
     remaining_slots: int = 1
     total_capacity: int = 1
     available_provider_ids: Optional[List[int]] = None
+    provider_pool_ids: Optional[List[int]] = None
     unavailable_reason: Optional[str] = None
 
 class AvailabilityResponse(BaseModel):
@@ -377,10 +378,28 @@ def ensure_slot_capacity(
         capacity_limit = min(capacity_limit, len(available_provider_ids))
 
     else:
+        provider_pool_ids = collect_available_providers(
+            db,
+            template,
+            target_date,
+            slot_start,
+            slot_end,
+            date_override
+        )
+
+        if not provider_pool_ids:
+            raise HTTPException(status_code=409, detail="ไม่มีผู้ให้บริการว่างในช่วงเวลานี้")
+
+        capacity_limit = min(capacity_limit, len(provider_pool_ids))
+
         if provider_id:
+            if provider_id not in provider_pool_ids:
+                raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกไม่ว่างในช่วงเวลานี้")
             provider = db.query(models.Provider).filter_by(id=provider_id, is_active=True).first()
             if not provider:
                 raise HTTPException(status_code=404, detail="ไม่พบผู้ให้บริการที่เลือกหรือไม่พร้อมใช้งาน")
+
+        available_provider_ids = provider_pool_ids
 
     bookings = fetch_slot_bookings(db, event_type.id, slot_start, slot_end)
 
@@ -407,10 +426,35 @@ def ensure_slot_capacity(
                 raise HTTPException(status_code=409, detail="ไม่สามารถกำหนดผู้ให้บริการอัตโนมัติได้")
 
     else:
-        if len(bookings) >= capacity_limit:
+        bookings_within_slot = bookings
+        if len(bookings_within_slot) >= capacity_limit:
             raise HTTPException(status_code=409, detail="ช่วงเวลานี้ถูกจองเต็มแล้ว")
-        if provider_id and any(appt.provider_id == provider_id for appt in bookings):
+
+        if provider_id and any(appt.provider_id == provider_id for appt in bookings_within_slot):
             raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกถูกจองแล้วในช่วงเวลานี้")
+
+        provider_pool_ids = provider_pool_ids or []
+        booked_provider_ids = [appt.provider_id for appt in bookings_within_slot if appt.provider_id]
+        unassigned_bookings = len([appt for appt in bookings_within_slot if not appt.provider_id])
+        remaining_pool = [pid for pid in provider_pool_ids if pid not in booked_provider_ids]
+
+        if unassigned_bookings >= len(remaining_pool):
+            raise HTTPException(status_code=409, detail="ช่วงเวลานี้ถูกจองเต็มแล้ว")
+
+        available_after_unassigned = remaining_pool[unassigned_bookings:]
+
+        remaining_capacity = max(capacity_limit - len(bookings_within_slot), 0)
+        if remaining_capacity == 0 or not available_after_unassigned:
+            raise HTTPException(status_code=409, detail="ช่วงเวลานี้ถูกจองเต็มแล้ว")
+
+        if provider_id:
+            if provider_id not in available_after_unassigned:
+                raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกถูกจองแล้วในช่วงเวลานี้")
+            assigned_provider_id = provider_id
+        else:
+            assigned_provider_id = select_auto_provider(template, available_after_unassigned) if available_after_unassigned else None
+            if assigned_provider_id is None:
+                raise HTTPException(status_code=409, detail="ไม่สามารถกำหนดผู้ให้บริการอัตโนมัติได้")
 
     return assigned_provider_id
 
@@ -573,6 +617,8 @@ async def get_booking_availability(
             elif slot_start < min_booking_time:
                 reason = "slot_too_soon"
             else:
+                provider_pool_ids: Optional[List[int]] = None
+
                 if template.requires_provider_assignment:
                     available_provider_ids = collect_available_providers(
                         db,
@@ -593,6 +639,19 @@ async def get_booking_availability(
                     elif not reason:
                         reason = "no_provider"
                         available_provider_ids = []
+                else:
+                    provider_pool_ids = collect_available_providers(
+                        db,
+                        template,
+                        target_date,
+                        slot_start,
+                        slot_end,
+                        date_override
+                    )
+                    if provider_pool_ids:
+                        capacity_limit = min(capacity_limit, len(provider_pool_ids))
+                    elif not reason:
+                        reason = "no_provider"
 
                 if reason not in {"no_provider", "provider_unavailable"}:
                     bookings = fetch_slot_bookings(
