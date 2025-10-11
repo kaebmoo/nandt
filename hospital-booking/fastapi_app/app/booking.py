@@ -50,12 +50,20 @@ class TimeSlot(BaseModel):
     time: str  # "09:00"
     available: bool
     remaining_slots: int = 1
+    total_capacity: int = 1
+    available_provider_ids: Optional[List[int]] = None
+    unavailable_reason: Optional[str] = None
 
 class AvailabilityResponse(BaseModel):
     date: str
     slots: List[TimeSlot]
     event_type: Dict
     provider: Optional[Dict] = None
+    template_id: Optional[int] = None
+    template_type: Optional[str] = None
+    requires_provider_assignment: Optional[bool] = None
+    message: Optional[str] = None
+    is_holiday: Optional[bool] = None
 
 class BookingCreate(BaseModel):
     event_type_id: int
@@ -147,6 +155,195 @@ def generate_time_slots(start_time: time, end_time: time, duration_minutes: int)
     
     return slots
 
+
+def convert_python_weekday(python_weekday: int) -> int:
+    """Convert Python weekday (0=Monday) to DayOfWeek enum value (0=Sunday)."""
+    return 0 if python_weekday == 6 else python_weekday + 1
+
+
+def resolve_resource_limits(template: models.AvailabilityTemplate, target_date: date) -> Dict[str, Optional[int]]:
+    """Determine capacity limits based on template settings and resource rules."""
+    rooms_limit = template.max_concurrent_slots or 1
+    rule_limit = None
+
+    specific_rules = [r for r in template.resource_capacities if r.is_active and r.specific_date == target_date]
+    if specific_rules:
+        # Use the rule with the smallest capacity constraint
+        rule = min(specific_rules, key=lambda r: r.available_rooms)
+        rooms_limit = min(rooms_limit, rule.available_rooms)
+        if rule.max_concurrent_appointments:
+            rule_limit = rule.max_concurrent_appointments
+    else:
+        target_day = convert_python_weekday(target_date.weekday())
+        day_rules = [r for r in template.resource_capacities if r.is_active and r.day_of_week and r.day_of_week.value == target_day]
+        if day_rules:
+            rule = min(day_rules, key=lambda r: r.available_rooms)
+            rooms_limit = min(rooms_limit, rule.available_rooms)
+            if rule.max_concurrent_appointments:
+                rule_limit = rule.max_concurrent_appointments
+
+    return {
+        "rooms_limit": rooms_limit,
+        "max_concurrent": rule_limit
+    }
+
+
+def collect_available_providers(
+    db: Session,
+    template: models.AvailabilityTemplate,
+    target_date: date,
+    slot_start: datetime,
+    slot_end: datetime
+) -> List[int]:
+    """Return provider IDs available for the given slot."""
+    target_day = convert_python_weekday(target_date.weekday())
+
+    schedules = db.query(models.ProviderSchedule).filter(
+        models.ProviderSchedule.template_id == template.id,
+        models.ProviderSchedule.is_active == True,
+        models.ProviderSchedule.effective_date <= target_date,
+        (models.ProviderSchedule.end_date.is_(None) | (models.ProviderSchedule.end_date >= target_date))
+    ).all()
+
+    available_ids = []
+    for schedule in schedules:
+        provider = schedule.provider
+        if not provider or not provider.is_active:
+            continue
+
+        days = schedule.days_of_week or []
+        if target_day not in days:
+            continue
+
+        # Respect custom time windows if provided
+        if schedule.custom_start_time:
+            schedule_start = datetime.combine(target_date, schedule.custom_start_time)
+            if slot_start < schedule_start:
+                continue
+        if schedule.custom_end_time:
+            schedule_end = datetime.combine(target_date, schedule.custom_end_time)
+            if slot_end > schedule_end:
+                continue
+
+        # Exclude providers on leave
+        leave_exists = db.query(models.ProviderLeave).filter(
+            models.ProviderLeave.provider_id == provider.id,
+            models.ProviderLeave.start_date <= target_date,
+            models.ProviderLeave.end_date >= target_date,
+        ).first()
+        if leave_exists:
+            continue
+
+        available_ids.append(provider.id)
+
+    return available_ids
+
+
+def fetch_slot_bookings(
+    db: Session,
+    event_type_id: int,
+    slot_start: datetime,
+    slot_end: datetime,
+    provider_ids: Optional[List[int]] = None
+) -> List[models.Appointment]:
+    query = db.query(models.Appointment).filter(
+        models.Appointment.event_type_id == event_type_id,
+        models.Appointment.status.in_(['confirmed', 'pending']),
+        models.Appointment.start_time < slot_end,
+        models.Appointment.end_time > slot_start
+    )
+
+    if provider_ids is not None:
+        query = query.filter(models.Appointment.provider_id.in_(provider_ids))
+
+    return query.all()
+
+
+def select_auto_provider(template: models.AvailabilityTemplate, available_provider_ids: List[int]) -> Optional[int]:
+    """Choose provider based on template assignments and priority."""
+    prioritized = sorted(
+        template.template_providers,
+        key=lambda assignment: (
+            0 if assignment.is_primary else 1,
+            assignment.priority,
+            assignment.id
+        )
+    )
+
+    for assignment in prioritized:
+        if assignment.provider_id in available_provider_ids:
+            return assignment.provider_id
+
+    return available_provider_ids[0] if available_provider_ids else None
+
+
+def ensure_slot_capacity(
+    db: Session,
+    event_type: models.EventType,
+    template: models.AvailabilityTemplate,
+    slot_start: datetime,
+    slot_end: datetime,
+    provider_id: Optional[int] = None
+) -> Optional[int]:
+    """Validate slot availability and return provider assignment (auto or requested)."""
+
+    capacity_info = resolve_resource_limits(template, slot_start.date())
+    capacity_limit = capacity_info["rooms_limit"] or 1
+    if capacity_info["max_concurrent"]:
+        capacity_limit = min(capacity_limit, capacity_info["max_concurrent"])
+
+    available_provider_ids: Optional[List[int]] = None
+
+    if template.requires_provider_assignment:
+        available_provider_ids = collect_available_providers(db, template, slot_start.date(), slot_start, slot_end)
+        if not available_provider_ids:
+            raise HTTPException(status_code=409, detail="ไม่มีผู้ให้บริการว่างในช่วงเวลานี้")
+
+        if provider_id:
+            if provider_id not in available_provider_ids:
+                raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกไม่ว่างในช่วงเวลานี้")
+            available_provider_ids = [provider_id]
+
+        capacity_limit = min(capacity_limit, len(available_provider_ids))
+
+    else:
+        if provider_id:
+            provider = db.query(models.Provider).filter_by(id=provider_id, is_active=True).first()
+            if not provider:
+                raise HTTPException(status_code=404, detail="ไม่พบผู้ให้บริการที่เลือกหรือไม่พร้อมใช้งาน")
+
+    bookings = fetch_slot_bookings(db, event_type.id, slot_start, slot_end)
+
+    assigned_provider_id = provider_id
+
+    if template.requires_provider_assignment:
+        booked_provider_ids = {appt.provider_id for appt in bookings if appt.provider_id}
+        unassigned_bookings = len([appt for appt in bookings if not appt.provider_id])
+
+        available_provider_ids = available_provider_ids or []
+        remaining_providers = [pid for pid in available_provider_ids if pid not in booked_provider_ids]
+        occupied_slots = len(booked_provider_ids) + unassigned_bookings
+        remaining_capacity = max(capacity_limit - occupied_slots, 0)
+
+        if provider_id:
+            if provider_id not in remaining_providers or remaining_capacity == 0:
+                raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกถูกจองแล้วในช่วงเวลานี้")
+            assigned_provider_id = provider_id
+        else:
+            if remaining_capacity == 0 or not remaining_providers:
+                raise HTTPException(status_code=409, detail="ช่วงเวลานี้ถูกจองเต็มแล้ว")
+            assigned_provider_id = select_auto_provider(template, remaining_providers)
+            if assigned_provider_id is None:
+                raise HTTPException(status_code=409, detail="ไม่สามารถกำหนดผู้ให้บริการอัตโนมัติได้")
+
+    else:
+        if len(bookings) >= capacity_limit:
+            raise HTTPException(status_code=409, detail="ช่วงเวลานี้ถูกจองเต็มแล้ว")
+        if provider_id and any(appt.provider_id == provider_id for appt in bookings):
+            raise HTTPException(status_code=409, detail="ผู้ให้บริการที่เลือกถูกจองแล้วในช่วงเวลานี้")
+
+    return assigned_provider_id
+
 # --- Main API Endpoints ---
 
 @router.get("/event-types/{event_type_id}", response_model=EventTypeDetail)
@@ -198,134 +395,170 @@ async def get_booking_availability(
         if not event_type:
             raise HTTPException(404, "Event type not found or inactive")
         
-        # 2. Parse date
+        # 2. Parse date and prepare response metadata
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        template = event_type.availability_template
 
-        # 2.5 NEW: Check for holidays first
+        event_type_info = {
+            "id": event_type.id,
+            "name": event_type.name,
+            "duration": event_type.duration_minutes,
+            "buffer_before": event_type.buffer_before_minutes,
+            "buffer_after": event_type.buffer_after_minutes
+        }
+
+        response_data = {
+            "date": date,
+            "slots": [],
+            "event_type": event_type_info,
+            "template_id": template.id if template else None,
+            "template_type": template.template_type if template else None,
+            "requires_provider_assignment": template.requires_provider_assignment if template else None,
+            "message": None,
+            "is_holiday": False
+        }
+
+        # 2.5 Check for holidays first
         holiday = db.query(models.Holiday).filter(
             models.Holiday.date == target_date,
             models.Holiday.is_active == True
         ).first()
 
         if holiday:
-            # It's a holiday, return no slots immediately
-            return AvailabilityResponse(
-                date=date,
-                slots=[],
-                event_type={"name": event_type.name, "duration": event_type.duration_minutes},
-                message=holiday.custom_message or f"ปิดทำการ: {holiday.name}",
-                is_holiday=True
-                # You could optionally include holiday info in the response
-                # "holiday_info": {"name": holiday.name}
-            )
-        
-        day_of_week = target_date.weekday()  # 0=Monday, 6=Sunday
-        
-        # Convert to our DayOfWeek enum (0=Sunday, 6=Saturday)
-        day_enum = (day_of_week + 1) % 7
-        
-        # 3. Check if date is not in the past
-        if target_date < datetime.now().date():
-            return AvailabilityResponse(
-                date=date,
-                slots=[],
-                event_type={"name": event_type.name, "duration": event_type.duration_minutes}
-            )
-        
-        # 4. Check if within booking window
-        max_date = datetime.now().date() + timedelta(days=event_type.max_advance_days)
+            response_data["message"] = holiday.description or f"ปิดทำการ: {holiday.name}"
+            response_data["is_holiday"] = True
+            return AvailabilityResponse(**response_data)
+
+        if target_date < today:
+            response_data["message"] = "ไม่สามารถจองวันที่ผ่านมาแล้ว"
+            return AvailabilityResponse(**response_data)
+
+        max_date = today + timedelta(days=event_type.max_advance_days)
         if target_date > max_date:
-            return AvailabilityResponse(
-                date=date,
-                slots=[],
-                event_type={"name": event_type.name, "duration": event_type.duration_minutes}
-            )
-        
-        # 5. Get base availability from template
-        base_slots = []
-        if event_type.template_id:
-            availabilities = db.query(models.Availability).filter(
-                models.Availability.template_id == event_type.template_id,
-                models.Availability.day_of_week == models.DayOfWeek(day_enum),
-                models.Availability.is_active == True
-            ).all()
-            
-            for avail in availabilities:
-                slots = generate_time_slots(
-                    avail.start_time,
-                    avail.end_time,
-                    event_type.duration_minutes
-                )
-                base_slots.extend(slots)
-        
-        # 6. Check date overrides
+            response_data["message"] = "วันที่เลือกอยู่นอกช่วงที่อนุญาตให้จองล่วงหน้า"
+            return AvailabilityResponse(**response_data)
+
+        if not template:
+            response_data["message"] = "ยังไม่ได้ตั้งค่าเวลาทำการสำหรับบริการนี้"
+            return AvailabilityResponse(**response_data)
+
+        day_enum = convert_python_weekday(target_date.weekday())
+
+        availabilities = db.query(models.Availability).filter(
+            models.Availability.template_id == template.id,
+            models.Availability.day_of_week == models.DayOfWeek(day_enum),
+            models.Availability.is_active == True
+        ).all()
+
+        base_slots: List[str] = []
+        for avail in availabilities:
+            base_slots.extend(generate_time_slots(avail.start_time, avail.end_time, event_type.duration_minutes))
+
         date_override = db.query(models.DateOverride).filter(
             models.DateOverride.date == target_date,
             or_(
-                models.DateOverride.template_id == event_type.template_id,
+                models.DateOverride.template_id == template.id,
                 models.DateOverride.template_scope == 'global'
             )
         ).first()
-        
+
         if date_override:
             if date_override.is_unavailable:
-                # วันหยุด - ไม่มี slots
-                base_slots = []
+                response_data["message"] = date_override.reason or "ไม่เปิดให้จองในวันนี้"
+                response_data["slots"] = []
+                return AvailabilityResponse(**response_data)
             elif date_override.custom_start_time and date_override.custom_end_time:
-                # เวลาพิเศษ - ใช้เวลาจาก override แทน
                 base_slots = generate_time_slots(
                     date_override.custom_start_time,
                     date_override.custom_end_time,
                     event_type.duration_minutes
                 )
-        
-        # 7. Check holidays
-        holiday = db.query(models.Holiday).filter(
-            models.Holiday.date == target_date
-        ).first()
-        
-        if holiday:
-            base_slots = []  # No slots on holidays
-        
-        # 8. Filter out booked slots
-        available_slots = []
-        for slot in base_slots:
-            slot_datetime = parse_datetime(date, slot)
-            
-            # Check minimum notice
-            min_booking_time = datetime.now() + timedelta(hours=event_type.min_notice_hours)
-            if slot_datetime < min_booking_time:
+
+        if not base_slots:
+            # No slots configured for this day
+            response_data["message"] = response_data["message"] or "ไม่มีเวลาว่างสำหรับวันนี้"
+            return AvailabilityResponse(**response_data)
+
+        resource_limits = resolve_resource_limits(template, target_date)
+        base_capacity = resource_limits["rooms_limit"] or 1
+        if resource_limits["max_concurrent"]:
+            base_capacity = min(base_capacity, resource_limits["max_concurrent"])
+
+        min_booking_time = datetime.now() + timedelta(hours=event_type.min_notice_hours)
+        slot_duration = timedelta(minutes=event_type.duration_minutes)
+
+        available_slots: List[TimeSlot] = []
+        seen_slots = set()
+
+        for slot in sorted(base_slots):
+            if slot in seen_slots:
                 continue
-            
-            # Check existing appointments
-            slot_end = slot_datetime + timedelta(minutes=event_type.duration_minutes)
-            
-            # Count existing bookings for this slot
-            existing_bookings = db.query(models.Appointment).filter(
-                models.Appointment.event_type_id == event_type_id,
-                models.Appointment.status.in_(['confirmed', 'pending']),
-                models.Appointment.start_time < slot_end,
-                models.Appointment.end_time > slot_datetime
-            )
-            
-            if provider_id:
-                existing_bookings = existing_bookings.filter(
-                    models.Appointment.provider_id == provider_id
+            seen_slots.add(slot)
+
+            slot_start = parse_datetime(date, slot)
+            slot_end = slot_start + slot_duration
+
+            reason = None
+            remaining_slots = 0
+            capacity_limit = base_capacity
+            available_provider_ids: Optional[List[int]] = None
+
+            if slot_start < min_booking_time:
+                reason = "slot_too_soon"
+            else:
+                if template.requires_provider_assignment:
+                    available_provider_ids = collect_available_providers(db, template, target_date, slot_start, slot_end)
+                    if provider_id:
+                        if provider_id not in available_provider_ids:
+                            reason = "provider_unavailable"
+                            available_provider_ids = []
+                        else:
+                            available_provider_ids = [provider_id]
+                    if not reason and available_provider_ids:
+                        capacity_limit = min(capacity_limit, len(available_provider_ids))
+                    elif not reason:
+                        reason = "no_provider"
+
+                bookings = fetch_slot_bookings(
+                    db,
+                    event_type_id,
+                    slot_start,
+                    slot_end
                 )
-            
-            booking_count = existing_bookings.count()
-            
-            # Check max bookings per slot (default 1)
-            max_per_slot = getattr(event_type, 'booking_per_slot', 1)
-            
-            if booking_count < max_per_slot:
-                available_slots.append(TimeSlot(
-                    time=slot,
-                    available=True,
-                    remaining_slots=max_per_slot - booking_count
-                ))
+
+                if template.requires_provider_assignment:
+                    booked_provider_ids = {appt.provider_id for appt in bookings if appt.provider_id}
+                    unassigned_bookings = len([appt for appt in bookings if not appt.provider_id])
+
+                    if available_provider_ids is None:
+                        available_provider_ids = []
+
+                    remaining_providers = [pid for pid in available_provider_ids if pid not in booked_provider_ids]
+                    occupied_slots = len(booked_provider_ids) + unassigned_bookings
+                    capacity_limit = max(capacity_limit, 0)
+                    remaining_slots = max(capacity_limit - occupied_slots, 0)
+                    remaining_slots = min(remaining_slots, len(remaining_providers))
+                    available_provider_ids = remaining_providers[:remaining_slots]
+                    if remaining_slots == 0:
+                        reason = reason or "fully_booked"
+                else:
+                    remaining_slots = max(capacity_limit - len(bookings), 0)
+                    if remaining_slots == 0:
+                        reason = "fully_booked"
+
+            if reason in {"no_provider", "provider_unavailable"}:
+                capacity_limit = 0
+
+            available_slots.append(TimeSlot(
+                time=slot,
+                available=reason is None and remaining_slots > 0,
+                remaining_slots=remaining_slots if remaining_slots > 0 else 0,
+                total_capacity=capacity_limit,
+                available_provider_ids=available_provider_ids if available_provider_ids else None,
+                unavailable_reason=reason
+            ))
         
-        # 9. Check daily limit
         if event_type.max_bookings_per_day:
             daily_bookings = db.query(models.Appointment).filter(
                 models.Appointment.event_type_id == event_type_id,
@@ -333,33 +566,23 @@ async def get_booking_availability(
                 models.Appointment.start_time >= datetime.combine(target_date, time.min),
                 models.Appointment.start_time < datetime.combine(target_date + timedelta(days=1), time.min)
             ).count()
-            
+
             if daily_bookings >= event_type.max_bookings_per_day:
                 available_slots = []
-        
-        # 10. Prepare response
-        response = AvailabilityResponse(
-            date=date,
-            slots=available_slots,
-            event_type={
-                "id": event_type.id,
-                "name": event_type.name,
-                "duration": event_type.duration_minutes,
-                "buffer_before": event_type.buffer_before_minutes,
-                "buffer_after": event_type.buffer_after_minutes
-            }
-        )
-        
+                response_data["message"] = "เต็มตามจำนวนที่อนุญาตต่อวัน"
+
+        response_data["slots"] = available_slots
+
         if provider_id:
             provider = db.query(models.Provider).filter_by(id=provider_id).first()
             if provider:
-                response.provider = {
+                response_data["provider"] = {
                     "id": provider.id,
                     "name": provider.name,
                     "title": provider.title
                 }
-        
-        return response
+
+        return AvailabilityResponse(**response_data)
         
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -409,23 +632,34 @@ async def create_booking(
                 f"Booking requires at least {event_type.min_notice_hours} hours notice"
             )
         
-        # 3. Check slot availability
+        template = event_type.availability_template
+        if not template:
+            raise HTTPException(400, "บริการนี้ยังไม่ได้ตั้งค่าเวลาทำการ")
+
+        # Enforce daily booking limit before allocating provider
+        if event_type.max_bookings_per_day:
+            target_date = appointment_datetime.date()
+            daily_bookings = db.query(models.Appointment).filter(
+                models.Appointment.event_type_id == booking.event_type_id,
+                models.Appointment.status.in_(['confirmed', 'pending']),
+                models.Appointment.start_time >= datetime.combine(target_date, time.min),
+                models.Appointment.start_time < datetime.combine(target_date + timedelta(days=1), time.min)
+            ).count()
+
+            if daily_bookings >= event_type.max_bookings_per_day:
+                raise HTTPException(409, "จำนวนการจองต่อวันเต็มแล้ว")
+
         slot_end = appointment_datetime + timedelta(minutes=event_type.duration_minutes)
-        
-        conflict = db.query(models.Appointment).filter(
-            models.Appointment.event_type_id == booking.event_type_id,
-            models.Appointment.status.in_(['confirmed', 'pending']),
-            models.Appointment.start_time < slot_end,
-            models.Appointment.end_time > appointment_datetime
+        assigned_provider_id = ensure_slot_capacity(
+            db,
+            event_type,
+            template,
+            appointment_datetime,
+            slot_end,
+            booking.provider_id
         )
-        
-        if booking.provider_id:
-            conflict = conflict.filter(
-                models.Appointment.provider_id == booking.provider_id
-            )
-        
-        if conflict.first():
-            raise HTTPException(409, "Time slot is not available")
+
+        provider_to_use = assigned_provider_id
         
         # 4. Create or find patient
         patient = None
@@ -467,7 +701,7 @@ async def create_booking(
         
         appointment = models.Appointment(
             patient_id=patient.id,
-            provider_id=booking.provider_id,  # Can be NULL for queue system
+            provider_id=provider_to_use,  # อาจเป็น None หาก template ไม่บังคับเลือกผู้ให้บริการ
             event_type_id=booking.event_type_id,
             service_type_id=service_type.id,
             start_time=appointment_datetime,
@@ -602,24 +836,53 @@ async def reschedule_booking(
             id=original.event_type_id
         ).first()
         
+        if new_datetime < datetime.now():
+            raise HTTPException(400, "ไม่สามารถเลื่อนนัดไปยังเวลาที่ผ่านมาแล้วได้")
+
+        min_booking_time = datetime.now() + timedelta(hours=event_type.min_notice_hours)
+        if new_datetime < min_booking_time:
+            raise HTTPException(400, "ต้องแจ้งเลื่อนล่วงหน้าตามเวลาที่กำหนด")
+
+        template = event_type.availability_template
+        if not template:
+            raise HTTPException(400, "บริการนี้ยังไม่ได้ตั้งค่าเวลาทำการ")
+
+        if event_type.max_bookings_per_day:
+            target_date = new_datetime.date()
+            daily_bookings = db.query(models.Appointment).filter(
+                models.Appointment.id != original.id,
+                models.Appointment.event_type_id == original.event_type_id,
+                models.Appointment.status.in_(['confirmed', 'pending']),
+                models.Appointment.start_time >= datetime.combine(target_date, time.min),
+                models.Appointment.start_time < datetime.combine(target_date + timedelta(days=1), time.min)
+            ).count()
+
+            if daily_bookings >= event_type.max_bookings_per_day:
+                raise HTTPException(409, "จำนวนการจองต่อวันเต็มแล้ว")
+
         new_end = new_datetime + timedelta(minutes=event_type.duration_minutes)
-        
-        # 5. Check new slot availability
-        conflict = db.query(models.Appointment).filter(
-            models.Appointment.id != original.id,
-            models.Appointment.event_type_id == original.event_type_id,
-            models.Appointment.status.in_(['confirmed', 'pending']),
-            models.Appointment.start_time < new_end,
-            models.Appointment.end_time > new_datetime
-        )
-        
-        if original.provider_id:
-            conflict = conflict.filter(
-                models.Appointment.provider_id == original.provider_id
+
+        try:
+            assigned_provider_id = ensure_slot_capacity(
+                db,
+                event_type,
+                template,
+                new_datetime,
+                new_end,
+                original.provider_id
             )
-        
-        if conflict.first():
-            raise HTTPException(409, "New time slot is not available")
+        except HTTPException as exc:
+            if template.requires_provider_assignment and original.provider_id and exc.status_code == 409:
+                assigned_provider_id = ensure_slot_capacity(
+                    db,
+                    event_type,
+                    template,
+                    new_datetime,
+                    new_end,
+                    None
+                )
+            else:
+                raise
         
         # 6. Update appointment
         original.status = 'rescheduled'
@@ -628,7 +891,7 @@ async def reschedule_booking(
         new_ref = generate_booking_reference()
         new_appointment = models.Appointment(
             patient_id=original.patient_id,
-            provider_id=original.provider_id,
+            provider_id=assigned_provider_id,
             event_type_id=original.event_type_id,
             service_type_id=original.service_type_id,
             start_time=new_datetime,

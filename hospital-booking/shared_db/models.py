@@ -2,7 +2,7 @@
 
 from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
                         create_engine, event, Boolean, 
-                        Time, Text, Enum as SQLEnum, JSON, Date)
+                        Time, Text, Enum as SQLEnum, JSON, Date, UniqueConstraint)
 # from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import CreateSchema
@@ -67,6 +67,9 @@ class AvailabilityTemplate(TenantBase):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)  # "จันทร์-ศุกร์ (08:30-16:30)" - removed unique=True for multi-tenant support
     description = Column(Text)
+    template_type = Column(String(20), default='dedicated')  # dedicated, shared, pool
+    max_concurrent_slots = Column(Integer, default=1)
+    requires_provider_assignment = Column(Boolean, default=True)
     timezone = Column(String(50), default='Asia/Bangkok')
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
@@ -76,6 +79,9 @@ class AvailabilityTemplate(TenantBase):
     availabilities = relationship("Availability", back_populates="template", cascade="all, delete-orphan")
     date_overrides = relationship("DateOverride", back_populates="template", cascade="all, delete-orphan")
     event_types = relationship("EventType", back_populates="availability_template")
+    template_providers = relationship("TemplateProvider", back_populates="template", cascade="all, delete-orphan")
+    provider_schedules = relationship("ProviderSchedule", back_populates="template", cascade="all, delete-orphan")
+    resource_capacities = relationship("ResourceCapacity", back_populates="template", cascade="all, delete-orphan")
 
 class Availability(TenantBase):
     """ตารางเวลาทำการ (ปรับให้อ้างอิง template_id)"""
@@ -226,6 +232,88 @@ class Provider(TenantBase):
     
     appointments = relationship("Appointment", back_populates="provider")
     availabilities = relationship("Availability", back_populates="provider")
+    template_assignments = relationship("TemplateProvider", back_populates="provider", cascade="all, delete-orphan")
+    schedules = relationship("ProviderSchedule", back_populates="provider", cascade="all, delete-orphan")
+    leaves = relationship("ProviderLeave", back_populates="provider", cascade="all, delete-orphan")
+
+
+class TemplateProvider(TenantBase):
+    """Mapping between availability templates and providers"""
+    __tablename__ = 'template_providers'
+
+    id = Column(Integer, primary_key=True)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'), nullable=False)
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    can_auto_assign = Column(Boolean, default=True)
+    priority = Column(Integer, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    template = relationship("AvailabilityTemplate", back_populates="template_providers")
+    provider = relationship("Provider", back_populates="template_assignments")
+
+    __table_args__ = (
+        UniqueConstraint('template_id', 'provider_id', name='uq_template_provider'),
+    )
+
+
+class ProviderSchedule(TenantBase):
+    """Defines provider work schedules linked to templates"""
+    __tablename__ = 'provider_schedules'
+
+    id = Column(Integer, primary_key=True)
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'), nullable=False)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'), nullable=False)
+    effective_date = Column(Date, nullable=False)
+    end_date = Column(Date)
+    recurrence_pattern = Column(String(50))  # e.g., weekly, biweekly
+    days_of_week = Column(JSON)  # list of DayOfWeek values
+    custom_start_time = Column(Time)
+    custom_end_time = Column(Time)
+    schedule_type = Column(String(20), default='regular')  # regular, on_call, temporary
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    provider = relationship("Provider", back_populates="schedules")
+    template = relationship("AvailabilityTemplate", back_populates="provider_schedules")
+
+
+class ProviderLeave(TenantBase):
+    """Tracks provider unavailability/leave"""
+    __tablename__ = 'provider_leaves'
+
+    id = Column(Integer, primary_key=True)
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    leave_type = Column(String(20))
+    reason = Column(Text)
+    approved_by = Column(String(100))
+    is_approved = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    provider = relationship("Provider", back_populates="leaves")
+
+
+class ResourceCapacity(TenantBase):
+    """Defines room/resource availability for templates"""
+    __tablename__ = 'resource_capacities'
+
+    id = Column(Integer, primary_key=True)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'), nullable=False)
+    specific_date = Column(Date)
+    day_of_week = Column(SQLEnum(DayOfWeek))
+    available_rooms = Column(Integer, nullable=False)
+    max_concurrent_appointments = Column(Integer)
+    time_slot_start = Column(Time)
+    time_slot_end = Column(Time)
+    notes = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    template = relationship("AvailabilityTemplate", back_populates="resource_capacities")
 
 class Holiday(TenantBase):
     __tablename__ = 'holidays'
@@ -315,10 +403,14 @@ def receive_after_insert(mapper, connection, target):
         Patient.__table__,
         ServiceType.__table__, 
         Provider.__table__,
-        AvailabilityTemplate.__table__,  # ใหม่! ต้องสร้างก่อน Availability
+        AvailabilityTemplate.__table__,
+        TemplateProvider.__table__,
+        ProviderSchedule.__table__,
+        ResourceCapacity.__table__,
         Availability.__table__,
         EventType.__table__,
         DateOverride.__table__,
+        ProviderLeave.__table__,
         Holiday.__table__,
         Appointment.__table__
     ]

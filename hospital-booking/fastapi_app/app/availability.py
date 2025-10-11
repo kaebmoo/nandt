@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Tuple
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Tuple, Any
 import sys
 import datetime
 from datetime import time
@@ -79,20 +79,164 @@ class DateOverrideResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TemplateSettings(BaseModel):
+    template_type: str = "dedicated"
+    max_concurrent_slots: int = 1
+    requires_provider_assignment: bool = True
+
+    @validator('max_concurrent_slots')
+    def validate_slots(cls, value: int) -> int:
+        if value is None or value < 1:
+            raise ValueError("max_concurrent_slots must be at least 1")
+        return value
+
+    @validator('template_type')
+    def validate_type(cls, value: str) -> str:
+        allowed = {"dedicated", "shared", "pool"}
+        if value not in allowed:
+            raise ValueError(f"template_type must be one of {', '.join(sorted(allowed))}")
+        return value
+
+
 class WeeklySchedule(BaseModel):
     name: str
     description: Optional[str] = None
     timezone: str = "Asia/Bangkok"
     schedule: Dict[int, List[Tuple[str, str]]]
+    settings: Optional[TemplateSettings] = None
 
 class AvailabilityTemplate(BaseModel):
     id: int
     name: str
     description: Optional[str]
     days: List[int]
+    template_type: str
+    max_concurrent_slots: int
+    requires_provider_assignment: bool
+    timezone: str
+    provider_count: int = 0
+    active_schedule_count: int = 0
+    capacity_rules: int = 0
     
     class Config:
         from_attributes = True
+
+
+class TemplateProviderCreate(BaseModel):
+    provider_id: int
+    is_primary: bool = False
+    can_auto_assign: bool = True
+    priority: int = 0
+
+
+class TemplateProviderUpdate(BaseModel):
+    is_primary: Optional[bool]
+    can_auto_assign: Optional[bool]
+    priority: Optional[int]
+
+
+class ProviderScheduleCreate(BaseModel):
+    provider_id: int
+    effective_date: str
+    end_date: Optional[str] = None
+    days_of_week: List[int] = Field(default_factory=list)
+    recurrence_pattern: Optional[str] = None
+    custom_start_time: Optional[str] = None
+    custom_end_time: Optional[str] = None
+    schedule_type: str = "regular"
+    notes: Optional[str] = None
+
+    @validator('days_of_week')
+    def validate_days(cls, value: List[int]) -> List[int]:
+        if not value:
+            raise ValueError("days_of_week must contain at least one day")
+        for day in value:
+            if day < 0 or day > 6:
+                raise ValueError("days_of_week must be between 0 and 6")
+        return sorted(set(value))
+
+
+class ProviderScheduleUpdate(BaseModel):
+    effective_date: Optional[str]
+    end_date: Optional[str]
+    days_of_week: Optional[List[int]]
+    recurrence_pattern: Optional[str]
+    custom_start_time: Optional[str]
+    custom_end_time: Optional[str]
+    schedule_type: Optional[str]
+    is_active: Optional[bool]
+    notes: Optional[str]
+
+
+class ResourceCapacityCreate(BaseModel):
+    available_rooms: int = 1
+    max_concurrent_appointments: Optional[int] = None
+    specific_date: Optional[str] = None
+    day_of_week: Optional[int] = None
+    time_slot_start: Optional[str] = None
+    time_slot_end: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: bool = True
+
+    @validator('available_rooms')
+    def validate_rooms(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("available_rooms must be at least 1")
+        return value
+
+    @validator('max_concurrent_appointments')
+    def validate_capacity(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("max_concurrent_appointments must be positive")
+        return value
+
+    @validator('day_of_week')
+    def validate_day(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and (value < 0 or value > 6):
+            raise ValueError("day_of_week must be between 0 and 6")
+        return value
+
+    @validator('specific_date')
+    def ensure_scope(cls, value: Optional[str], values: Dict[str, Any]) -> Optional[str]:
+        if not value and values.get('day_of_week') is None:
+            raise ValueError("Either specific_date or day_of_week must be provided")
+        return value
+
+
+class ResourceCapacityUpdate(BaseModel):
+    available_rooms: Optional[int]
+    max_concurrent_appointments: Optional[int]
+    specific_date: Optional[str]
+    day_of_week: Optional[int]
+    time_slot_start: Optional[str]
+    time_slot_end: Optional[str]
+    notes: Optional[str]
+    is_active: Optional[bool]
+
+
+class ProviderLeaveCreate(BaseModel):
+    provider_id: int
+    start_date: str
+    end_date: str
+    leave_type: Optional[str] = None
+    reason: Optional[str] = None
+    approved_by: Optional[str] = None
+    is_approved: bool = False
+
+    @validator('end_date')
+    def validate_range(cls, end_date: str, values: Dict[str, Any]) -> str:
+        start_date = values.get('start_date')
+        if start_date and end_date < start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return end_date
+
+
+class ProviderLeaveUpdate(BaseModel):
+    end_date: Optional[str]
+    leave_type: Optional[str]
+    reason: Optional[str]
+    approved_by: Optional[str]
+    is_approved: Optional[bool]
 
 def parse_time(time_str: str) -> time:
     try:
@@ -103,6 +247,26 @@ def parse_time(time_str: str) -> time:
 
 def format_time(time_obj: time) -> str:
     return time_obj.strftime("%H:%M")
+
+
+def parse_optional_time(value: Optional[str]) -> Optional[time]:
+    if value is None:
+        return None
+    return parse_time(value)
+
+
+def parse_date(date_str: str) -> datetime.date:
+    try:
+        return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    except Exception:
+        raise ValueError(f"Invalid date format (expected YYYY-MM-DD): {date_str}")
+
+
+def to_day_enum(day_value: int) -> models.DayOfWeek:
+    try:
+        return models.DayOfWeek(day_value)
+    except Exception:
+        raise ValueError(f"Invalid day of week: {day_value}")
 
 def get_or_create_default_template(db: Session) -> int:
     """สร้างหรือหา default availability template"""
@@ -257,12 +421,18 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
                     break
                 counter += 1
         
+        # Apply template settings
+        settings = schedule_data.settings or TemplateSettings()
+
         # สร้าง template
         template = models.AvailabilityTemplate(
             name=template_name,
             description=schedule_data.description,
             timezone=schedule_data.timezone,
-            is_active=True
+            is_active=True,
+            template_type=settings.template_type,
+            max_concurrent_slots=settings.max_concurrent_slots,
+            requires_provider_assignment=settings.requires_provider_assignment
         )
         db.add(template)
         db.flush()  # เพื่อได้ template.id
@@ -340,6 +510,11 @@ async def update_availability_template(subdomain: str, template_id: int, schedul
         template.name = schedule_data.name
         template.description = schedule_data.description
         template.timezone = schedule_data.timezone
+
+        if schedule_data.settings:
+            template.template_type = schedule_data.settings.template_type
+            template.max_concurrent_slots = schedule_data.settings.max_concurrent_slots
+            template.requires_provider_assignment = schedule_data.settings.requires_provider_assignment
         
         # ตรวจสอบ event types ที่ใช้ template นี้
         events_using = db.query(models.EventType).filter(
@@ -445,7 +620,13 @@ async def get_availability_templates(subdomain: str, db: Session = Depends(get_d
                 "name": template.name,
                 "description": template.description,
                 "days": sorted(list(days)),
-                "timezone": template.timezone
+                "timezone": template.timezone,
+                "template_type": template.template_type,
+                "max_concurrent_slots": template.max_concurrent_slots,
+                "requires_provider_assignment": template.requires_provider_assignment,
+                "provider_count": len(template.template_providers),
+                "active_schedule_count": sum(1 for s in template.provider_schedules if s.is_active),
+                "capacity_rules": len(template.resource_capacities)
             })
         
         return {"templates": result}
@@ -472,25 +653,595 @@ async def get_availability_template_details(subdomain: str, template_id: int, db
             if avail.is_active:
                 day_num = avail.day_of_week.value if hasattr(avail.day_of_week, 'value') else avail.day_of_week
                 day_str = str(day_num)
-                
+
                 if day_str not in schedule:
                     schedule[day_str] = []
-                
+
                 schedule[day_str].append({
                     'start': format_time(avail.start_time),
                     'end': format_time(avail.end_time)
                 })
-        
+
+        provider_assignments = []
+        for assignment in template.template_providers:
+            provider = assignment.provider
+            provider_assignments.append({
+                "assignment_id": assignment.id,
+                "provider_id": provider.id if provider else None,
+                "provider_name": provider.name if provider else None,
+                "title": provider.title if provider else None,
+                "department": provider.department if provider else None,
+                "is_active": provider.is_active if provider else None,
+                "is_primary": assignment.is_primary,
+                "can_auto_assign": assignment.can_auto_assign,
+                "priority": assignment.priority,
+                "created_at": assignment.created_at.isoformat()
+            })
+
+        provider_schedules = []
+        for schedule_row in template.provider_schedules:
+            provider = schedule_row.provider
+            provider_schedules.append({
+                "schedule_id": schedule_row.id,
+                "provider_id": provider.id if provider else None,
+                "provider_name": provider.name if provider else None,
+                "effective_date": schedule_row.effective_date.isoformat(),
+                "end_date": schedule_row.end_date.isoformat() if schedule_row.end_date else None,
+                "days_of_week": schedule_row.days_of_week,
+                "recurrence_pattern": schedule_row.recurrence_pattern,
+                "custom_start_time": format_time(schedule_row.custom_start_time) if schedule_row.custom_start_time else None,
+                "custom_end_time": format_time(schedule_row.custom_end_time) if schedule_row.custom_end_time else None,
+                "schedule_type": schedule_row.schedule_type,
+                "is_active": schedule_row.is_active,
+                "notes": schedule_row.notes,
+                "updated_at": schedule_row.updated_at.isoformat() if schedule_row.updated_at else None
+            })
+
+        resource_capacities = []
+        for capacity in template.resource_capacities:
+            resource_capacities.append({
+                "capacity_id": capacity.id,
+                "specific_date": capacity.specific_date.isoformat() if capacity.specific_date else None,
+                "day_of_week": capacity.day_of_week.value if capacity.day_of_week else None,
+                "available_rooms": capacity.available_rooms,
+                "max_concurrent_appointments": capacity.max_concurrent_appointments,
+                "time_slot_start": format_time(capacity.time_slot_start) if capacity.time_slot_start else None,
+                "time_slot_end": format_time(capacity.time_slot_end) if capacity.time_slot_end else None,
+                "notes": capacity.notes,
+                "is_active": capacity.is_active,
+                "created_at": capacity.created_at.isoformat() if capacity.created_at else None
+            })
+
         return {
             "id": template.id,
             "name": template.name,
             "description": template.description,
             "timezone": template.timezone,
-            "schedule": schedule
+            "template_type": template.template_type,
+            "max_concurrent_slots": template.max_concurrent_slots,
+            "requires_provider_assignment": template.requires_provider_assignment,
+            "schedule": schedule,
+            "providers": provider_assignments,
+            "provider_schedules": provider_schedules,
+            "resource_capacities": resource_capacities
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Template Provider Assignments ---
+
+@router.get("/availability/templates/{template_id}/providers", response_model=dict)
+async def list_template_providers(subdomain: str, template_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        template = db.query(models.AvailabilityTemplate).filter_by(id=template_id).first()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        providers = []
+        for assignment in template.template_providers:
+            provider = assignment.provider
+            providers.append({
+                "assignment_id": assignment.id,
+                "provider_id": provider.id if provider else None,
+                "name": provider.name if provider else None,
+                "title": provider.title if provider else None,
+                "department": provider.department if provider else None,
+                "is_active": provider.is_active if provider else None,
+                "is_primary": assignment.is_primary,
+                "can_auto_assign": assignment.can_auto_assign,
+                "priority": assignment.priority,
+                "created_at": assignment.created_at.isoformat()
+            })
+
+        return {"providers": providers}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/availability/templates/{template_id}/providers", response_model=dict)
+async def add_template_provider(subdomain: str, template_id: int, payload: TemplateProviderCreate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        template = db.query(models.AvailabilityTemplate).filter_by(id=template_id).first()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        provider = db.query(models.Provider).filter_by(id=payload.provider_id).first()
+        if not provider or not provider.is_active:
+            raise HTTPException(status_code=404, detail="Provider not found or inactive")
+
+        existing_schedule = db.query(models.ProviderSchedule).filter_by(
+            template_id=template_id,
+            provider_id=payload.provider_id
+        ).first()
+
+        if existing_schedule:
+            raise HTTPException(status_code=409, detail="Provider already has a schedule for this template")
+
+        existing = db.query(models.TemplateProvider).filter_by(
+            template_id=template_id,
+            provider_id=payload.provider_id
+        ).first()
+
+        if existing:
+            raise HTTPException(status_code=409, detail="Provider already assigned to this template")
+
+        assignment = models.TemplateProvider(
+            template_id=template_id,
+            provider_id=payload.provider_id,
+            is_primary=payload.is_primary,
+            can_auto_assign=payload.can_auto_assign,
+            priority=payload.priority
+        )
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+
+        return {
+            "message": "Provider added to template",
+            "assignment_id": assignment.id
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.patch("/availability/templates/{template_id}/providers/{provider_id}", response_model=dict)
+async def update_template_provider(subdomain: str, template_id: int, provider_id: int, payload: TemplateProviderUpdate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        assignment = db.query(models.TemplateProvider).filter_by(
+            template_id=template_id,
+            provider_id=provider_id
+        ).first()
+
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Provider assignment not found")
+
+        if payload.is_primary is not None:
+            assignment.is_primary = payload.is_primary
+        if payload.can_auto_assign is not None:
+            assignment.can_auto_assign = payload.can_auto_assign
+        if payload.priority is not None:
+            assignment.priority = payload.priority
+
+        db.commit()
+
+        return {"message": "Assignment updated"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/availability/templates/{template_id}/providers/{provider_id}", response_model=dict)
+async def remove_template_provider(subdomain: str, template_id: int, provider_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        assignment = db.query(models.TemplateProvider).filter_by(
+            template_id=template_id,
+            provider_id=provider_id
+        ).first()
+
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Provider assignment not found")
+
+        db.delete(assignment)
+        db.commit()
+
+        return {"message": "Provider removed from template"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# --- Provider Schedules ---
+
+@router.get("/availability/templates/{template_id}/schedules", response_model=dict)
+async def list_provider_schedules(subdomain: str, template_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        schedules = db.query(models.ProviderSchedule).filter_by(template_id=template_id).all()
+        result = []
+        for schedule in schedules:
+            provider = schedule.provider
+            result.append({
+                "schedule_id": schedule.id,
+                "provider_id": provider.id if provider else None,
+                "provider_name": provider.name if provider else None,
+                "effective_date": schedule.effective_date.isoformat(),
+                "end_date": schedule.end_date.isoformat() if schedule.end_date else None,
+                "days_of_week": schedule.days_of_week,
+                "recurrence_pattern": schedule.recurrence_pattern,
+                "custom_start_time": format_time(schedule.custom_start_time) if schedule.custom_start_time else None,
+                "custom_end_time": format_time(schedule.custom_end_time) if schedule.custom_end_time else None,
+                "schedule_type": schedule.schedule_type,
+                "is_active": schedule.is_active,
+                "notes": schedule.notes
+            })
+
+        return {"schedules": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/availability/templates/{template_id}/schedules", response_model=dict)
+async def create_provider_schedule(subdomain: str, template_id: int, payload: ProviderScheduleCreate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        template = db.query(models.AvailabilityTemplate).filter_by(id=template_id).first()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        provider = db.query(models.Provider).filter_by(id=payload.provider_id).first()
+        if not provider or not provider.is_active:
+            raise HTTPException(status_code=404, detail="Provider not found or inactive")
+
+        schedule = models.ProviderSchedule(
+            provider_id=payload.provider_id,
+            template_id=template_id,
+            effective_date=parse_date(payload.effective_date),
+            end_date=parse_date(payload.end_date) if payload.end_date else None,
+            days_of_week=payload.days_of_week,
+            recurrence_pattern=payload.recurrence_pattern,
+            custom_start_time=parse_optional_time(payload.custom_start_time),
+            custom_end_time=parse_optional_time(payload.custom_end_time),
+            schedule_type=payload.schedule_type,
+            notes=payload.notes
+        )
+        db.add(schedule)
+        db.commit()
+        db.refresh(schedule)
+
+        return {
+            "message": "Provider schedule created",
+            "schedule_id": schedule.id
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.patch("/availability/templates/{template_id}/schedules/{schedule_id}", response_model=dict)
+async def update_provider_schedule(subdomain: str, template_id: int, schedule_id: int, payload: ProviderScheduleUpdate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        schedule = db.query(models.ProviderSchedule).filter_by(id=schedule_id, template_id=template_id).first()
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+
+        if payload.effective_date:
+            schedule.effective_date = parse_date(payload.effective_date)
+        if payload.end_date is not None:
+            schedule.end_date = parse_date(payload.end_date) if payload.end_date else None
+        if payload.days_of_week is not None:
+            if not payload.days_of_week:
+                raise HTTPException(status_code=400, detail="days_of_week cannot be empty")
+            schedule.days_of_week = sorted(set(payload.days_of_week))
+        if payload.recurrence_pattern is not None:
+            schedule.recurrence_pattern = payload.recurrence_pattern
+        if payload.custom_start_time is not None:
+            schedule.custom_start_time = parse_optional_time(payload.custom_start_time)
+        if payload.custom_end_time is not None:
+            schedule.custom_end_time = parse_optional_time(payload.custom_end_time)
+        if payload.schedule_type is not None:
+            schedule.schedule_type = payload.schedule_type
+        if payload.is_active is not None:
+            schedule.is_active = payload.is_active
+        if payload.notes is not None:
+            schedule.notes = payload.notes
+
+        db.commit()
+
+        return {"message": "Schedule updated"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/availability/templates/{template_id}/schedules/{schedule_id}", response_model=dict)
+async def delete_provider_schedule(subdomain: str, template_id: int, schedule_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        schedule = db.query(models.ProviderSchedule).filter_by(id=schedule_id, template_id=template_id).first()
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+
+        db.delete(schedule)
+        db.commit()
+
+        return {"message": "Schedule deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# --- Resource Capacity Rules ---
+
+@router.get("/availability/templates/{template_id}/capacities", response_model=dict)
+async def list_resource_capacities(subdomain: str, template_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        capacities = db.query(models.ResourceCapacity).filter_by(template_id=template_id).all()
+        result = []
+        for capacity in capacities:
+            result.append({
+                "capacity_id": capacity.id,
+                "specific_date": capacity.specific_date.isoformat() if capacity.specific_date else None,
+                "day_of_week": capacity.day_of_week.value if capacity.day_of_week else None,
+                "available_rooms": capacity.available_rooms,
+                "max_concurrent_appointments": capacity.max_concurrent_appointments,
+                "time_slot_start": format_time(capacity.time_slot_start) if capacity.time_slot_start else None,
+                "time_slot_end": format_time(capacity.time_slot_end) if capacity.time_slot_end else None,
+                "notes": capacity.notes,
+                "is_active": capacity.is_active,
+                "created_at": capacity.created_at.isoformat() if capacity.created_at else None
+            })
+
+        return {"capacities": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/availability/templates/{template_id}/capacities", response_model=dict)
+async def create_resource_capacity(subdomain: str, template_id: int, payload: ResourceCapacityCreate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        template = db.query(models.AvailabilityTemplate).filter_by(id=template_id).first()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        capacity = models.ResourceCapacity(
+            template_id=template_id,
+            specific_date=parse_date(payload.specific_date) if payload.specific_date else None,
+            day_of_week=to_day_enum(payload.day_of_week) if payload.day_of_week is not None else None,
+            available_rooms=payload.available_rooms,
+            max_concurrent_appointments=payload.max_concurrent_appointments,
+            time_slot_start=parse_optional_time(payload.time_slot_start),
+            time_slot_end=parse_optional_time(payload.time_slot_end),
+            notes=payload.notes,
+            is_active=payload.is_active
+        )
+        db.add(capacity)
+        db.commit()
+        db.refresh(capacity)
+
+        return {
+            "message": "Resource capacity created",
+            "capacity_id": capacity.id
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.patch("/availability/templates/{template_id}/capacities/{capacity_id}", response_model=dict)
+async def update_resource_capacity(subdomain: str, template_id: int, capacity_id: int, payload: ResourceCapacityUpdate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        capacity = db.query(models.ResourceCapacity).filter_by(id=capacity_id, template_id=template_id).first()
+        if not capacity:
+            raise HTTPException(status_code=404, detail="Capacity rule not found")
+
+        if payload.specific_date is not None:
+            capacity.specific_date = parse_date(payload.specific_date) if payload.specific_date else None
+        if payload.day_of_week is not None:
+            capacity.day_of_week = to_day_enum(payload.day_of_week)
+        if payload.available_rooms is not None:
+            if payload.available_rooms < 1:
+                raise HTTPException(status_code=400, detail="available_rooms must be at least 1")
+            capacity.available_rooms = payload.available_rooms
+        if payload.max_concurrent_appointments is not None:
+            if payload.max_concurrent_appointments < 1:
+                raise HTTPException(status_code=400, detail="max_concurrent_appointments must be positive")
+            capacity.max_concurrent_appointments = payload.max_concurrent_appointments
+        if payload.time_slot_start is not None:
+            capacity.time_slot_start = parse_optional_time(payload.time_slot_start)
+        if payload.time_slot_end is not None:
+            capacity.time_slot_end = parse_optional_time(payload.time_slot_end)
+        if payload.notes is not None:
+            capacity.notes = payload.notes
+        if payload.is_active is not None:
+            capacity.is_active = payload.is_active
+
+        db.commit()
+
+        return {"message": "Capacity rule updated"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/availability/templates/{template_id}/capacities/{capacity_id}", response_model=dict)
+async def delete_resource_capacity(subdomain: str, template_id: int, capacity_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        capacity = db.query(models.ResourceCapacity).filter_by(id=capacity_id, template_id=template_id).first()
+        if not capacity:
+            raise HTTPException(status_code=404, detail="Capacity rule not found")
+
+        db.delete(capacity)
+        db.commit()
+
+        return {"message": "Capacity rule deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# --- Provider Leaves ---
+
+@router.get("/availability/providers/{provider_id}/leaves", response_model=dict)
+async def list_provider_leaves(subdomain: str, provider_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        leaves = db.query(models.ProviderLeave).filter_by(provider_id=provider_id).order_by(models.ProviderLeave.start_date).all()
+        result = []
+        for leave in leaves:
+            result.append({
+                "leave_id": leave.id,
+                "start_date": leave.start_date.isoformat(),
+                "end_date": leave.end_date.isoformat(),
+                "leave_type": leave.leave_type,
+                "reason": leave.reason,
+                "approved_by": leave.approved_by,
+                "is_approved": leave.is_approved,
+                "created_at": leave.created_at.isoformat() if leave.created_at else None
+            })
+
+        return {"leaves": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/availability/providers/{provider_id}/leaves", response_model=dict)
+async def create_provider_leave(subdomain: str, provider_id: int, payload: ProviderLeaveCreate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        provider = db.query(models.Provider).filter_by(id=provider_id).first()
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        if payload.provider_id != provider_id:
+            raise HTTPException(status_code=400, detail="provider_id mismatch in payload")
+
+        leave = models.ProviderLeave(
+            provider_id=provider_id,
+            start_date=parse_date(payload.start_date),
+            end_date=parse_date(payload.end_date),
+            leave_type=payload.leave_type,
+            reason=payload.reason,
+            approved_by=payload.approved_by,
+            is_approved=payload.is_approved
+        )
+        db.add(leave)
+        db.commit()
+        db.refresh(leave)
+
+        return {
+            "message": "Provider leave created",
+            "leave_id": leave.id
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.patch("/availability/providers/{provider_id}/leaves/{leave_id}", response_model=dict)
+async def update_provider_leave(subdomain: str, provider_id: int, leave_id: int, payload: ProviderLeaveUpdate, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        leave = db.query(models.ProviderLeave).filter_by(id=leave_id, provider_id=provider_id).first()
+        if not leave:
+            raise HTTPException(status_code=404, detail="Leave record not found")
+
+        if payload.end_date is not None:
+            new_end = parse_date(payload.end_date)
+            if new_end < leave.start_date:
+                raise HTTPException(status_code=400, detail="end_date cannot be before start_date")
+            leave.end_date = new_end
+        if payload.leave_type is not None:
+            leave.leave_type = payload.leave_type
+        if payload.reason is not None:
+            leave.reason = payload.reason
+        if payload.approved_by is not None:
+            leave.approved_by = payload.approved_by
+        if payload.is_approved is not None:
+            leave.is_approved = payload.is_approved
+
+        db.commit()
+
+        return {"message": "Leave record updated"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/availability/providers/{provider_id}/leaves/{leave_id}", response_model=dict)
+async def delete_provider_leave(subdomain: str, provider_id: int, leave_id: int, db: Session = Depends(get_db)):
+    try:
+        get_tenant_db(subdomain, db)
+
+        leave = db.query(models.ProviderLeave).filter_by(id=leave_id, provider_id=provider_id).first()
+        if not leave:
+            raise HTTPException(status_code=404, detail="Leave record not found")
+
+        db.delete(leave)
+        db.commit()
+
+        return {"message": "Leave record deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @router.delete("/availability/{availability_id}")
 async def delete_availability(subdomain: str, availability_id: int, db: Session = Depends(get_db)):

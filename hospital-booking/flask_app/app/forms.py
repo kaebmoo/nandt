@@ -1,8 +1,8 @@
 # flask_app/app/forms.py
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, SelectField, BooleanField, TimeField, DateField, HiddenField
-from wtforms.validators import DataRequired, Length, Optional, ValidationError
+from wtforms import StringField, TextAreaField, SelectField, BooleanField, TimeField, DateField, HiddenField, IntegerField
+from wtforms.validators import DataRequired, Length, Optional, ValidationError, NumberRange
 from wtforms.fields import FieldList, FormField
 from datetime import datetime, time
 
@@ -37,6 +37,31 @@ class AvailabilityTemplateForm(FlaskForm):
         choices=[('Asia/Bangkok', 'Asia/Bangkok (GMT+7)')], 
         default='Asia/Bangkok'
     )
+    template_type = SelectField(
+        'ประเภทเทมเพลต',
+        choices=[
+            ('dedicated', 'เฉพาะผู้ให้บริการ (Dedicated)'),
+            ('shared', 'ใช้ร่วมกันหลายผู้ให้บริการ (Shared)'),
+            ('pool', 'คิวรวม/ไม่ระบุผู้ให้บริการ (Provider Pool)')
+        ],
+        default='dedicated',
+        description='กำหนดรูปแบบการจัดสรรผู้ให้บริการสำหรับเทมเพลตนี้'
+    )
+    max_concurrent_slots = IntegerField(
+        'จำนวนการจองพร้อมกันสูงสุด',
+        validators=[
+            DataRequired(message='กรุณากำหนดจำนวนการจองพร้อมกัน'),
+            NumberRange(min=1, max=50, message='จำนวนการจองต้องอยู่ระหว่าง 1-50')
+        ],
+        default=1,
+        description='จำกัดจำนวนการจองที่สามารถเกิดขึ้นพร้อมกันต่อช่วงเวลา',
+        render_kw={'min': 1, 'max': 50, 'step': 1, 'type': 'number'}
+    )
+    requires_provider_assignment = BooleanField(
+        'ต้องเลือกผู้ให้บริการสำหรับทุกการจอง',
+        default=True,
+        description='เปิดใช้งานเมื่อผู้ป่วยต้องเลือกหรือได้รับมอบหมายผู้ให้บริการในแต่ละการจอง'
+    )
     
     # Schedule สำหรับแต่ละวัน
     sunday = FormField(DayScheduleForm, label='อาทิตย์')
@@ -59,6 +84,10 @@ class AvailabilityTemplateForm(FlaskForm):
     def validate(self, extra_validators=None):
         """Validate ทั้งฟอร์ม"""
         if not super().validate():
+            return False
+
+        if self.max_concurrent_slots.data is None or self.max_concurrent_slots.data < 1:
+            self.max_concurrent_slots.errors.append('จำนวนการจองพร้อมกันต้องไม่น้อยกว่า 1')
             return False
         
         # ตรวจสอบว่าต้องมีอย่างน้อย 1 วันที่เปิดทำการ
@@ -100,7 +129,12 @@ class AvailabilityTemplateForm(FlaskForm):
             'name': self.name.data,
             'description': self.description.data or '',
             'timezone': self.timezone.data,
-            'schedule': schedule
+            'schedule': schedule,
+            'settings': {
+                'template_type': self.template_type.data or 'dedicated',
+                'max_concurrent_slots': int(self.max_concurrent_slots.data or 1),
+                'requires_provider_assignment': bool(self.requires_provider_assignment.data)
+            }
         }
 
 class DateOverrideForm(FlaskForm):
@@ -235,6 +269,9 @@ def populate_availability_form_from_api_data(form, api_data):
     form.name.data = first_record['name']
     form.description.data = first_record.get('description', '')
     form.timezone.data = first_record.get('timezone', 'Asia/Bangkok')
+    form.template_type.data = first_record.get('template_type', form.template_type.data or 'dedicated')
+    form.max_concurrent_slots.data = first_record.get('max_concurrent_slots', form.max_concurrent_slots.data or 1)
+    form.requires_provider_assignment.data = first_record.get('requires_provider_assignment', form.requires_provider_assignment.data)
     
     # จัดกลุ่มตาม day_of_week
     schedule_by_day = {}
@@ -292,5 +329,8 @@ def create_default_template_form():
     # ตั้งค่าเริ่มต้นให้ form
     form.name.data = 'จันทร์-ศุกร์ (08:30-16:30)'
     form.description.data = 'เวลาทำการปกติวันธรรมดา'
+    form.template_type.data = 'dedicated'
+    form.max_concurrent_slots.data = 1
+    form.requires_provider_assignment.data = True
     
     return form

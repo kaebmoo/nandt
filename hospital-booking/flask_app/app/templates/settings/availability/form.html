@@ -1,6 +1,6 @@
 <!-- templates/settings/availability/form.html -->
 {% extends "base.html" %}
-{% from 'macros/forms.html' import render_field, render_field_errors, render_form_errors %}
+{% from 'macros/forms.html' import render_field, render_field_errors, render_form_errors, render_checkbox %}
 
 {% block title %}{{ page_title }} - NudDee{% endblock %}
 
@@ -114,6 +114,17 @@
                     </div>
                     <div>
                         {{ render_field(form.timezone, class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2") }}
+                    </div>
+                </div>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        {{ render_field(form.template_type, class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2") }}
+                    </div>
+                    <div>
+                        {{ render_field(form.max_concurrent_slots, class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2") }}
+                    </div>
+                    <div class="md:col-span-1">
+                        {{ render_checkbox(form.requires_provider_assignment) }}
                     </div>
                 </div>
                 <div class="mt-4">

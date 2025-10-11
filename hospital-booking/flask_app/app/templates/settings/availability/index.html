@@ -131,13 +131,39 @@
             </div>
         </div>
 
-        <!-- Template Details & Date Overrides -->
+        <!-- Template Details & Management Sections -->
         <div class="lg:col-span-2 space-y-8">
-            
-            <!-- Selected Template Details -->
+            {% set template_type_labels = {
+                'dedicated': 'เฉพาะผู้ให้บริการ (Dedicated)',
+                'shared': 'ใช้ร่วมกันหลายผู้ให้บริการ (Shared)',
+                'pool': 'คิวรวม/ไม่ระบุผู้ให้บริการ (Provider Pool)'
+            } %}
+            {% set schedule_map = {} %}
+            {% set provider_assignments = [] %}
+            {% set provider_schedules = [] %}
+            {% set resource_capacities = [] %}
+            {% set assigned_ids = [] %}
+            {% set scheduled_provider_ids = [] %}
+            {% set provider_count = 0 %}
+            {% if selected_template %}
+                {% set schedule_map = selected_template.schedule or {} %}
+                {% set provider_assignments = selected_template.providers_detail or [] %}
+                {% set provider_schedules = selected_template.provider_schedules_detail or [] %}
+                {% set resource_capacities = selected_template.resource_capacities_detail or [] %}
+                {% set assigned_ids = provider_assignments | map(attribute='provider_id') | list %}
+                {% set scheduled_provider_ids = provider_schedules | selectattr('provider_id') | map(attribute='provider_id') | list %}
+                {% set provider_count = selected_template.provider_count if selected_template.provider_count is not none else provider_assignments|length %}
+            {% endif %}
+
             <div id="template-details" class="bg-white rounded-xl shadow-sm border p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-semibold text-gray-900">รายละเอียดเทมเพลต</h3>
+                    {% if selected_template %}
+                        <a href="{{ url('availability.edit_template', template_id=selected_template.id) }}"
+                           class="text-sm text-purple-600 hover:text-purple-800 transition-colors">
+                            แก้ไขเทมเพลต
+                        </a>
+                    {% endif %}
                 </div>
                 <div id="template-details-content">
                     {% if selected_template %}
@@ -147,22 +173,60 @@
                                 <p class="text-sm text-gray-600 mb-3">{{ selected_template.description }}</p>
                             {% endif %}
                         </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <div class="border rounded-lg p-4 bg-indigo-50 border-indigo-200">
+                                <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">ประเภทเทมเพลต</p>
+                                <p class="text-lg font-semibold text-indigo-900 mt-1">
+                                    {{ template_type_labels.get(selected_template.template_type, 'ไม่ระบุ') }}
+                                </p>
+                            </div>
+                            <div class="border rounded-lg p-4 bg-sky-50 border-sky-200">
+                                <p class="text-xs font-semibold text-sky-700 uppercase tracking-wide">ความจุต่อช่วงเวลา</p>
+                                <p class="text-lg font-semibold text-sky-900 mt-1">
+                                    {{ selected_template.max_concurrent_slots or 1 }} การจอง
+                                </p>
+                            </div>
+                            <div class="border rounded-lg p-4 bg-emerald-50 border-emerald-200">
+                                <p class="text-xs font-semibold text-emerald-700 uppercase tracking-wide">การกำหนดผู้ให้บริการ</p>
+                                <p class="text-lg font-semibold text-emerald-900 mt-1">
+                                    {% if selected_template.requires_provider_assignment %}
+                                        ต้องกำหนด / เลือกผู้ให้บริการ
+                                    {% else %}
+                                        จองได้โดยไม่ระบุผู้ให้บริการ
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="border rounded-lg p-4 bg-amber-50 border-amber-200">
+                                <p class="text-xs font-semibold text-amber-700 uppercase tracking-wide">ผู้ให้บริการในเทมเพลต</p>
+                                <p class="text-lg font-semibold text-amber-900 mt-1">
+                                    {{ provider_count }} คน
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-xs uppercase text-gray-500 tracking-wide mb-2">เขตเวลา</p>
+                            <div class="inline-flex items-center space-x-2 bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                                <span>🕒</span>
+                                <span>{{ selected_template.timezone or 'Asia/Bangkok' }}</span>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {% set day_names = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'] %}
                             {% for day_num in range(7) %}
-                                {% set is_active = day_num in selected_template.days %}
+                                {% set day_key = day_num|string %}
+                                {% set day_slots = schedule_map.get(day_key) %}
+                                {% set is_active = day_slots and day_slots|length > 0 %}
                                 <div class="border rounded-lg p-3 {% if is_active %}bg-green-50 border-green-200{% else %}bg-gray-50 border-gray-200{% endif %}">
                                     <h5 class="font-medium text-gray-900 mb-1">{{ day_names[day_num] }}</h5>
                                     {% if is_active %}
-                                        {% if selected_template.schedule and selected_template.schedule[day_num|string] %}
-                                            {% for slot in selected_template.schedule[day_num|string] %}
-                                                <div class="text-sm text-green-700">
-                                                    {{ slot.start if slot.start else slot[0] }} - {{ slot.end if slot.end else slot[1] }}
-                                                </div>
+                                        <div class="space-y-1">
+                                            {% for slot in day_slots %}
+                                                <div class="text-sm text-green-700 font-mono">{{ slot.start }} - {{ slot.end }}</div>
                                             {% endfor %}
-                                        {% else %}
-                                            <div class="text-sm text-green-700">08:30 - 16:30</div>
-                                        {% endif %}
+                                        </div>
                                     {% else %}
                                         <div class="text-sm text-gray-500">ปิด</div>
                                     {% endif %}
@@ -177,7 +241,342 @@
                 </div>
             </div>
 
-            <!-- Template-Specific Date Overrides -->
+            <div class="bg-white rounded-xl shadow-sm border p-6" id="template-providers-card">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">ผู้ให้บริการในเทมเพลต</h2>
+                        <p class="text-sm text-gray-600">กำหนดผู้ให้บริการที่สามารถรับจองจากเทมเพลตนี้</p>
+                    </div>
+                    {% if selected_template %}
+                        <button type="button"
+                                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                onclick="openModal('provider-modal')">
+                            เพิ่มผู้ให้บริการ
+                        </button>
+                    {% endif %}
+                </div>
+                {% if selected_template %}
+                    {% if provider_assignments %}
+                        <div class="space-y-4">
+                            {% for assignment in provider_assignments %}
+                                <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                    <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-gray-900">
+                                            {{ assignment.provider_name or 'ไม่พบชื่อผู้ให้บริการ' }}
+                                        </h3>
+                                        <div class="text-sm text-gray-600">
+                                            {% if assignment.title %}{{ assignment.title }}{% endif %}
+                                            {% if assignment.department %} • {{ assignment.department }}{% endif %}
+                                        </div>
+                                        <div class="mt-2 space-x-2">
+                                            {% if assignment.is_primary %}
+                                                <span class="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">Primary</span>
+                                            {% endif %}
+                                            {% if assignment.can_auto_assign %}
+                                                <span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Auto Assign</span>
+                                            {% else %}
+                                                <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">เลือกด้วยตนเองเท่านั้น</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 md:mt-0 flex flex-col space-y-3 md:space-y-0 md:flex-row md:items-center md:space-x-4">
+                                        {% if assignment.provider_id %}
+                                            <form method="POST"
+                                                  action="{{ url('availability.update_template_provider', template_id=selected_template.id, provider_id=assignment.provider_id) }}"
+                                                  class="bg-white border border-gray-200 rounded-lg px-4 py-3 space-y-2">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="assignment_id" value="{{ assignment.assignment_id }}">
+                                                <div class="flex items-center space-x-2">
+                                                    <input type="hidden" name="is_primary" value="off">
+                                                    <input type="checkbox" name="is_primary" value="on"
+                                                           {% if assignment.is_primary %}checked{% endif %}
+                                                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                                                    <span class="text-sm text-gray-700">Primary</span>
+                                                </div>
+                                                <div class="flex items-center space-x-2">
+                                                    <input type="hidden" name="can_auto_assign" value="off">
+                                                    <input type="checkbox" name="can_auto_assign" value="on"
+                                                           {% if assignment.can_auto_assign %}checked{% endif %}
+                                                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                                                    <span class="text-sm text-gray-700">Auto Assign</span>
+                                                </div>
+                                                <div class="flex items-center space-x-2">
+                                                    <label class="text-sm text-gray-700">Priority</label>
+                                                    <input type="number" name="priority" value="{{ assignment.priority or 0 }}"
+                                                           class="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                                </div>
+                                                <div class="flex justify-end">
+                                                    <button type="submit"
+                                                            class="text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors">
+                                                        บันทึก
+                                                    </button>
+                                                </div>
+                                            </form>
+                                            <form method="POST"
+                                                  action="{{ url('availability.delete_template_provider', template_id=selected_template.id, provider_id=assignment.provider_id) }}"
+                                                  onsubmit="return confirm('ยืนยันการนำผู้ให้บริการออกจากเทมเพลตนี้หรือไม่?')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit"
+                                                        class="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                                                    นำออก
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <div class="text-sm text-red-500">ไม่พบข้อมูลผู้ให้บริการที่เชื่อมโยง</div>
+                                        {% endif %}
+                                    </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                            <p class="text-sm">ยังไม่มีการกำหนดผู้ให้บริการ</p>
+                            <p class="text-xs mt-1 text-gray-400">กด “เพิ่มผู้ให้บริการ” เพื่อเชื่อมโยงบุคลากรเข้ากับเทมเพลตนี้</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <p class="text-sm">เลือกเทมเพลตเพื่อจัดการผู้ให้บริการ</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border p-6" id="provider-schedules-card">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">ตารางทำงานของผู้ให้บริการ</h2>
+                        <p class="text-sm text-gray-600">กำหนดช่วงเวลาที่ผู้ให้บริการแต่ละคนพร้อมรับจอง</p>
+                    </div>
+                    {% if selected_template %}
+                        <button type="button"
+                                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                onclick="openScheduleModalForCreate()">
+                            เพิ่มตารางใหม่
+                        </button>
+                    {% endif %}
+                </div>
+                {% if selected_template %}
+                    {% if provider_schedules %}
+                        <div class="space-y-4">
+                            {% for schedule in provider_schedules %}
+                                <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <h3 class="text-sm font-semibold text-gray-900">{{ schedule.provider_name or 'ไม่ระบุผู้ให้บริการ' }}</h3>
+                                            <div class="mt-1 text-sm text-gray-600 flex flex-wrap items-center gap-2">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs">
+                                                    {{ schedule.schedule_type|default('regular')|capitalize }}
+                                                </span>
+                                                <span class="text-xs text-gray-500">
+                                                    เริ่ม {{ schedule.effective_date }}
+                                                    {% if schedule.end_date %}
+                                                        • ถึง {{ schedule.end_date }}
+                                                    {% else %}
+                                                        • ไม่มีวันสิ้นสุด
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <div class="mt-2 text-sm text-gray-700 flex flex-wrap gap-2">
+                                                {% for day in schedule.days_of_week %}
+                                                    <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                                                        {{ day|day_name_th_short }}
+                                                    </span>
+                                                {% endfor %}
+                                            </div>
+                                            <div class="mt-2 text-sm text-gray-600">
+                                                {% if schedule.custom_start_time and schedule.custom_end_time %}
+                                                    ชั่วโมงทำการ: {{ schedule.custom_start_time }} - {{ schedule.custom_end_time }}
+                                                {% else %}
+                                                    ใช้เวลาตามเทมเพลต
+                                                {% endif %}
+                                                {% if schedule.notes %}
+                                                    <div class="text-xs text-gray-500 mt-1">หมายเหตุ: {{ schedule.notes }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 lg:mt-0 flex items-center space-x-3">
+                                            <button type="button"
+                                                    class="px-4 py-2 border border-purple-200 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors text-sm"
+                                                    onclick="openScheduleModalForEdit(this)"
+                                                    data-schedule-id="{{ schedule.schedule_id }}"
+                                                    data-provider-id="{{ schedule.provider_id }}"
+                                                    data-effective-date="{{ schedule.effective_date }}"
+                                                    data-end-date="{{ schedule.end_date or '' }}"
+                                                    data-days="{{ schedule.days_of_week | default([], true) | join(',') }}"
+                                                    data-schedule-type="{{ schedule.schedule_type or 'regular' }}"
+                                                    data-start-time="{{ schedule.custom_start_time or '' }}"
+                                                    data-end-time="{{ schedule.custom_end_time or '' }}"
+                                                    data-notes="{{ schedule.notes or '' }}"
+                                                    data-is-active="{{ 'true' if schedule.is_active else 'false' }}">
+                                                แก้ไข
+                                            </button>
+
+                                            <form method="POST"
+                                                  action="{{ url('availability.toggle_provider_schedule', template_id=selected_template.id, schedule_id=schedule.schedule_id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="is_active" value="{{ 'on' if not schedule.is_active else 'off' }}">
+                                                <button type="submit"
+                                                        class="px-4 py-2 text-sm rounded-lg border transition-colors {% if schedule.is_active %}border-emerald-200 text-emerald-700 hover:bg-emerald-50{% else %}border-gray-200 text-gray-600 hover:bg-gray-100{% endif %}">
+                                                    {% if schedule.is_active %}ปิดใช้งาน{% else %}เปิดใช้งาน{% endif %}
+                                                </button>
+                                            </form>
+                                            <form method="POST"
+                                                  action="{{ url('availability.delete_provider_schedule', template_id=selected_template.id, schedule_id=schedule.schedule_id) }}"
+                                                  onsubmit="return confirm('ยืนยันการลบตารางนี้หรือไม่?')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit"
+                                                        class="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm">
+                                                    ลบ
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                            <p class="text-sm">ยังไม่มีการตั้งค่าตารางผู้ให้บริการ</p>
+                            <p class="text-xs mt-1 text-gray-400">กำหนดตารางเพื่อจำกัดเวลาที่ผู้ให้บริการแต่ละคนทำงาน</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <p class="text-sm">เลือกเทมเพลตเพื่อกำหนดตารางผู้ให้บริการ</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border p-6" id="resource-capacity-card">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">ข้อจำกัดความจุ (Resource Capacity)</h2>
+                        <p class="text-sm text-gray-600">กำหนดจำนวนห้องหรือคิวสูงสุดในวันที่หรือช่วงเวลาต่าง ๆ</p>
+                    </div>
+                    {% if selected_template %}
+                        <button type="button"
+                                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                onclick="openModal('capacity-modal')">
+                            เพิ่มข้อจำกัด
+                        </button>
+                    {% endif %}
+                </div>
+                {% if selected_template %}
+                    {% if resource_capacities %}
+                        <div class="space-y-4">
+                            {% for capacity in resource_capacities %}
+                                <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <div class="flex items-center space-x-2">
+                                                <h3 class="text-sm font-semibold text-gray-900">ความจุสูงสุด</h3>
+                                                {% if capacity.is_active %}
+                                                    <span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">ใช้งานอยู่</span>
+                                                {% else %}
+                                                    <span class="px-2 py-0.5 text-xs rounded-full bg-gray-200 text-gray-600">ปิดใช้งาน</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="mt-2 text-sm text-gray-700 space-y-1">
+                                                <div>รองรับได้ {{ capacity.available_rooms }} ห้อง/ผู้ให้บริการพร้อมกัน</div>
+                                                {% if capacity.max_concurrent_appointments %}
+                                                    <div>จำกัดการจองพร้อมกันสูงสุด {{ capacity.max_concurrent_appointments }} รายการ</div>
+                                                {% endif %}
+                                                <div>
+                                                    {% if capacity.specific_date %}
+                                                        วันที่ {{ capacity.specific_date|thai_date }}
+                                                    {% elif capacity.day_of_week is not none %}
+                                                        ทุกวัน{{ capacity.day_of_week|day_name_th_short }}
+                                                    {% else %}
+                                                        ใช้กับทุกวัน
+                                                    {% endif %}
+                                                </div>
+                                                {% if capacity.time_slot_start and capacity.time_slot_end %}
+                                                    <div>ช่วงเวลา {{ capacity.time_slot_start }} - {{ capacity.time_slot_end }}</div>
+                                                {% endif %}
+                                                {% if capacity.notes %}
+                                                    <div class="text-xs text-gray-500">หมายเหตุ: {{ capacity.notes }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 lg:mt-0 flex items-center space-x-3">
+                                            <form method="POST"
+                                                  action="{{ url('availability.toggle_resource_capacity', template_id=selected_template.id, capacity_id=capacity.capacity_id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="is_active" value="{{ 'on' if not capacity.is_active else 'off' }}">
+                                                <button type="submit"
+                                                        class="px-4 py-2 text-sm rounded-lg border transition-colors {% if capacity.is_active %}border-emerald-200 text-emerald-700 hover:bg-emerald-50{% else %}border-gray-200 text-gray-600 hover:bg-gray-100{% endif %}">
+                                                    {% if capacity.is_active %}ปิดใช้งาน{% else %}เปิดใช้งาน{% endif %}
+                                                </button>
+                                            </form>
+                                            <form method="POST"
+                                                  action="{{ url('availability.delete_resource_capacity', template_id=selected_template.id, capacity_id=capacity.capacity_id) }}"
+                                                  onsubmit="return confirm('ยืนยันการลบข้อจำกัดนี้หรือไม่?')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit"
+                                                        class="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm">
+                                                    ลบ
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                            <p class="text-sm">ยังไม่มีการกำหนดข้อจำกัดความจุเพิ่มเติม</p>
+                            <p class="text-xs mt-1 text-gray-400">ใช้ฟีเจอร์นี้เมื่อมีจำนวนห้องหรือเครื่องมือจำกัดเป็นพิเศษ</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <p class="text-sm">เลือกเทมเพลตเพื่อจัดการข้อจำกัดความจุ</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border p-6" id="provider-leaves-card">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">การลาของผู้ให้บริการ</h2>
+                        <p class="text-sm text-gray-600">บันทึกวันลาหรือไม่พร้อมให้บริการ เพื่อกันไม่ให้ถูกเลือกในช่วงที่ไม่สะดวก</p>
+                    </div>
+                    {% if selected_template %}
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <select id="leave-provider-select"
+                                    class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    {% if not provider_options %}disabled{% endif %}>
+                                <option value="">เลือกผู้ให้บริการ</option>
+                                {% for provider in provider_options %}
+                                    <option value="{{ provider.id }}">{{ provider.name }}{% if provider.title %} • {{ provider.title }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button"
+                                    class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                    onclick="openLeaveModal()"
+                                    {% if not provider_options %}disabled{% endif %}>
+                                เพิ่มการลา
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+                {% if selected_template %}
+                    <div id="provider-leave-list" class="space-y-3"
+                         data-template-id="{{ selected_template.id }}"
+                         data-csrf="{{ csrf_token() }}">
+                        <div class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">
+                            เลือกผู้ให้บริการเพื่อดูข้อมูลการลา
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <p class="text-sm">เลือกเทมเพลตเพื่อจัดการข้อมูลการลา</p>
+                    </div>
+                {% endif %}
+            </div>
+
             {% if selected_template %}
             <div id="template-date-overrides" class="bg-white rounded-xl shadow-sm border p-6">
                 <div class="flex justify-between items-center mb-6">
@@ -252,10 +651,347 @@
             </div>
             {% endif %}
 
-
         </div>
     </div>
 </div>
+
+{% if selected_template %}
+<!-- Provider Assignment Modal -->
+<div id="provider-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl p-6 max-w-lg w-full mx-4" onclick="event.stopPropagation();">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">เพิ่มผู้ให้บริการในเทมเพลต</h3>
+            <button onclick="closeModal('provider-modal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <form method="POST" action="{{ url('availability.add_template_provider', template_id=selected_template.id) }}" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">เลือกผู้ให้บริการ</label>
+                <select name="provider_id" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="">-- เลือกผู้ให้บริการ --</option>
+                    {% for provider in provider_options %}
+                        <option value="{{ provider.id }}" {% if provider.id in assigned_ids %}disabled{% endif %}>
+                            {{ provider.name }}{% if provider.title %} • {{ provider.title }}{% endif %}
+                            {% if provider.id in assigned_ids %}(ถูกกำหนดแล้ว){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                {% if provider_options|length == 0 %}
+                    <p class="mt-2 text-sm text-gray-500">ยังไม่มีผู้ให้บริการที่เปิดใช้งานในระบบ</p>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" name="is_primary" value="on"
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="text-sm text-gray-700">กำหนดเป็น Primary</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" name="can_auto_assign" value="on" checked
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="text-sm text-gray-700">อนุญาตให้ระบบเลือกให้อัตโนมัติ</span>
+                </label>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">ลำดับความสำคัญ (Priority)</label>
+                <input type="number" name="priority" value="0" min="0" max="99"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <p class="text-xs text-gray-500 mt-1">ตัวเลขยิ่งน้อยยิ่งมีความสำคัญสูง</p>
+            </div>
+
+            <div class="flex justify-end space-x-4 pt-4">
+                <button type="button" onclick="closeModal('provider-modal')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        {% if provider_options|length == 0 %}disabled{% endif %}>
+                    บันทึกผู้ให้บริการ
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Provider Schedule Modal -->
+<div id="schedule-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onclick="event.stopPropagation();">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900" id="schedule-modal-title">กำหนดตารางผู้ให้บริการ</h3>
+            <button onclick="closeModal('schedule-modal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <form id="provider-schedule-form"
+              method="POST"
+              action="{{ url('availability.add_provider_schedule', template_id=selected_template.id) }}"
+              class="space-y-4"
+              data-create-action="{{ url('availability.add_provider_schedule', template_id=selected_template.id) }}"
+              data-update-action-template="{{ url('availability.update_provider_schedule', template_id=selected_template.id, schedule_id=999999) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="schedule_id" id="schedule-id-input" value="">
+            <input type="hidden" name="is_active" id="schedule-is-active-input" value="on">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ผู้ให้บริการ</label>
+                    <select name="provider_id" id="schedule-provider-select" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">-- เลือกผู้ให้บริการ --</option>
+                        {% for provider in provider_options %}
+                            <option value="{{ provider.id }}" {% if provider.id in scheduled_provider_ids %}disabled{% endif %}>
+                                {{ provider.name }}{% if provider.title %} • {{ provider.title }}{% endif %}
+                                {% if provider.id in scheduled_provider_ids %}(มีตารางแล้ว){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-2">ผู้ที่มีตารางอยู่แล้วจะไม่สามารถเลือกได้</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ประเภทตาราง</label>
+                    <select name="schedule_type" id="schedule-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="regular">เวลาปกติ</option>
+                        <option value="override">Override เฉพาะกิจ</option>
+                        <option value="oncall">On-call / เวรนอกเวลา</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่เริ่มต้น</label>
+                    <input type="date" name="effective_date" id="schedule-effective-date" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่สิ้นสุด (ถ้ามี)</label>
+                    <input type="date" name="end_date" id="schedule-end-date"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">วันที่ทำงาน</label>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {% set day_names_modal = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] %}
+                    {% for day in range(7) %}
+                        <label class="flex items-center space-x-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                            <input type="checkbox" name="days_of_week" value="{{ day }}"
+                                   class="schedule-day-checkbox h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                            <span class="text-sm text-gray-700">{{ day_names_modal[day] }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                <p class="text-xs text-gray-500 mt-2">ต้องเลือกอย่างน้อย 1 วันทำการ</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เวลาเริ่ม (ถ้าต่างจากเทมเพลต)</label>
+                    <input type="time" name="custom_start_time" id="schedule-start-time"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เวลาสิ้นสุด</label>
+                    <input type="time" name="custom_end_time" id="schedule-end-time"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">หมายเหตุ (ถ้ามี)</label>
+                <textarea name="notes" id="schedule-notes" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="ระบุเหตุผลหรือรายละเอียดเพิ่มเติม"></textarea>
+            </div>
+
+            <div class="flex justify-end space-x-4 pt-4">
+                <button type="button" onclick="closeModal('schedule-modal')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit" id="schedule-submit-button"
+                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    บันทึกตาราง
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Capacity Modal -->
+<div id="capacity-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl p-6 max-w-xl w-full mx-4" onclick="event.stopPropagation();">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">เพิ่มข้อจำกัดความจุ</h3>
+            <button onclick="closeModal('capacity-modal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <form method="POST" action="{{ url('availability.add_resource_capacity', template_id=selected_template.id) }}" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่เฉพาะเจาะจง</label>
+                    <input type="date" name="specific_date"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันในสัปดาห์</label>
+                    <select name="day_of_week"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="none">-- ไม่ระบุ (ใช้เฉพาะวันที่เลือก) --</option>
+                        {% set day_labels_modal = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'] %}
+                        {% for day in range(7) %}
+                            <option value="{{ day }}">{{ day_labels_modal[day] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500">ต้องระบุอย่างน้อยวันที่เฉพาะเจาะจงหรือวันในสัปดาห์</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">จำนวนห้อง / Slot พร้อมกัน</label>
+                    <input type="number" name="available_rooms" value="1" min="1" max="99" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">จำกัดการจองพร้อมกัน (ถ้ามี)</label>
+                    <input type="number" name="max_concurrent_appointments" min="1" max="99"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เวลาเริ่ม (เพิ่มเติม)</label>
+                    <input type="time" name="time_slot_start"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เวลาสิ้นสุด</label>
+                    <input type="time" name="time_slot_end"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700 mb-2">หมายเหตุ</label>
+                <textarea name="notes" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="ระบุบริบท เช่น ปรับลดเพราะห้องปิดปรับปรุง"></textarea>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" name="is_active" value="on" checked
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="text-sm text-gray-700">เปิดใช้งานทันที</span>
+                </label>
+            </div>
+
+            <div class="flex justify-end space-x-4 pt-4">
+                <button type="button" onclick="closeModal('capacity-modal')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    บันทึกข้อจำกัด
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Provider Leave Modal -->
+<div id="leave-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl p-6 max-w-lg w-full mx-4" onclick="event.stopPropagation();">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">บันทึกการลาของผู้ให้บริการ</h3>
+                <p class="text-sm text-gray-500">กำลังบันทึกให้: <span id="leave-modal-provider-label" class="font-medium text-gray-800"></span></p>
+            </div>
+            <button onclick="closeModal('leave-modal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <form method="POST" action="{{ url('availability.add_provider_leave', template_id=selected_template.id) }}" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="provider_id" id="leave-modal-provider-id" value="">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่เริ่มลา</label>
+                    <input type="date" name="start_date" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่สิ้นสุดลา</label>
+                    <input type="date" name="end_date" required
+                           class="w-full px-3 py-2 border.border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ประเภทการลา</label>
+                    <input type="text" name="leave_type"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           placeholder="เช่น ลาพักร้อน, ลากิจ, ลาป่วย">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ผู้อนุมัติ (ถ้ามี)</label>
+                    <input type="text" name="approved_by"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">เหตุผลเพิ่มเติม</label>
+                <input type="text" name="reason"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                       placeholder="ระบุเหตุผลหรือรายละเอียดอื่น ๆ">
+            </div>
+
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="is_approved" value="on"
+                       class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                <span class="text-sm text-gray-700">อนุมัติแล้ว</span>
+            </label>
+
+            <div class="flex justify-end space-x-4 pt-4">
+                <button type="button" onclick="closeModal('leave-modal')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    บันทึกการลา
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <!-- Date Override Modal -->
 <div id="date-override-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
@@ -332,7 +1068,47 @@
 
 {% block extra_js %}
 <script>
-    let selectedTemplateId = null;
+    const templateId = {{ selected_template.id if selected_template else 'null' }};
+    const assignedProviderIds = {{ assigned_ids|default([], true)|tojson }};
+    const providerOptionsData = {{ provider_options|default([], true)|tojson }};
+    const providerLookup = {};
+    providerOptionsData.forEach(provider => {
+        if (provider && provider.id !== undefined) {
+            providerLookup[String(provider.id)] = provider;
+        }
+    });
+    const csrfTokenValue = "{{ csrf_token() }}";
+    const currentPageUrl = new URL(window.location.href);
+    const subdomainParam = currentPageUrl.searchParams.get('subdomain');
+    const templateScheduleMap = {{ schedule_map|default({}, true)|tojson }};
+    const templateDefaultDayList = {{ selected_template.days|default([], true)|tojson }};
+    const mapDayValues = Object.keys(templateScheduleMap || {})
+        .filter(key => Array.isArray(templateScheduleMap[key]) && (templateScheduleMap[key] || []).length > 0)
+        .map(key => {
+            const parsed = parseInt(key, 10);
+            return Number.isNaN(parsed) ? null : parsed;
+        })
+        .filter(day => day !== null);
+    const fallbackDayValues = Array.isArray(templateDefaultDayList)
+        ? templateDefaultDayList.filter(day => typeof day === 'number' && !Number.isNaN(day))
+        : [];
+    const defaultScheduleDays = (mapDayValues.length > 0 ? mapDayValues : fallbackDayValues).filter((value, index, array) => array.indexOf(value) === index);
+    const scheduleModalElement = document.getElementById('schedule-modal');
+    const scheduleForm = document.getElementById('provider-schedule-form');
+    const scheduleProviderSelect = document.getElementById('schedule-provider-select');
+    const scheduleTypeSelect = document.getElementById('schedule-type');
+    const scheduleEffectiveInput = document.getElementById('schedule-effective-date');
+    const scheduleEndInput = document.getElementById('schedule-end-date');
+    const scheduleStartInput = document.getElementById('schedule-start-time');
+    const scheduleEndTimeInput = document.getElementById('schedule-end-time');
+    const scheduleNotesInput = document.getElementById('schedule-notes');
+    const scheduleDayCheckboxes = scheduleModalElement ? Array.from(scheduleModalElement.querySelectorAll('.schedule-day-checkbox')) : [];
+    const scheduleModalTitle = document.getElementById('schedule-modal-title');
+    const scheduleSubmitButton = document.getElementById('schedule-submit-button');
+    const scheduleIdInput = document.getElementById('schedule-id-input');
+    const scheduleIsActiveInput = document.getElementById('schedule-is-active-input');
+    let lastEditedProviderOption = null;
+    let lastEditedProviderWasDisabled = false;
 
     function deleteTemplate(event, templateId) {
         event.stopPropagation();
@@ -354,8 +1130,6 @@
         form.style.display = 'none';
 
         const actionUrl = new URL(`/settings/availability/template/${templateId}/delete`, window.location.origin);
-        const currentUrl = new URL(window.location.href);
-        const subdomainParam = currentUrl.searchParams.get('subdomain');
         if (subdomainParam) {
             actionUrl.searchParams.set('subdomain', subdomainParam);
         }
@@ -365,7 +1139,7 @@
         const csrfToken = document.createElement('input');
         csrfToken.type = 'hidden';
         csrfToken.name = 'csrf_token';
-        csrfToken.value = '{{ csrf_token() }}';
+        csrfToken.value = csrfTokenValue;
         form.appendChild(csrfToken);
         
         // เก็บ URL เดิมไว้เช็ค
@@ -409,7 +1183,8 @@
     // โหลด template-specific overrides
     async function loadTemplateOverrides(templateId) {
         try {
-            const response = await fetch(`/settings/api/template/${templateId}/overrides`);
+            const endpoint = `/settings/api/template/${templateId}/overrides${subdomainParam ? `?subdomain=${encodeURIComponent(subdomainParam)}` : ''}`;
+            const response = await fetch(endpoint);
             const data = await response.json();
             
             if (response.ok) {
@@ -430,7 +1205,7 @@
                                     <form method="POST" action="/settings/availability/date-override/${override.id}/delete" 
                                           style="display: inline;" 
                                           onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')">
-                                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name=csrf-token]').getAttribute('content')}">
+                                        <input type="hidden" name="csrf_token" value="${csrfTokenValue}">
                                         <button type="submit" class="text-red-600 hover:text-red-800 transition-colors">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -485,14 +1260,13 @@
     
     // แสดง form สำหรับวันพิเศษเฉพาะเทมเพลต
     function showTemplateOverrideForm() {
-        {% if selected_template %}
-        const templateId = {{ selected_template.id }};
-        document.getElementById('modal-template-id').value = templateId;
-        document.getElementById('modal-scope').value = 'template';
-        document.getElementById('date-override-modal').classList.remove('hidden');
-        {% else %}
-        alert('กรุณาเลือกเทมเพลตก่อน');
-        {% endif %}
+        if (templateId) {
+            document.getElementById('modal-template-id').value = templateId;
+            document.getElementById('modal-scope').value = 'template';
+            document.getElementById('date-override-modal').classList.remove('hidden');
+        } else {
+            alert('กรุณาเลือกเทมเพลตก่อน');
+        }
     }
     
     // ซ่อน form
@@ -515,18 +1289,336 @@
             timeInputs.style.display = 'block';
         }
     }
+
+    function setScheduleDays(days) {
+        if (!scheduleDayCheckboxes.length) {
+            return;
+        }
+        const allowedValues = Array.isArray(days) ? new Set(days.map(day => String(day))) : new Set();
+        scheduleDayCheckboxes.forEach(checkbox => {
+            checkbox.checked = allowedValues.size > 0 ? allowedValues.has(checkbox.value) : false;
+        });
+    }
+
+    function resetScheduleForm() {
+        if (!scheduleForm) {
+            return;
+        }
+        scheduleForm.reset();
+        if (scheduleIdInput) {
+            scheduleIdInput.value = '';
+        }
+        if (scheduleSubmitButton) {
+            scheduleSubmitButton.textContent = 'บันทึกตาราง';
+        }
+        if (scheduleModalTitle) {
+            scheduleModalTitle.textContent = 'กำหนดตารางผู้ให้บริการ';
+        }
+        if (scheduleForm.dataset && scheduleForm.dataset.createAction) {
+            scheduleForm.action = scheduleForm.dataset.createAction;
+        }
+        if (scheduleEffectiveInput) {
+            scheduleEffectiveInput.value = '';
+        }
+        if (scheduleEndInput) {
+            scheduleEndInput.value = '';
+        }
+        if (scheduleStartInput) {
+            scheduleStartInput.value = '';
+        }
+        if (scheduleEndTimeInput) {
+            scheduleEndTimeInput.value = '';
+        }
+        if (scheduleNotesInput) {
+            scheduleNotesInput.value = '';
+        }
+        if (scheduleIsActiveInput) {
+            scheduleIsActiveInput.value = 'on';
+        }
+        if (scheduleProviderSelect) {
+            scheduleProviderSelect.disabled = false;
+            if (scheduleProviderSelect.options.length > 0) {
+                scheduleProviderSelect.value = '';
+            }
+        }
+        if (lastEditedProviderOption) {
+            lastEditedProviderOption.disabled = lastEditedProviderWasDisabled;
+            lastEditedProviderOption = null;
+        }
+        lastEditedProviderWasDisabled = false;
+        setScheduleDays(defaultScheduleDays);
+    }
+
+    function openScheduleModalForCreate() {
+        if (!scheduleForm) {
+            return;
+        }
+        resetScheduleForm();
+        openModal('schedule-modal');
+    }
+
+    function openScheduleModalForEdit(trigger) {
+        if (!scheduleForm || !trigger) {
+            return;
+        }
+        const scheduleId = trigger.dataset.scheduleId;
+        if (!scheduleId) {
+            return;
+        }
+        resetScheduleForm();
+        if (scheduleForm.dataset && scheduleForm.dataset.updateActionTemplate) {
+            const updateUrl = scheduleForm.dataset.updateActionTemplate.replace('999999', scheduleId);
+            scheduleForm.action = updateUrl;
+        }
+        if (scheduleIdInput) {
+            scheduleIdInput.value = scheduleId;
+        }
+        if (scheduleModalTitle) {
+            scheduleModalTitle.textContent = 'แก้ไขตารางผู้ให้บริการ';
+        }
+        if (scheduleSubmitButton) {
+            scheduleSubmitButton.textContent = 'อัปเดตตาราง';
+        }
+        const providerId = trigger.dataset.providerId || '';
+        if (scheduleProviderSelect) {
+            if (providerId) {
+                const option = scheduleProviderSelect.querySelector(`option[value="${providerId}"]`);
+                if (option) {
+                    lastEditedProviderWasDisabled = option.disabled;
+                    lastEditedProviderOption = option;
+                    option.disabled = false;
+                }
+                scheduleProviderSelect.value = providerId;
+            }
+            scheduleProviderSelect.disabled = true;
+        }
+        if (scheduleTypeSelect && trigger.dataset.scheduleType) {
+            scheduleTypeSelect.value = trigger.dataset.scheduleType;
+        }
+        if (scheduleEffectiveInput && trigger.dataset.effectiveDate) {
+            scheduleEffectiveInput.value = trigger.dataset.effectiveDate;
+        }
+        if (scheduleEndInput) {
+            scheduleEndInput.value = trigger.dataset.endDate || '';
+        }
+        if (scheduleStartInput) {
+            scheduleStartInput.value = trigger.dataset.startTime || '';
+        }
+        if (scheduleEndTimeInput) {
+            scheduleEndTimeInput.value = trigger.dataset.endTime || '';
+        }
+        if (scheduleNotesInput) {
+            scheduleNotesInput.value = trigger.dataset.notes || '';
+        }
+        if (scheduleIsActiveInput) {
+            scheduleIsActiveInput.value = trigger.dataset.isActive === 'false' ? 'off' : 'on';
+        }
+        const dayValuesRaw = trigger.dataset.days || '';
+        if (dayValuesRaw) {
+            const parsedDays = dayValuesRaw.split(',')
+                .map(value => parseInt(value.trim(), 10))
+                .filter(num => !Number.isNaN(num));
+            setScheduleDays(parsedDays);
+        } else {
+            setScheduleDays([]);
+        }
+        openModal('schedule-modal');
+    }
+
+    function openModal(id) {
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.add('hidden');
+        if (id === 'schedule-modal') {
+            resetScheduleForm();
+        } else {
+            const form = modal.querySelector('form');
+            if (form) {
+                form.reset();
+            }
+        }
+        if (id === 'leave-modal') {
+            const label = document.getElementById('leave-modal-provider-label');
+            if (label) {
+                label.textContent = '';
+            }
+        }
+    }
+
+    function renderDefaultLeaveMessage() {
+        const container = document.getElementById('provider-leave-list');
+        if (!container) return;
+        container.innerHTML = '<div class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">เลือกผู้ให้บริการเพื่อดูข้อมูลการลา</div>';
+    }
+
+    function openLeaveModal() {
+        const select = document.getElementById('leave-provider-select');
+        if (!select) return;
+        const providerId = select.value;
+        if (!providerId) {
+            alert('กรุณาเลือกผู้ให้บริการก่อน');
+            return;
+        }
+        const provider = providerLookup[String(providerId)];
+        const label = document.getElementById('leave-modal-provider-label');
+        if (label) {
+            label.textContent = provider ? provider.name : '';
+        }
+        const input = document.getElementById('leave-modal-provider-id');
+        if (input) {
+            input.value = providerId;
+        }
+        openModal('leave-modal');
+    }
+
+    const htmlEscapes = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).replace(/[&<>"']/g, match => htmlEscapes[match] || match);
+    }
+
+    function formatDate(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return escapeHtml(value);
+        }
+        return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function renderProviderLeaves(providerId, leaves) {
+        const container = document.getElementById('provider-leave-list');
+        if (!container) return;
+        const provider = providerLookup[String(providerId)];
+        const providerName = provider ? provider.name : 'ผู้ให้บริการ';
+
+        if (!leaves || leaves.length === 0) {
+            container.innerHTML = `
+                <div class="text-sm font-semibold text-gray-700 mb-2">รายการลาของ ${escapeHtml(providerName)}</div>
+                <div class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    ยังไม่มีการลาที่บันทึกไว้
+                </div>
+            `;
+            return;
+        }
+
+        let itemsHtml = '';
+        leaves.forEach(leave => {
+            const start = formatDate(leave.start_date);
+            const end = formatDate(leave.end_date);
+            let deleteAction = '#';
+            if (templateId) {
+                const deleteUrl = new URL(`/settings/availability/template/${templateId}/provider-leaves/${providerId}/${leave.leave_id}/delete`, window.location.origin);
+                if (subdomainParam) {
+                    deleteUrl.searchParams.set('subdomain', subdomainParam);
+                }
+                deleteAction = deleteUrl.toString();
+            }
+            itemsHtml += `
+                <div class="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                        <div>
+                            <div class="text-sm font-semibold text-gray-900">${start} - ${end}</div>
+                            <div class="text-xs text-gray-600 mt-1">${escapeHtml(leave.leave_type || 'ไม่ระบุประเภท')}</div>
+                            ${leave.reason ? `<div class="text-xs text-gray-500 mt-1">เหตุผล: ${escapeHtml(leave.reason)}</div>` : ''}
+                            ${leave.approved_by ? `<div class="text-xs text-gray-400 mt-1">ผู้อนุมัติ: ${escapeHtml(leave.approved_by)}</div>` : ''}
+                            <span class="inline-flex mt-2 px-2 py-0.5 rounded-full ${leave.is_approved ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'} text-xs">
+                                ${leave.is_approved ? 'อนุมัติแล้ว' : 'รออนุมัติ'}
+                            </span>
+                        </div>
+                        <form method="POST" action="${deleteAction}" class="mt-4 sm:mt-0" onsubmit="return confirm('ยืนยันการลบข้อมูลการลานี้หรือไม่?')">
+                            <input type="hidden" name="csrf_token" value="${csrfTokenValue}">
+                            <button type="submit" class="px-3 py-1 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm">
+                                ลบ
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = `
+            <div class="text-sm font-semibold text-gray-700 mb-2">รายการลาของ ${escapeHtml(providerName)}</div>
+            <div class="space-y-3">${itemsHtml}</div>
+        `;
+    }
+
+    async function fetchProviderLeaves(providerId) {
+        const container = document.getElementById('provider-leave-list');
+        if (!container) return;
+        container.innerHTML = '<div class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">กำลังโหลดข้อมูล...</div>';
+        try {
+            const endpoint = `/settings/api/providers/${providerId}/leaves${subdomainParam ? `?subdomain=${encodeURIComponent(subdomainParam)}` : ''}`;
+            const response = await fetch(endpoint);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลได้');
+            }
+            renderProviderLeaves(providerId, data.leaves || []);
+        } catch (error) {
+            container.innerHTML = `<div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-4 text-center">ไม่สามารถโหลดข้อมูล: ${escapeHtml(error.message)}</div>`;
+        }
+    }
     
     // Initialize
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+    window.openLeaveModal = openLeaveModal;
+    window.openScheduleModalForCreate = openScheduleModalForCreate;
+    window.openScheduleModalForEdit = openScheduleModalForEdit;
+
     document.addEventListener('DOMContentLoaded', function() {
-        // Setup override type change handler
         document.querySelectorAll('input[name="override_type"]').forEach(radio => {
             radio.addEventListener('change', toggleTimeInputs);
         });
-        
-        // ถ้ามี selected_template ให้โหลด overrides
-        // {% if selected_template %}
-        // loadTemplateOverrides({{ selected_template.id }});
-        // {% endif %}
+
+        if (scheduleForm) {
+            resetScheduleForm();
+        }
+
+        const leaveSelect = document.getElementById('leave-provider-select');
+        if (leaveSelect) {
+            leaveSelect.addEventListener('change', () => {
+                const providerId = leaveSelect.value;
+                if (providerId) {
+                    fetchProviderLeaves(providerId);
+                } else {
+                    renderDefaultLeaveMessage();
+                }
+            });
+
+            if (templateId && Array.isArray(assignedProviderIds) && assignedProviderIds.length > 0) {
+                const defaultId = String(assignedProviderIds[0]);
+                const options = Array.from(leaveSelect.options || []);
+                if (options.some(option => option.value === defaultId)) {
+                    leaveSelect.value = defaultId;
+                    fetchProviderLeaves(defaultId);
+                }
+            }
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(modal => {
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeModal(modal.id);
+                }
+            });
+        });
     });
 </script>
 {% endblock %}

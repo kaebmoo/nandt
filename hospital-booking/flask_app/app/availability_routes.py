@@ -36,6 +36,8 @@ def make_api_request(method, endpoint, data=None, params=None):
             response = requests.post(url, json=data, timeout=10)
         elif method.upper() == 'PUT':
             response = requests.put(url, json=data, timeout=10)
+        elif method.upper() == 'PATCH':
+            response = requests.patch(url, json=data, timeout=10)
         elif method.upper() == 'DELETE':
             response = requests.delete(url, timeout=10)
         else:
@@ -51,6 +53,10 @@ def make_api_request(method, endpoint, data=None, params=None):
         return None, f"การเชื่อมต่อ API ล้มเหลว: {str(e)}"
     except Exception as e:
         return None, f"เกิดข้อผิดพลาด: {str(e)}"
+
+
+def redirect_to_template_settings(template_id):
+    return redirect(build_url_with_context('availability.availability_settings', selected_template=template_id))
 
 # ===== MAIN AVAILABILITY PAGE =====
 @availability_bp.route('/availability')
@@ -85,6 +91,13 @@ def availability_settings():
             detail_data, _ = make_api_request('GET', f'/availability/template/{template["id"]}/details')
             if detail_data:
                 template['schedule'] = detail_data.get('schedule', {})
+                template['providers_detail'] = detail_data.get('providers', [])
+                template['provider_schedules_detail'] = detail_data.get('provider_schedules', [])
+                template['resource_capacities_detail'] = detail_data.get('resource_capacities', [])
+                template['template_type'] = detail_data.get('template_type', template.get('template_type'))
+                template['max_concurrent_slots'] = detail_data.get('max_concurrent_slots', template.get('max_concurrent_slots'))
+                template['requires_provider_assignment'] = detail_data.get('requires_provider_assignment', template.get('requires_provider_assignment', True))
+                template['timezone'] = detail_data.get('timezone', template.get('timezone'))
     
     # เลือก template
     selected_template_id = request.args.get('selected_template', type=int)
@@ -101,6 +114,14 @@ def availability_settings():
         overrides_data, _ = make_api_request('GET', '/date-overrides', params={'template_id': selected_template['id']})
         if overrides_data:
             template_overrides = overrides_data.get('date_overrides', [])
+
+    # ดึงรายการผู้ให้บริการทั้งหมดสำหรับการจัดการ assignment
+    providers_data, providers_error = make_api_request('GET', '/providers')
+    provider_options = []
+    if providers_error:
+        flash(f'เกิดข้อผิดพลาดในการโหลดรายชื่อผู้ให้บริการ: {providers_error}', 'warning')
+    elif providers_data:
+        provider_options = providers_data.get('providers', [])
     
     # สร้าง response และเพิ่ม cache control headers
     response = make_response(render_template('settings/availability/index.html',
@@ -108,6 +129,7 @@ def availability_settings():
                                             templates=templates,
                                             selected_template=selected_template,
                                             template_overrides=template_overrides,
+                                            provider_options=provider_options,
                                             subdomain=subdomain))
     
     # ป้องกัน browser cache เพื่อให้ข้อมูลอัปเดตทันที
@@ -218,6 +240,9 @@ def edit_template(template_id):
         form.name.data = template_details.get('name')
         form.description.data = template_details.get('description')
         form.timezone.data = template_details.get('timezone', 'Asia/Bangkok')
+        form.template_type.data = template_details.get('template_type', 'dedicated')
+        form.max_concurrent_slots.data = template_details.get('max_concurrent_slots', 1)
+        form.requires_provider_assignment.data = template_details.get('requires_provider_assignment', True)
 
     # เติมข้อมูล "ช่องเวลา" (slots) จาก API เสมอ
     day_fields = [form.sunday, form.monday, form.tuesday, form.wednesday, form.thursday, form.friday, form.saturday]
@@ -369,6 +394,416 @@ def delete_date_override(override_id):
         flash('ลบวันพิเศษเรียบร้อยแล้ว!', 'success')
     
     return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
+
+
+# ===== TEMPLATE PROVIDER ASSIGNMENTS =====
+
+@availability_bp.route('/availability/template/<int:template_id>/providers/add', methods=['POST'])
+@login_required
+def add_template_provider(template_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    try:
+        provider_id = int(request.form.get('provider_id', ''))
+    except (TypeError, ValueError):
+        flash('กรุณาเลือกผู้ให้บริการ', 'error')
+        return redirect_to_template_settings(template_id)
+
+    is_primary = request.form.get('is_primary') == 'on'
+    can_auto_assign = request.form.get('can_auto_assign') != 'off' and request.form.get('can_auto_assign') is not None
+    priority_value = request.form.get('priority', '0')
+    try:
+        priority = int(priority_value)
+    except ValueError:
+        priority = 0
+
+    payload = {
+        'provider_id': provider_id,
+        'is_primary': is_primary,
+        'can_auto_assign': can_auto_assign,
+        'priority': priority
+    }
+
+    _, error = make_api_request('POST', f'/availability/templates/{template_id}/providers', payload)
+
+    if error:
+        flash(f'ไม่สามารถเพิ่มผู้ให้บริการได้: {error}', 'error')
+    else:
+        flash('เพิ่มผู้ให้บริการให้เทมเพลตเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/providers/<int:provider_id>/update', methods=['POST'])
+@login_required
+def update_template_provider(template_id, provider_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    payload = {}
+
+    if 'is_primary' in request.form:
+        payload['is_primary'] = 'on' in request.form.getlist('is_primary')
+    if 'can_auto_assign' in request.form:
+        payload['can_auto_assign'] = 'on' in request.form.getlist('can_auto_assign')
+    if 'priority' in request.form:
+        try:
+            payload['priority'] = int(request.form.get('priority') or 0)
+        except ValueError:
+            flash('ลำดับความสำคัญต้องเป็นตัวเลข', 'error')
+            return redirect_to_template_settings(template_id)
+
+    if not payload:
+        flash('ไม่มีข้อมูลสำหรับอัปเดต', 'warning')
+        return redirect_to_template_settings(template_id)
+
+    _, error = make_api_request('PATCH', f'/availability/templates/{template_id}/providers/{provider_id}', payload)
+
+    if error:
+        flash(f'ไม่สามารถอัปเดตข้อมูลผู้ให้บริการได้: {error}', 'error')
+    else:
+        flash('อัปเดตข้อมูลผู้ให้บริการเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/providers/<int:provider_id>/delete', methods=['POST'])
+@login_required
+def delete_template_provider(template_id, provider_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    _, error = make_api_request('DELETE', f'/availability/templates/{template_id}/providers/{provider_id}')
+
+    if error:
+        flash(f'ไม่สามารถนำผู้ให้บริการออกได้: {error}', 'error')
+    else:
+        flash('นำผู้ให้บริการออกจากเทมเพลตแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+# ===== PROVIDER SCHEDULES =====
+
+def _parse_days_of_week():
+    days = []
+    for value in request.form.getlist('days_of_week'):
+        try:
+            days.append(int(value))
+        except ValueError:
+            continue
+    return sorted(set(days))
+
+
+@availability_bp.route('/availability/template/<int:template_id>/schedules/add', methods=['POST'])
+@login_required
+def add_provider_schedule(template_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    try:
+        provider_id = int(request.form.get('provider_id', ''))
+    except (TypeError, ValueError):
+        flash('กรุณาเลือกผู้ให้บริการ', 'error')
+        return redirect_to_template_settings(template_id)
+
+    effective_date = request.form.get('effective_date')
+    if not effective_date:
+        flash('กรุณาระบุวันที่เริ่มต้น', 'error')
+        return redirect_to_template_settings(template_id)
+
+    days_of_week = _parse_days_of_week()
+    if not days_of_week:
+        flash('ต้องเลือกอย่างน้อย 1 วันทำการ', 'error')
+        return redirect_to_template_settings(template_id)
+
+    payload = {
+        'provider_id': provider_id,
+        'effective_date': effective_date,
+        'end_date': request.form.get('end_date') or None,
+        'days_of_week': days_of_week,
+        'recurrence_pattern': request.form.get('recurrence_pattern') or None,
+        'custom_start_time': request.form.get('custom_start_time') or None,
+        'custom_end_time': request.form.get('custom_end_time') or None,
+        'schedule_type': request.form.get('schedule_type') or 'regular',
+        'notes': request.form.get('notes') or None
+    }
+
+    _, error = make_api_request('POST', f'/availability/templates/{template_id}/schedules', payload)
+
+    if error:
+        flash(f'ไม่สามารถเพิ่มตารางผู้ให้บริการได้: {error}', 'error')
+    else:
+        flash('เพิ่มตารางผู้ให้บริการเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/schedules/<int:schedule_id>/update', methods=['POST'])
+@login_required
+def update_provider_schedule(template_id, schedule_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    effective_date = request.form.get('effective_date')
+    if not effective_date:
+        flash('กรุณาระบุวันที่เริ่มต้น', 'error')
+        return redirect_to_template_settings(template_id)
+
+    days_of_week = _parse_days_of_week()
+    if not days_of_week:
+        flash('ต้องเลือกอย่างน้อย 1 วันทำการ', 'error')
+        return redirect_to_template_settings(template_id)
+
+    payload = {
+        'effective_date': effective_date,
+        'end_date': request.form.get('end_date') or None,
+        'days_of_week': days_of_week,
+        'recurrence_pattern': request.form.get('recurrence_pattern') or None,
+        'custom_start_time': request.form.get('custom_start_time') or None,
+        'custom_end_time': request.form.get('custom_end_time') or None,
+        'schedule_type': request.form.get('schedule_type') or 'regular',
+        'notes': request.form.get('notes') or None,
+        'is_active': (request.form.get('is_active') or 'on') == 'on'
+    }
+
+    _, error = make_api_request('PATCH', f'/availability/templates/{template_id}/schedules/{schedule_id}', payload)
+
+    if error:
+        flash(f'ไม่สามารถอัปเดตตารางผู้ให้บริการได้: {error}', 'error')
+    else:
+        flash('อัปเดตตารางผู้ให้บริการเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/schedules/<int:schedule_id>/toggle', methods=['POST'])
+@login_required
+def toggle_provider_schedule(template_id, schedule_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    is_active = request.form.get('is_active') == 'on'
+
+    payload = {'is_active': is_active}
+    _, error = make_api_request('PATCH', f'/availability/templates/{template_id}/schedules/{schedule_id}', payload)
+
+    if error:
+        flash(f'ไม่สามารถอัปเดตสถานะตารางได้: {error}', 'error')
+    else:
+        flash('อัปเดตสถานะตารางสำเร็จ', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/schedules/<int:schedule_id>/delete', methods=['POST'])
+@login_required
+def delete_provider_schedule(template_id, schedule_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    _, error = make_api_request('DELETE', f'/availability/templates/{template_id}/schedules/{schedule_id}')
+
+    if error:
+        flash(f'ไม่สามารถลบตารางได้: {error}', 'error')
+    else:
+        flash('ลบตารางผู้ให้บริการเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+# ===== RESOURCE CAPACITY RULES =====
+
+@availability_bp.route('/availability/template/<int:template_id>/capacities/add', methods=['POST'])
+@login_required
+def add_resource_capacity(template_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    available_rooms = request.form.get('available_rooms')
+    try:
+        available_rooms_int = int(available_rooms)
+    except (TypeError, ValueError):
+        flash('จำนวนห้องที่รองรับต้องเป็นตัวเลข', 'error')
+        return redirect_to_template_settings(template_id)
+
+    payload = {
+        'specific_date': request.form.get('specific_date') or None,
+        'day_of_week': int(request.form.get('day_of_week')) if request.form.get('day_of_week') not in (None, '', 'none') else None,
+        'available_rooms': available_rooms_int,
+        'max_concurrent_appointments': int(request.form.get('max_concurrent_appointments')) if request.form.get('max_concurrent_appointments') else None,
+        'time_slot_start': request.form.get('time_slot_start') or None,
+        'time_slot_end': request.form.get('time_slot_end') or None,
+        'notes': request.form.get('notes') or None,
+        'is_active': request.form.get('is_active') == 'on'
+    }
+
+    _, error = make_api_request('POST', f'/availability/templates/{template_id}/capacities', payload)
+
+    if error:
+        flash(f'ไม่สามารถเพิ่มข้อจำกัดความจุได้: {error}', 'error')
+    else:
+        flash('เพิ่มข้อจำกัดความจุเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/capacities/<int:capacity_id>/toggle', methods=['POST'])
+@login_required
+def toggle_resource_capacity(template_id, capacity_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    is_active = request.form.get('is_active') == 'on'
+    payload = {'is_active': is_active}
+
+    _, error = make_api_request('PATCH', f'/availability/templates/{template_id}/capacities/{capacity_id}', payload)
+
+    if error:
+        flash(f'ไม่สามารถอัปเดตข้อจำกัดความจุได้: {error}', 'error')
+    else:
+        flash('อัปเดตสถานะข้อจำกัดความจุเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/capacities/<int:capacity_id>/delete', methods=['POST'])
+@login_required
+def delete_resource_capacity(template_id, capacity_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    _, error = make_api_request('DELETE', f'/availability/templates/{template_id}/capacities/{capacity_id}')
+
+    if error:
+        flash(f'ไม่สามารถลบข้อจำกัดความจุได้: {error}', 'error')
+    else:
+        flash('ลบข้อจำกัดความจุเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+# ===== PROVIDER LEAVES =====
+
+@availability_bp.route('/availability/template/<int:template_id>/provider-leaves/add', methods=['POST'])
+@login_required
+def add_provider_leave(template_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    try:
+        provider_id = int(request.form.get('provider_id', ''))
+    except (TypeError, ValueError):
+        flash('กรุณาเลือกผู้ให้บริการ', 'error')
+        return redirect_to_template_settings(template_id)
+
+    start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
+
+    if not start_date or not end_date:
+        flash('กรุณาระบุวันที่เริ่มและสิ้นสุดการลา', 'error')
+        return redirect_to_template_settings(template_id)
+
+    payload = {
+        'provider_id': provider_id,
+        'start_date': start_date,
+        'end_date': end_date,
+        'leave_type': request.form.get('leave_type') or None,
+        'reason': request.form.get('reason') or None,
+        'approved_by': request.form.get('approved_by') or None,
+        'is_approved': request.form.get('is_approved') == 'on'
+    }
+
+    _, error = make_api_request('POST', f'/availability/providers/{provider_id}/leaves', payload)
+
+    if error:
+        flash(f'ไม่สามารถบันทึกการลาของผู้ให้บริการได้: {error}', 'error')
+    else:
+        flash('บันทึกการลาของผู้ให้บริการเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/provider-leaves/<int:provider_id>/<int:leave_id>/delete', methods=['POST'])
+@login_required
+def delete_provider_leave(template_id, provider_id, leave_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    _, error = make_api_request('DELETE', f'/availability/providers/{provider_id}/leaves/{leave_id}')
+
+    if error:
+        flash(f'ไม่สามารถลบข้อมูลการลาได้: {error}', 'error')
+    else:
+        flash('ลบข้อมูลการลาของผู้ให้บริการแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/api/providers/<int:provider_id>/leaves')
+@login_required
+def get_provider_leaves(provider_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    leaves_data, error = make_api_request('GET', f'/availability/providers/{provider_id}/leaves')
+
+    if error:
+        return jsonify({'error': error}), 500
+
+    return jsonify(leaves_data or {'leaves': []})
 
 # ===== AJAX API ENDPOINTS =====
 @availability_bp.route('/api/template/<int:template_id>/overrides')

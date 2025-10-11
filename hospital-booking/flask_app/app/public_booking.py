@@ -260,6 +260,69 @@ def confirm_booking():
     date_obj = datetime.strptime(date, '%Y-%m-%d')
     date_display = date_obj.strftime('%d/%m/%Y')
 
+    provider_choices = []
+    provider_selection_required = False
+    provider_error_message = None
+    provider_auto_label = 'ไม่ต้องการเลือก (ให้ระบบเลือกให้)'
+
+    fastapi_base = get_fastapi_url()
+    availability_url = f"{fastapi_base}/api/v1/tenants/{subdomain}/booking/availability/{event_type_id}"
+
+    try:
+        availability_response = requests.get(availability_url, params={'date': date}, timeout=10)
+        if availability_response.ok:
+            availability_data = availability_response.json()
+            template_id = availability_data.get('template_id')
+            provider_selection_required = bool(availability_data.get('requires_provider_assignment'))
+
+            if provider_selection_required:
+                slots = availability_data.get('slots', [])
+                slot_info = next((slot for slot in slots if slot.get('time') == time), None)
+
+                if not slot_info or not slot_info.get('available'):
+                    flash('ช่วงเวลาที่เลือกไม่พร้อมใช้งานแล้ว กรุณาเลือกใหม่อีกครั้ง', 'error')
+                    return redirect(build_url_with_context('booking.book_service', event_type_id=event_type_id))
+
+                available_provider_ids = slot_info.get('available_provider_ids') or []
+
+                if template_id and available_provider_ids:
+                    providers_url = f"{fastapi_base}/api/v1/tenants/{subdomain}/availability/templates/{template_id}/providers"
+                    providers_response = requests.get(providers_url, timeout=10)
+
+                    if providers_response.ok:
+                        providers_data = providers_response.json().get('providers', [])
+                        for assignment in providers_data:
+                            provider_id = assignment.get('provider_id')
+                            if provider_id not in available_provider_ids:
+                                continue
+                            if assignment.get('is_active') is False:
+                                continue
+
+                            provider_choices.append({
+                                'id': provider_id,
+                                'name': assignment.get('name'),
+                                'title': assignment.get('title'),
+                                'is_primary': assignment.get('is_primary'),
+                                'priority': assignment.get('priority'),
+                                'can_auto_assign': assignment.get('can_auto_assign')
+                            })
+
+                        provider_choices.sort(key=lambda item: (
+                            0 if item.get('is_primary') else 1,
+                            item.get('priority') if item.get('priority') is not None else 999,
+                            (item.get('name') or '').lower()
+                        ))
+                    else:
+                        provider_error_message = 'ไม่สามารถโหลดรายชื่อผู้ให้บริการได้'
+                else:
+                    provider_error_message = 'ไม่มีผู้ให้บริการว่างในช่วงเวลาที่เลือก'
+        else:
+            provider_error_message = 'ไม่สามารถตรวจสอบความพร้อมของช่วงเวลาที่เลือกได้'
+    except requests.exceptions.RequestException:
+        provider_error_message = 'ไม่สามารถเชื่อมต่อเพื่อตรวจสอบรายชื่อผู้ให้บริการได้'
+    except Exception:
+        provider_error_message = 'เกิดข้อผิดพลาดในการเตรียมข้อมูลผู้ให้บริการ'
+
     # สร้าง token สำหรับหน้านี้
     from .utils.security import generate_booking_token
     booking_token = generate_booking_token()
@@ -279,6 +342,10 @@ def confirm_booking():
                          date=date,
                          date_display=date_display,
                          time=time,
+                         provider_choices=provider_choices,
+                         provider_selection_required=provider_selection_required,
+                         provider_auto_label=provider_auto_label,
+                         provider_error_message=provider_error_message,
                          subdomain=subdomain)
 
 @public_bp.route('/create', methods=['POST'])
@@ -347,6 +414,13 @@ def create_booking():
         'guest_phone': guest_phone if guest_phone else None,  # ส่ง None แทน ''
         'notes': request.form.get('notes', '')
     }
+
+    provider_id_raw = request.form.get('provider_id', '').strip()
+    if provider_id_raw:
+        try:
+            booking_data['provider_id'] = int(provider_id_raw)
+        except ValueError:
+            pass
     
     # Validate
     if not booking_data['guest_name']:
