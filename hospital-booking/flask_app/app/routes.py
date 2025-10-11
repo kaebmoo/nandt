@@ -9,7 +9,8 @@ from sqlalchemy import text
 import logging
 from shared_db.models import (Appointment, User, Hospital, 
                               Provider, EventType, Patient, 
-                              ServiceType, AvailabilityTemplate)
+                              ServiceType, AvailabilityTemplate,
+                              TemplateProvider)
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
 from .utils.url_helper import get_dashboard_url, build_url_with_context
@@ -214,7 +215,7 @@ def view_appointment(appointment_id):
 def admin_reschedule_appointment(appointment_id):
     """Admin เลื่อนนัดหมาย (มีสิทธิ์มากกว่า public)"""
     
-    db = get_db_session()
+    db = SessionLocal()
     tenant_schema = g.tenant_schema
     subdomain = g.subdomain
     
@@ -232,21 +233,45 @@ def admin_reschedule_appointment(appointment_id):
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
             return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+
+        event_type = db.query(EventType).filter_by(id=appointment.event_type_id).first()
+        template = event_type.availability_template if event_type else None
+
+        provider_options = []
+        if template and template.requires_provider_assignment:
+            assignments = db.query(TemplateProvider).filter_by(template_id=template.id).all()
+            for assignment in assignments:
+                provider = assignment.provider
+                provider_options.append({
+                    "id": provider.id if provider else None,
+                    "name": provider.name if provider else "ไม่ทราบชื่อ",
+                    "title": provider.title if provider and provider.title else None,
+                    "is_active": provider.is_active if provider else False
+                })
         
         if request.method == 'POST':
             # Process reschedule
             new_date = request.form.get('new_date')
             new_time = request.form.get('new_time')
             reason = request.form.get('reason', 'เลื่อนโดยเจ้าหน้าที่')
-            
+            provider_id_raw = request.form.get('provider_id')
+
+            provider_id = None
+            if provider_id_raw:
+                try:
+                    provider_id = int(provider_id_raw)
+                except (TypeError, ValueError):
+                    provider_id = None
+
             # สร้าง reschedule request ผ่าน FastAPI
             reschedule_data = {
                 'booking_reference': appointment.booking_reference,
                 'new_date': new_date,
                 'new_time': new_time,
-                'reason': f"[Admin] {reason}"
+                'reason': f"[Admin] {reason}",
+                'provider_id': provider_id
             }
-            
+
             response = requests.post(
                 f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/reschedule",
                 json=reschedule_data
@@ -254,7 +279,9 @@ def admin_reschedule_appointment(appointment_id):
             
             if response.ok:
                 result = response.json()
-                flash(f'เลื่อนนัดเรียบร้อยแล้ว - รหัสใหม่: {result["new_booking_reference"]}', 'success')
+                booking_ref = result.get('booking_reference', appointment.booking_reference)
+                message = result.get('message', 'เลื่อนนัดเรียบร้อยแล้ว')
+                flash(f"{message} - รหัส: {booking_ref}", 'success')
                 
                 # ส่ง notification ถ้ามี email/phone
                 if appointment.guest_email or appointment.guest_phone:
@@ -267,25 +294,15 @@ def admin_reschedule_appointment(appointment_id):
                 flash(error.get('detail', 'ไม่สามารถเลื่อนนัดได้'), 'error')
         
         # GET - แสดง form
-        event_type = db.query(EventType).filter_by(id=appointment.event_type_id).first()
-        
-        # ดึง availability สำหรับ calendar
-        availability_schedule = {}
-        if event_type and event_type.template_id:
-            avail_response = requests.get(
-                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{event_type.template_id}/details"
-            )
-            if avail_response.ok:
-                availability_data = avail_response.json()
-                availability_schedule = availability_data.get('schedule', {})
-        
         current_user = get_current_user()
         hospital_name = current_user.hospital.name
         
         return render_template('appointments/admin_reschedule.html',
                              appointment=appointment,
                              event_type=event_type,
-                             availability_schedule=availability_schedule,
+                             template_info=template,
+                             provider_options=provider_options,
+                             requires_provider_assignment=bool(template and template.requires_provider_assignment),
                              hospital_name=hospital_name,
                              subdomain=subdomain,
                              current_user=current_user)
@@ -293,7 +310,99 @@ def admin_reschedule_appointment(appointment_id):
     except Exception as e:
         current_app.logger.error(f"Error in admin reschedule: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
-        return redirect(build_url_with_context('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+@bp.route('/appointments/<int:appointment_id>/admin-reschedule/availability')
+@login_required
+@with_tenant(require_access=True)
+def admin_reschedule_availability(appointment_id):
+    date_str = request.args.get('date')
+    provider_id = request.args.get('provider_id')
+
+    if not date_str:
+        return jsonify({'error': 'กรุณาระบุวันที่'}), 400
+
+    subdomain = g.subdomain
+    tenant_schema = g.tenant_schema
+    if not tenant_schema or not subdomain:
+        return jsonify({'error': 'ไม่พบข้อมูล tenant'}), 400
+
+    db = SessionLocal()
+    try:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        db.commit()
+
+        appointment = db.query(Appointment).filter_by(id=appointment_id).first()
+        if not appointment:
+            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+
+        event_type = db.query(EventType).filter_by(id=appointment.event_type_id).first()
+        if not event_type:
+            return jsonify({'error': 'ไม่พบบริการ'}), 404
+
+        template = event_type.availability_template
+
+        current_start_time = appointment.start_time
+        requires_provider = bool(template and template.requires_provider_assignment)
+    except Exception as exc:
+        db.rollback()
+        current_app.logger.error(f"Error preparing availability: {exc}")
+        return jsonify({'error': 'ไม่สามารถดึงข้อมูลได้'}), 500
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    params = {'date': date_str}
+    if provider_id:
+        params['provider_id'] = provider_id
+
+    try:
+        response = requests.get(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/availability/{event_type.id}",
+            params=params,
+            timeout=10
+        )
+    except requests.RequestException as exc:
+        current_app.logger.error(f"Failed to fetch availability: {exc}")
+        return jsonify({'error': 'ไม่สามารถเชื่อมต่อบริการได้'}), 502
+
+    if not response.ok:
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        message = data.get('detail') or data.get('message') or 'ไม่สามารถดึงข้อมูลได้'
+        return jsonify({'error': message}), response.status_code
+
+    data = response.json()
+    slots = data.get('slots', [])
+
+    if current_start_time and current_start_time.strftime('%Y-%m-%d') == date_str:
+        current_time_str = current_start_time.strftime('%H:%M')
+        for slot in slots:
+            if slot.get('time') == current_time_str:
+                slot['available'] = False
+                slot['unavailable_reason'] = 'current_slot'
+                slot['remaining_slots'] = 0
+
+    return jsonify({
+        'slots': slots,
+        'message': data.get('message'),
+        'requires_provider_assignment': requires_provider,
+        'current_slot_time': current_start_time.strftime('%H:%M') if current_start_time else None
+    })
 
 @bp.route('/appointments/<int:appointment_id>/edit', methods=['GET', 'POST'])
 @login_required

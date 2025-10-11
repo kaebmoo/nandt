@@ -563,9 +563,9 @@ def reschedule_booking(reference):
             
             if response.ok:
                 result = response.json()
-                flash('เลื่อนนัดเรียบร้อยแล้ว', 'success')
+                flash(result.get('message', 'เลื่อนนัดเรียบร้อยแล้ว'), 'success')
                 return redirect(build_url_with_context('booking.success',
-                                      reference=result['new_booking_reference']))
+                                      reference=result.get('booking_reference', reference)))
             else:
                 error = response.json()
                 flash(error.get('detail', 'ไม่สามารถเลื่อนนัดได้'), 'error')

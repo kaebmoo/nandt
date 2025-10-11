@@ -111,6 +111,7 @@ class RescheduleRequest(BaseModel):
     booking_reference: str
     new_date: str
     new_time: str
+    provider_id: Optional[int] = None
     reason: Optional[str] = None
 
 class EventTypeDetail(BaseModel):
@@ -999,6 +1000,8 @@ async def reschedule_booking(
 
         new_end = new_datetime + timedelta(minutes=event_type.duration_minutes)
 
+        requested_provider_id = request.provider_id or original.provider_id
+
         try:
             assigned_provider_id = ensure_slot_capacity(
                 db,
@@ -1006,10 +1009,10 @@ async def reschedule_booking(
                 template,
                 new_datetime,
                 new_end,
-                original.provider_id
+                requested_provider_id
             )
         except HTTPException as exc:
-            if template.requires_provider_assignment and original.provider_id and exc.status_code == 409:
+            if template.requires_provider_assignment and exc.status_code == 409 and not request.provider_id:
                 assigned_provider_id = ensure_slot_capacity(
                     db,
                     event_type,
@@ -1020,47 +1023,36 @@ async def reschedule_booking(
                 )
             else:
                 raise
-        
-        # 6. Update appointment
-        original.status = 'rescheduled'
-        
-        # 7. Create new appointment
-        new_ref = generate_booking_reference()
-        new_appointment = models.Appointment(
-            patient_id=original.patient_id,
-            provider_id=assigned_provider_id,
-            event_type_id=original.event_type_id,
-            service_type_id=original.service_type_id,
-            start_time=new_datetime,
-            end_time=new_end,
-            booking_reference=new_ref,
-            status='confirmed',
-            guest_name=original.guest_name,
-            guest_email=original.guest_email,
-            guest_phone=original.guest_phone,
-            notes=original.notes,
-            rescheduled_from_id=original.id,
-            reschedule_count=(original.reschedule_count or 0) + 1
-        )
-        
-        db.add(new_appointment)
+
+        original.start_time = new_datetime
+        original.end_time = new_end
+        original.provider_id = assigned_provider_id
+        original.status = 'confirmed'
+        original.reschedule_count = (original.reschedule_count or 0) + 1
+
+        if request.reason:
+            note_entry = f"[Reschedule] {request.reason}"
+            if original.internal_notes:
+                original.internal_notes = f"{original.internal_notes}\n{note_entry}"
+            else:
+                original.internal_notes = note_entry
+
         db.commit()
-        
-        # 8. Send notification
+
         if original.guest_email:
             background_tasks.add_task(
                 send_reschedule_email,
                 original.guest_email,
-                new_appointment,
+                original,
                 event_type
             )
-        
+
         return {
             "success": True,
-            "new_booking_reference": new_ref,
-            "old_booking_reference": request.booking_reference,
+            "booking_reference": original.booking_reference,
             "new_appointment_datetime": new_datetime.isoformat(),
-            "message": "การเลื่อนนัดสำเร็จ!"
+            "provider_id": assigned_provider_id,
+            "message": "เลื่อนนัดหมายเรียบร้อยแล้ว"
         }
         
     except HTTPException:
