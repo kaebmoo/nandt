@@ -6,18 +6,22 @@ from typing import List, Dict
 import os
 
 class HolidayService:
+    '''
+    Service to fetch and process holiday data from BOT API
+    https://portal.api.bot.or.th/
+    '''
     
     @staticmethod
     def fetch_from_bot_api(year: int) -> List[Dict]:
         """Fetch holidays from BOT API"""
         
-        bot_client_id = os.environ.get('BOT_CLIENT_ID', '')
-        if not bot_client_id:
+        token = os.environ.get('BOT_TOKEN', '')
+        if not token:
             return []
             
-        url = f'https://apigw1.bot.or.th/bot/public/financial-institutions-holidays/?year={year}'
+        url = f'https://gateway.api.bot.or.th/financial-institutions-holidays/?year={year}'
         headers = {
-            'X-IBM-Client-Id': bot_client_id,
+            'Authorization': token,
             'accept': 'application/json'
         }
         

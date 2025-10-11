@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text, exc, extract
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Set
 from datetime import date
 import logging
+from threading import Lock
 
 from shared_db.database import SessionLocal
 from shared_db import models
@@ -51,6 +52,29 @@ class SyncRequest(BaseModel):
     year: int = Field(default_factory=lambda: date.today().year)
     holidays: List[HolidayBase]
 
+
+_initialized_tenants: Set[str] = set()
+_tenant_lock = Lock()
+
+
+def ensure_holiday_table(subdomain: str, db: Session):
+    schema_key = subdomain or ""
+    with _tenant_lock:
+        if schema_key in _initialized_tenants:
+            return
+
+        try:
+            exists = db.execute(text("SELECT to_regclass('holidays')")).scalar()
+            if not exists:
+                logger.info("Creating holidays table for tenant '%s'", subdomain)
+                models.Holiday.__table__.create(bind=db.get_bind(), checkfirst=True)
+                db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        else:
+            _initialized_tenants.add(schema_key)
+
 # --- API Endpoints ---
 @router.get("/holidays", response_model=List[HolidayResponse])
 async def get_holidays(
@@ -67,6 +91,8 @@ async def get_holidays(
     db.commit()
     
     try:
+        ensure_holiday_table(subdomain, db)
+        
         query = db.query(models.Holiday)
         
         if year:
@@ -112,6 +138,8 @@ async def sync_holidays(
         ]
     
     try:
+        ensure_holiday_table(subdomain, db)
+
         added_count = 0
         skipped_count = 0
         
@@ -156,6 +184,8 @@ async def create_custom_holiday(
     db.commit()
     
     try:
+        ensure_holiday_table(subdomain, db)
+
         exists = db.query(models.Holiday).filter_by(date=holiday.date).first()
         if exists:
             raise HTTPException(status_code=409, detail=f"Holiday on {holiday.date} already exists.")
@@ -191,6 +221,8 @@ async def get_holiday(
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
     db.commit()
     
+    ensure_holiday_table(subdomain, db)
+
     holiday = db.query(models.Holiday).filter_by(id=holiday_id).first()
     if not holiday:
         raise HTTPException(status_code=404, detail="Holiday not found.")
@@ -210,6 +242,8 @@ async def update_holiday(
     db.commit()
     
     try:
+        ensure_holiday_table(subdomain, db)
+
         holiday = db.query(models.Holiday).filter_by(id=holiday_id).first()
         if not holiday:
             raise HTTPException(status_code=404, detail="Holiday not found.")
@@ -239,6 +273,8 @@ async def delete_holiday(
     db.commit()
     
     try:
+        ensure_holiday_table(subdomain, db)
+
         holiday = db.query(models.Holiday).filter_by(id=holiday_id).first()
         if not holiday:
             raise HTTPException(status_code=404, detail="Holiday not found.")
