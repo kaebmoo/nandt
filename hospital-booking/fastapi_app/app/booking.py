@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import text, and_, or_
+from sqlalchemy import text
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from typing import Optional, List, Dict, Literal
 from datetime import datetime, timedelta, date, time
@@ -188,14 +188,63 @@ def resolve_resource_limits(template: models.AvailabilityTemplate, target_date: 
     }
 
 
+def get_active_holiday(db: Session, target_date: date) -> Optional[models.Holiday]:
+    return db.query(models.Holiday).filter(
+        models.Holiday.date == target_date,
+        models.Holiday.is_active == True
+    ).first()
+
+
+def get_relevant_date_override(db: Session, template_id: Optional[int], target_date: date) -> Optional[models.DateOverride]:
+    template_override = None
+    if template_id is not None:
+        template_override = db.query(models.DateOverride).filter(
+            models.DateOverride.date == target_date,
+            models.DateOverride.template_id == template_id
+        ).order_by(models.DateOverride.id.desc()).first()
+
+    if template_override:
+        return template_override
+
+    return db.query(models.DateOverride).filter(
+        models.DateOverride.date == target_date,
+        models.DateOverride.template_scope == 'global'
+    ).order_by(models.DateOverride.id.desc()).first()
+
+
+def is_slot_blocked_by_override(
+    override: Optional[models.DateOverride],
+    target_date: date,
+    slot_start: datetime,
+    slot_end: datetime
+) -> bool:
+    if not override:
+        return False
+
+    if override.is_unavailable:
+        return True
+
+    if override.custom_start_time and override.custom_end_time:
+        override_start = datetime.combine(target_date, override.custom_start_time)
+        override_end = datetime.combine(target_date, override.custom_end_time)
+        if slot_start < override_start or slot_end > override_end:
+            return True
+
+    return False
+
+
 def collect_available_providers(
     db: Session,
     template: models.AvailabilityTemplate,
     target_date: date,
     slot_start: datetime,
-    slot_end: datetime
+    slot_end: datetime,
+    date_override: Optional[models.DateOverride] = None
 ) -> List[int]:
     """Return provider IDs available for the given slot."""
+    if is_slot_blocked_by_override(date_override, target_date, slot_start, slot_end):
+        return []
+
     target_day = convert_python_weekday(target_date.weekday())
 
     schedules = db.query(models.ProviderSchedule).filter(
@@ -286,8 +335,22 @@ def ensure_slot_capacity(
     provider_id: Optional[int] = None
 ) -> Optional[int]:
     """Validate slot availability and return provider assignment (auto or requested)."""
+    if template is None:
+        raise HTTPException(status_code=400, detail="บริการนี้ยังไม่ได้ตั้งค่าเวลาทำการ")
 
-    capacity_info = resolve_resource_limits(template, slot_start.date())
+    target_date = slot_start.date()
+
+    holiday = get_active_holiday(db, target_date)
+    if holiday:
+        detail = holiday.description or f"ปิดทำการ: {holiday.name}"
+        raise HTTPException(status_code=409, detail=detail)
+
+    date_override = get_relevant_date_override(db, template.id if template else None, target_date)
+    if is_slot_blocked_by_override(date_override, target_date, slot_start, slot_end):
+        detail = date_override.reason if date_override else None
+        raise HTTPException(status_code=409, detail=detail or "ช่วงเวลานี้ไม่เปิดให้บริการ")
+
+    capacity_info = resolve_resource_limits(template, target_date)
     capacity_limit = capacity_info["rooms_limit"] or 1
     if capacity_info["max_concurrent"]:
         capacity_limit = min(capacity_limit, capacity_info["max_concurrent"])
@@ -295,7 +358,14 @@ def ensure_slot_capacity(
     available_provider_ids: Optional[List[int]] = None
 
     if template.requires_provider_assignment:
-        available_provider_ids = collect_available_providers(db, template, slot_start.date(), slot_start, slot_end)
+        available_provider_ids = collect_available_providers(
+            db,
+            template,
+            target_date,
+            slot_start,
+            slot_end,
+            date_override
+        )
         if not available_provider_ids:
             raise HTTPException(status_code=409, detail="ไม่มีผู้ให้บริการว่างในช่วงเวลานี้")
 
@@ -420,10 +490,7 @@ async def get_booking_availability(
         }
 
         # 2.5 Check for holidays first
-        holiday = db.query(models.Holiday).filter(
-            models.Holiday.date == target_date,
-            models.Holiday.is_active == True
-        ).first()
+        holiday = get_active_holiday(db, target_date)
 
         if holiday:
             response_data["message"] = holiday.description or f"ปิดทำการ: {holiday.name}"
@@ -455,13 +522,7 @@ async def get_booking_availability(
         for avail in availabilities:
             base_slots.extend(generate_time_slots(avail.start_time, avail.end_time, event_type.duration_minutes))
 
-        date_override = db.query(models.DateOverride).filter(
-            models.DateOverride.date == target_date,
-            or_(
-                models.DateOverride.template_id == template.id,
-                models.DateOverride.template_scope == 'global'
-            )
-        ).first()
+        date_override = get_relevant_date_override(db, template.id if template else None, target_date)
 
         if date_override:
             if date_override.is_unavailable:
@@ -504,11 +565,23 @@ async def get_booking_availability(
             capacity_limit = base_capacity
             available_provider_ids: Optional[List[int]] = None
 
-            if slot_start < min_booking_time:
+            if is_slot_blocked_by_override(date_override, target_date, slot_start, slot_end):
+                reason = "template_override"
+                if template.requires_provider_assignment:
+                    available_provider_ids = []
+                capacity_limit = 0
+            elif slot_start < min_booking_time:
                 reason = "slot_too_soon"
             else:
                 if template.requires_provider_assignment:
-                    available_provider_ids = collect_available_providers(db, template, target_date, slot_start, slot_end)
+                    available_provider_ids = collect_available_providers(
+                        db,
+                        template,
+                        target_date,
+                        slot_start,
+                        slot_end,
+                        date_override
+                    )
                     if provider_id:
                         if provider_id not in available_provider_ids:
                             reason = "provider_unavailable"
@@ -519,43 +592,48 @@ async def get_booking_availability(
                         capacity_limit = min(capacity_limit, len(available_provider_ids))
                     elif not reason:
                         reason = "no_provider"
-
-                bookings = fetch_slot_bookings(
-                    db,
-                    event_type_id,
-                    slot_start,
-                    slot_end
-                )
-
-                if template.requires_provider_assignment:
-                    booked_provider_ids = {appt.provider_id for appt in bookings if appt.provider_id}
-                    unassigned_bookings = len([appt for appt in bookings if not appt.provider_id])
-
-                    if available_provider_ids is None:
                         available_provider_ids = []
 
-                    remaining_providers = [pid for pid in available_provider_ids if pid not in booked_provider_ids]
-                    occupied_slots = len(booked_provider_ids) + unassigned_bookings
-                    capacity_limit = max(capacity_limit, 0)
-                    remaining_slots = max(capacity_limit - occupied_slots, 0)
-                    remaining_slots = min(remaining_slots, len(remaining_providers))
-                    available_provider_ids = remaining_providers[:remaining_slots]
-                    if remaining_slots == 0:
-                        reason = reason or "fully_booked"
-                else:
-                    remaining_slots = max(capacity_limit - len(bookings), 0)
-                    if remaining_slots == 0:
-                        reason = "fully_booked"
+                if reason not in {"no_provider", "provider_unavailable"}:
+                    bookings = fetch_slot_bookings(
+                        db,
+                        event_type_id,
+                        slot_start,
+                        slot_end
+                    )
 
-            if reason in {"no_provider", "provider_unavailable"}:
+                    if template.requires_provider_assignment:
+                        booked_provider_ids = {appt.provider_id for appt in bookings if appt.provider_id}
+                        unassigned_bookings = len([appt for appt in bookings if not appt.provider_id])
+
+                        if available_provider_ids is None:
+                            available_provider_ids = []
+
+                        remaining_providers = [pid for pid in available_provider_ids if pid not in booked_provider_ids]
+                        occupied_slots = len(booked_provider_ids) + unassigned_bookings
+                        capacity_limit = max(capacity_limit, 0)
+                        remaining_slots = max(capacity_limit - occupied_slots, 0)
+                        remaining_slots = min(remaining_slots, len(remaining_providers))
+                        available_provider_ids = remaining_providers[:remaining_slots]
+                        if remaining_slots == 0:
+                            reason = reason or "fully_booked"
+                    else:
+                        remaining_slots = max(capacity_limit - len(bookings), 0)
+                        if remaining_slots == 0:
+                            reason = "fully_booked"
+
+            if reason in {"no_provider", "provider_unavailable", "template_override"}:
                 capacity_limit = 0
+
+            if template.requires_provider_assignment and available_provider_ids is None:
+                available_provider_ids = []
 
             available_slots.append(TimeSlot(
                 time=slot,
                 available=reason is None and remaining_slots > 0,
                 remaining_slots=remaining_slots if remaining_slots > 0 else 0,
                 total_capacity=capacity_limit,
-                available_provider_ids=available_provider_ids if available_provider_ids else None,
+                available_provider_ids=available_provider_ids if template.requires_provider_assignment else None,
                 unavailable_reason=reason
             ))
         

@@ -157,15 +157,15 @@ class ProviderScheduleCreate(BaseModel):
 
 
 class ProviderScheduleUpdate(BaseModel):
-    effective_date: Optional[str]
-    end_date: Optional[str]
-    days_of_week: Optional[List[int]]
-    recurrence_pattern: Optional[str]
-    custom_start_time: Optional[str]
-    custom_end_time: Optional[str]
-    schedule_type: Optional[str]
-    is_active: Optional[bool]
-    notes: Optional[str]
+    effective_date: Optional[str] = None
+    end_date: Optional[str] = None
+    days_of_week: Optional[List[int]] = None
+    recurrence_pattern: Optional[str] = None
+    custom_start_time: Optional[str] = None
+    custom_end_time: Optional[str] = None
+    schedule_type: Optional[str] = None
+    is_active: Optional[bool] = None
+    notes: Optional[str] = None
 
 
 class ResourceCapacityCreate(BaseModel):
