@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from typing import List, Optional, Dict, Tuple, Any
 import sys
 import datetime
@@ -171,8 +171,8 @@ class ProviderScheduleUpdate(BaseModel):
 class ResourceCapacityCreate(BaseModel):
     available_rooms: int = 1
     max_concurrent_appointments: Optional[int] = None
-    specific_date: Optional[str] = None
     day_of_week: Optional[int] = None
+    specific_date: Optional[str] = None
     time_slot_start: Optional[str] = None
     time_slot_end: Optional[str] = None
     notes: Optional[str] = None
@@ -196,11 +196,11 @@ class ResourceCapacityCreate(BaseModel):
             raise ValueError("day_of_week must be between 0 and 6")
         return value
 
-    @validator('specific_date')
-    def ensure_scope(cls, value: Optional[str], values: Dict[str, Any]) -> Optional[str]:
-        if not value and values.get('day_of_week') is None:
+    @model_validator(mode='after')
+    def ensure_scope(cls, values: 'ResourceCapacityCreate') -> 'ResourceCapacityCreate':
+        if values.specific_date is None and values.day_of_week is None:
             raise ValueError("Either specific_date or day_of_week must be provided")
-        return value
+        return values
 
 
 class ResourceCapacityUpdate(BaseModel):

@@ -671,6 +671,10 @@ def add_resource_capacity(template_id):
         'is_active': request.form.get('is_active') == 'on'
     }
 
+    if payload['specific_date'] is None and payload['day_of_week'] is None:
+        flash('กรุณาระบุวันที่เฉพาะเจาะจง หรือเลือกวันในสัปดาห์อย่างน้อยหนึ่งค่า', 'error')
+        return redirect_to_template_settings(template_id)
+
     _, error = make_api_request('POST', f'/availability/templates/{template_id}/capacities', payload)
 
     if error:

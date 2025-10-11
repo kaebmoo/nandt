@@ -487,7 +487,7 @@
                                                     {% if capacity.specific_date %}
                                                         วันที่ {{ capacity.specific_date|thai_date }}
                                                     {% elif capacity.day_of_week is not none %}
-                                                        ทุกวัน{{ capacity.day_of_week|day_name_th_short }}
+                                                        ทุกวัน {{ capacity.day_of_week|day_name_th_short }}
                                                     {% else %}
                                                         ใช้กับทุกวัน
                                                     {% endif %}
