@@ -2,6 +2,7 @@
 
 import os
 import requests
+from datetime import datetime
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, abort, g, make_response
 from .auth import login_required, check_tenant_access
 from .core.tenant_manager import with_tenant  # import decorator
@@ -349,6 +350,20 @@ def create_date_override():
         flash('กรุณาเลือกวันที่', 'error')
         return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
     
+    if override_type == 'custom':
+        if not custom_start_time or not custom_end_time:
+            flash('กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดสำหรับเวลาพิเศษ', 'error')
+            return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
+        try:
+            start_dt = datetime.strptime(custom_start_time, '%H:%M')
+            end_dt = datetime.strptime(custom_end_time, '%H:%M')
+        except ValueError:
+            flash('รูปแบบเวลาไม่ถูกต้อง', 'error')
+            return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
+        if start_dt >= end_dt:
+            flash('เวลาสิ้นสุดต้องมากกว่าเวลาเริ่ม', 'error')
+            return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
+
     # สร้าง data สำหรับส่งไป API
     api_data = {
         'date': date_str,
@@ -370,7 +385,7 @@ def create_date_override():
     if error:
         flash(f'เกิดข้อผิดพลาดในการเพิ่มวันพิเศษ: {error}', 'error')
     else:
-        flash('เพิ่มวันพิเศษเรียบร้อยแล้ว!', 'success')
+        flash('เพิ่มวันพิเศษเรียบร้อยแล้ว (ระบบบันทึกทันที)', 'success')
     
     return redirect(request.referrer or build_url_with_context('availability.availability_settings'))
 
@@ -704,6 +719,58 @@ def toggle_resource_capacity(template_id, capacity_id):
         flash(f'ไม่สามารถอัปเดตข้อจำกัดความจุได้: {error}', 'error')
     else:
         flash('อัปเดตสถานะข้อจำกัดความจุเรียบร้อยแล้ว', 'success')
+
+    return redirect_to_template_settings(template_id)
+
+
+@availability_bp.route('/availability/template/<int:template_id>/capacities/<int:capacity_id>/update', methods=['POST'])
+@login_required
+def update_resource_capacity(template_id, capacity_id):
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    available_rooms = request.form.get('available_rooms')
+    try:
+        available_rooms_int = int(available_rooms)
+    except (TypeError, ValueError):
+        flash('จำนวนห้องที่รองรับต้องเป็นตัวเลข', 'error')
+        return redirect_to_template_settings(template_id)
+
+    day_raw = request.form.get('day_of_week')
+    specific_date = request.form.get('specific_date') or None
+    day_value = None
+    if day_raw not in (None, '', 'none'):
+        try:
+            day_value = int(day_raw)
+        except ValueError:
+            flash('วันในสัปดาห์ไม่ถูกต้อง', 'error')
+            return redirect_to_template_settings(template_id)
+
+    if not specific_date and day_value is None:
+        flash('กรุณาระบุวันที่เฉพาะเจาะจงหรือเลือกวันในสัปดาห์อย่างน้อยหนึ่งค่า', 'error')
+        return redirect_to_template_settings(template_id)
+
+    payload = {
+        'available_rooms': available_rooms_int,
+        'max_concurrent_appointments': int(request.form.get('max_concurrent_appointments')) if request.form.get('max_concurrent_appointments') else None,
+        'specific_date': specific_date,
+        'day_of_week': day_value,
+        'time_slot_start': request.form.get('time_slot_start') or None,
+        'time_slot_end': request.form.get('time_slot_end') or None,
+        'notes': request.form.get('notes') or None,
+        'is_active': request.form.get('is_active') == 'on'
+    }
+
+    _, error = make_api_request('PATCH', f'/availability/templates/{template_id}/capacities/{capacity_id}', payload)
+
+    if error:
+        flash(f'ไม่สามารถอัปเดตข้อจำกัดความจุได้: {error}', 'error')
+    else:
+        flash('อัปเดตข้อจำกัดความจุเรียบร้อยแล้ว', 'success')
 
     return redirect_to_template_settings(template_id)
 

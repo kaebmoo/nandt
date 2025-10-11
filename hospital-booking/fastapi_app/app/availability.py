@@ -204,14 +204,14 @@ class ResourceCapacityCreate(BaseModel):
 
 
 class ResourceCapacityUpdate(BaseModel):
-    available_rooms: Optional[int]
-    max_concurrent_appointments: Optional[int]
-    specific_date: Optional[str]
-    day_of_week: Optional[int]
-    time_slot_start: Optional[str]
-    time_slot_end: Optional[str]
-    notes: Optional[str]
-    is_active: Optional[bool]
+    available_rooms: Optional[int] = None
+    max_concurrent_appointments: Optional[int] = None
+    specific_date: Optional[str] = None
+    day_of_week: Optional[int] = None
+    time_slot_start: Optional[str] = None
+    time_slot_end: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class ProviderLeaveCreate(BaseModel):
@@ -1076,26 +1076,31 @@ async def update_resource_capacity(subdomain: str, template_id: int, capacity_id
         if not capacity:
             raise HTTPException(status_code=404, detail="Capacity rule not found")
 
-        if payload.specific_date is not None:
+        updated_fields = payload.model_fields_set
+
+        if 'specific_date' in updated_fields:
             capacity.specific_date = parse_date(payload.specific_date) if payload.specific_date else None
-        if payload.day_of_week is not None:
-            capacity.day_of_week = to_day_enum(payload.day_of_week)
-        if payload.available_rooms is not None:
-            if payload.available_rooms < 1:
+        if 'day_of_week' in updated_fields:
+            capacity.day_of_week = to_day_enum(payload.day_of_week) if payload.day_of_week is not None else None
+        if 'available_rooms' in updated_fields:
+            if payload.available_rooms is not None and payload.available_rooms < 1:
                 raise HTTPException(status_code=400, detail="available_rooms must be at least 1")
-            capacity.available_rooms = payload.available_rooms
-        if payload.max_concurrent_appointments is not None:
-            if payload.max_concurrent_appointments < 1:
+            if payload.available_rooms is not None:
+                capacity.available_rooms = payload.available_rooms
+        if 'max_concurrent_appointments' in updated_fields:
+            if payload.max_concurrent_appointments is not None and payload.max_concurrent_appointments < 1:
                 raise HTTPException(status_code=400, detail="max_concurrent_appointments must be positive")
             capacity.max_concurrent_appointments = payload.max_concurrent_appointments
-        if payload.time_slot_start is not None:
+        if 'time_slot_start' in updated_fields or 'time_slot_end' in updated_fields:
             capacity.time_slot_start = parse_optional_time(payload.time_slot_start)
-        if payload.time_slot_end is not None:
             capacity.time_slot_end = parse_optional_time(payload.time_slot_end)
-        if payload.notes is not None:
+        if 'notes' in updated_fields:
             capacity.notes = payload.notes
-        if payload.is_active is not None:
+        if 'is_active' in updated_fields and payload.is_active is not None:
             capacity.is_active = payload.is_active
+
+        if capacity.specific_date is None and capacity.day_of_week is None:
+            raise HTTPException(status_code=400, detail="ต้องระบุวันที่เฉพาะเจาะจงหรือวันในสัปดาห์")
 
         db.commit()
 
@@ -1318,8 +1323,32 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
         custom_end_time = parse_time(override_data.custom_end_time) if override_data.custom_end_time else None
         
         # Validate
+        if override_data.template_scope == 'template' and not override_data.template_id:
+            raise HTTPException(status_code=400, detail="ต้องระบุเทมเพลตสำหรับวันพิเศษของเทมเพลต")
+
+        if not override_data.is_unavailable:
+            if not custom_start_time or not custom_end_time:
+                raise HTTPException(status_code=400, detail="กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดสำหรับเวลาพิเศษ")
+        else:
+            custom_start_time = None
+            custom_end_time = None
+
         if custom_start_time and custom_end_time and custom_start_time >= custom_end_time:
             raise HTTPException(status_code=400, detail="Start time must be before end time")
+
+        duplicate_query = db.query(models.DateOverride).filter(
+            models.DateOverride.date == override_date,
+            models.DateOverride.template_scope == override_data.template_scope
+        )
+
+        if override_data.template_scope == 'template':
+            duplicate_query = duplicate_query.filter(models.DateOverride.template_id == override_data.template_id)
+        else:
+            duplicate_query = duplicate_query.filter(models.DateOverride.template_id.is_(None))
+
+        existing_override = duplicate_query.first()
+        if existing_override:
+            raise HTTPException(status_code=409, detail="มีการตั้งค่าวันพิเศษในวันที่นี้อยู่แล้ว")
         
         # Create override
         override = models.DateOverride(

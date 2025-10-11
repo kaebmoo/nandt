@@ -225,8 +225,14 @@
                             </svg>
                             เพิ่มวันพิเศษ
                         </button>
+
                     {% endif %}
                 </div>
+                {% if action == 'edit' %}
+                    <p class="text-xs text-gray-500 mb-4">
+                        หมายเหตุ: การเพิ่มวันพิเศษจะถูกบันทึกทันทีและแสดงในรายการด้านล่าง
+                    </p>
+                {% endif %}
                 
                 {% if action == 'create' %}
                     <!-- แสดงข้อความสำหรับหน้าสร้าง -->
@@ -256,7 +262,48 @@
                     <!-- แสดงรายการวันพิเศษสำหรับหน้าแก้ไข (โค้ดเดิม) -->
                     {% if template_overrides %}
                         <div class="space-y-3">
-                            <!-- โค้ดแสดง overrides เดิม -->
+                            {% for override in template_overrides %}
+                                <div class="override-item border rounded-lg p-4 bg-purple-50 border-purple-200">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="text-sm font-medium text-gray-700">📅 {{ override.date | thai_date }}</span>
+                                        </div>
+                                        <button type="button"
+                                                class="text-red-600 hover:text-red-800 transition-colors"
+                                                onclick="confirmDeleteOverride(this)"
+                                                data-delete-url="{{ url('availability.delete_date_override', override_id=override.id) }}">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <span class="text-sm font-medium">
+                                                {% if override.is_unavailable %}
+                                                    🚫 วันหยุด
+                                                {% else %}
+                                                    ⏰ เวลาพิเศษ
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            {% if override.is_unavailable %}
+                                                <div class="text-sm text-red-600">ปิดทำการ</div>
+                                            {% else %}
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="text-sm font-mono">{{ override.custom_start_time or '' }}</span>
+                                                    <span class="text-gray-500">-</span>
+                                                    <span class="text-sm font-mono">{{ override.custom_end_time or '' }}</span>
+                                                </div>
+                                            {% endif %}
+                                            {% if override.reason %}
+                                                <div class="text-sm text-gray-600 mt-1">"{{ override.reason }}"</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
                         </div>
                     {% else %}
                         <div class="text-center py-8 text-gray-500">
@@ -383,6 +430,7 @@
 <script>
     const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
     const dayFieldNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const csrfTokenValue = "{{ csrf_token() }}";
     
     // เลือก preset
     function selectPreset(value) {
@@ -599,17 +647,45 @@
     function toggleTimeInputs() {
         const overrideType = document.querySelector('input[name="override_type"]:checked');
         const timeInputs = document.getElementById('time-inputs');
+        const startInput = document.querySelector('input[name="custom_start_time"]');
+        const endInput = document.querySelector('input[name="custom_end_time"]');
         
-        if (overrideType && timeInputs) {
+        if (overrideType && timeInputs && startInput && endInput) {
             if (overrideType.value === 'unavailable') {
                 timeInputs.style.display = 'none';
                 // Clear time values
-                document.querySelector('input[name="custom_start_time"]').value = '';
-                document.querySelector('input[name="custom_end_time"]').value = '';
+                startInput.value = '';
+                endInput.value = '';
+                startInput.required = false;
+                endInput.required = false;
             } else {
                 timeInputs.style.display = 'block';
+                startInput.required = true;
+                endInput.required = true;
             }
         }
+    }
+
+    function confirmDeleteOverride(button) {
+        if (!button || !button.dataset.deleteUrl) {
+            return;
+        }
+        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบวันพิเศษนี้?')) {
+            return;
+        }
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = button.dataset.deleteUrl;
+        form.style.display = 'none';
+
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrfTokenValue;
+        form.appendChild(csrfInput);
+
+        document.body.appendChild(form);
+        form.submit();
     }
     
     // Real-time validation
@@ -751,6 +827,8 @@
                 }
             });
         }
+
+        toggleTimeInputs();
     });
 
     function forceSubmit() {

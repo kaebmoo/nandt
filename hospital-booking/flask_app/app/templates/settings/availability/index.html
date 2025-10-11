@@ -458,7 +458,7 @@
                     {% if selected_template %}
                         <button type="button"
                                 class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                                onclick="openModal('capacity-modal')">
+                                onclick="openCapacityModalForCreate()">
                             เพิ่มข้อจำกัด
                         </button>
                     {% endif %}
@@ -501,6 +501,20 @@
                                             </div>
                                         </div>
                                         <div class="mt-4 lg:mt-0 flex items-center space-x-3">
+                                            <button type="button"
+                                                    class="px-4 py-2 border border-purple-200 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors text-sm"
+                                                    onclick="openCapacityModalForEdit(this)"
+                                                    data-capacity-id="{{ capacity.capacity_id }}"
+                                                    data-specific-date="{{ capacity.specific_date or '' }}"
+                                                    data-day-of-week="{{ capacity.day_of_week if capacity.day_of_week is not none else 'none' }}"
+                                                    data-available-rooms="{{ capacity.available_rooms }}"
+                                                    data-max-concurrent="{{ capacity.max_concurrent_appointments or '' }}"
+                                                    data-start-time="{{ capacity.time_slot_start or '' }}"
+                                                    data-end-time="{{ capacity.time_slot_end or '' }}"
+                                                    data-notes="{{ capacity.notes|default('', true)|e }}"
+                                                    data-is-active="{{ 'true' if capacity.is_active else 'false' }}">
+                                                แก้ไข
+                                            </button>
                                             <form method="POST"
                                                   action="{{ url('availability.toggle_resource_capacity', template_id=selected_template.id, capacity_id=capacity.capacity_id) }}">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -836,7 +850,7 @@
 <div id="capacity-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center modal-overlay">
     <div class="bg-white rounded-xl p-6 max-w-xl w-full mx-4" onclick="event.stopPropagation();">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">เพิ่มข้อจำกัดความจุ</h3>
+            <h3 class="text-lg font-semibold text-gray-900" id="capacity-modal-title">เพิ่มข้อจำกัดความจุ</h3>
             <button onclick="closeModal('capacity-modal')" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -844,18 +858,24 @@
             </button>
         </div>
 
-        <form method="POST" action="{{ url('availability.add_resource_capacity', template_id=selected_template.id) }}" class="space-y-4">
+        <form id="resource-capacity-form"
+              method="POST"
+              action="{{ url('availability.add_resource_capacity', template_id=selected_template.id) }}"
+              class="space-y-4"
+              data-create-action="{{ url('availability.add_resource_capacity', template_id=selected_template.id) }}"
+              data-update-action-template="{{ url('availability.update_resource_capacity', template_id=selected_template.id, capacity_id=0) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="capacity_id" id="capacity-id-input" value="">
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">วันที่เฉพาะเจาะจง</label>
-                    <input type="date" name="specific_date"
+                    <input type="date" name="specific_date" id="capacity-specific-date"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">วันในสัปดาห์</label>
-                    <select name="day_of_week"
+                    <select name="day_of_week" id="capacity-day-select"
                             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                         <option value="none">-- ไม่ระบุ (ใช้เฉพาะวันที่เลือก) --</option>
                         {% set day_labels_modal = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'] %}
@@ -870,12 +890,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">จำนวนห้อง / Slot พร้อมกัน</label>
-                    <input type="number" name="available_rooms" value="1" min="1" max="99" required
+                    <input type="number" name="available_rooms" id="capacity-available-rooms" value="1" min="1" max="99" required
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">จำกัดการจองพร้อมกัน (ถ้ามี)</label>
-                    <input type="number" name="max_concurrent_appointments" min="1" max="99"
+                    <input type="number" name="max_concurrent_appointments" id="capacity-max-concurrent" min="1" max="99"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
             </div>
@@ -883,23 +903,23 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">เวลาเริ่ม (เพิ่มเติม)</label>
-                    <input type="time" name="time_slot_start"
+                    <input type="time" name="time_slot_start" id="capacity-start-time"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">เวลาสิ้นสุด</label>
-                    <input type="time" name="time_slot_end"
+                    <input type="time" name="time_slot_end" id="capacity-end-time"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
             </div>
 
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700 mb-2">หมายเหตุ</label>
-                <textarea name="notes" rows="3"
+                <textarea name="notes" id="capacity-notes" rows="3"
                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="ระบุบริบท เช่น ปรับลดเพราะห้องปิดปรับปรุง"></textarea>
                 <label class="flex items-center space-x-2">
-                    <input type="checkbox" name="is_active" value="on" checked
+                    <input type="checkbox" name="is_active" id="capacity-is-active" value="on" checked
                            class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
                     <span class="text-sm text-gray-700">เปิดใช้งานทันที</span>
                 </label>
@@ -910,7 +930,7 @@
                         class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
                     ยกเลิก
                 </button>
-                <button type="submit"
+                <button type="submit" id="capacity-submit-button"
                         class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
                     บันทึกข้อจำกัด
                 </button>
@@ -1107,6 +1127,18 @@
     const scheduleSubmitButton = document.getElementById('schedule-submit-button');
     const scheduleIdInput = document.getElementById('schedule-id-input');
     const scheduleIsActiveInput = document.getElementById('schedule-is-active-input');
+    const capacityForm = document.getElementById('resource-capacity-form');
+    const capacityTitle = document.getElementById('capacity-modal-title');
+    const capacityIdInput = document.getElementById('capacity-id-input');
+    const capacitySpecificDateInput = document.getElementById('capacity-specific-date');
+    const capacityDaySelect = document.getElementById('capacity-day-select');
+    const capacityRoomsInput = document.getElementById('capacity-available-rooms');
+    const capacityMaxInput = document.getElementById('capacity-max-concurrent');
+    const capacityStartInput = document.getElementById('capacity-start-time');
+    const capacityEndInput = document.getElementById('capacity-end-time');
+    const capacityNotesInput = document.getElementById('capacity-notes');
+    const capacityActiveCheckbox = document.getElementById('capacity-is-active');
+    const capacitySubmitButton = document.getElementById('capacity-submit-button');
     let lastEditedProviderOption = null;
     let lastEditedProviderWasDisabled = false;
 
@@ -1425,6 +1457,137 @@
         openModal('schedule-modal');
     }
 
+    function resetCapacityForm() {
+        if (!capacityForm) {
+            return;
+        }
+        if (typeof capacityForm.reset === 'function') {
+            capacityForm.reset();
+        }
+        if (capacityForm.dataset && capacityForm.dataset.createAction) {
+            capacityForm.action = capacityForm.dataset.createAction;
+        }
+        if (capacityIdInput) {
+            capacityIdInput.value = '';
+        }
+        if (capacitySpecificDateInput) {
+            capacitySpecificDateInput.value = '';
+        }
+        if (capacityDaySelect) {
+            capacityDaySelect.value = 'none';
+        }
+        if (capacityRoomsInput) {
+            capacityRoomsInput.value = '1';
+        }
+        if (capacityMaxInput) {
+            capacityMaxInput.value = '';
+        }
+        if (capacityStartInput) {
+            capacityStartInput.value = '';
+        }
+        if (capacityEndInput) {
+            capacityEndInput.value = '';
+        }
+        if (capacityNotesInput) {
+            capacityNotesInput.value = '';
+        }
+        if (capacityActiveCheckbox) {
+            capacityActiveCheckbox.checked = true;
+        }
+        if (capacityTitle) {
+            capacityTitle.textContent = 'เพิ่มข้อจำกัดความจุ';
+        }
+        if (capacitySubmitButton) {
+            capacitySubmitButton.textContent = 'บันทึกข้อจำกัด';
+        }
+    }
+
+    function openCapacityModalForCreate() {
+        if (!capacityForm) {
+            return;
+        }
+        resetCapacityForm();
+        openModal('capacity-modal');
+    }
+
+    function openCapacityModalForEdit(trigger) {
+        if (!capacityForm || !trigger) {
+            return;
+        }
+        const capacityId = trigger.dataset.capacityId;
+        if (!capacityId) {
+            return;
+        }
+        resetCapacityForm();
+        if (capacityForm.dataset && capacityForm.dataset.updateActionTemplate) {
+            const templateUrl = capacityForm.dataset.updateActionTemplate;
+            if (templateUrl.includes('/capacities/0/')) {
+                capacityForm.action = templateUrl.replace('/capacities/0/', `/capacities/${capacityId}/`);
+            } else {
+                capacityForm.action = templateUrl;
+            }
+        }
+        if (capacityIdInput) {
+            capacityIdInput.value = capacityId;
+        }
+        if (capacityTitle) {
+            capacityTitle.textContent = 'แก้ไขข้อจำกัดความจุ';
+        }
+        if (capacitySubmitButton) {
+            capacitySubmitButton.textContent = 'อัปเดตข้อจำกัด';
+        }
+        const sanitize = (value) => {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            if (value === 'None' || value === 'null') {
+                return '';
+            }
+            const temp = document.createElement('textarea');
+            temp.innerHTML = value;
+            return temp.value;
+        };
+        if (capacitySpecificDateInput) {
+            capacitySpecificDateInput.value = sanitize(trigger.dataset.specificDate);
+        }
+        if (capacityDaySelect) {
+            const dayValue = trigger.dataset.dayOfWeek;
+            const normalizedDay = sanitize(dayValue);
+            capacityDaySelect.value = normalizedDay !== '' ? normalizedDay : 'none';
+        }
+        if (capacityRoomsInput && trigger.dataset.availableRooms) {
+            capacityRoomsInput.value = trigger.dataset.availableRooms;
+        }
+        if (capacityMaxInput) {
+            capacityMaxInput.value = sanitize(trigger.dataset.maxConcurrent);
+        }
+        if (capacityStartInput) {
+            const rawStart = sanitize(trigger.dataset.startTime);
+            if (rawStart && rawStart.includes(':')) {
+                const parts = rawStart.split(':');
+                capacityStartInput.value = parts[0].padStart(2, '0') + ':' + parts[1].padStart(2, '0');
+            } else {
+                capacityStartInput.value = rawStart;
+            }
+        }
+        if (capacityEndInput) {
+            const rawEnd = sanitize(trigger.dataset.endTime);
+            if (rawEnd && rawEnd.includes(':')) {
+                const parts = rawEnd.split(':');
+                capacityEndInput.value = parts[0].padStart(2, '0') + ':' + parts[1].padStart(2, '0');
+            } else {
+                capacityEndInput.value = rawEnd;
+            }
+        }
+        if (capacityNotesInput) {
+            capacityNotesInput.value = sanitize(trigger.dataset.notes);
+        }
+        if (capacityActiveCheckbox) {
+            capacityActiveCheckbox.checked = trigger.dataset.isActive === 'true';
+        }
+        openModal('capacity-modal');
+    }
+
     function openModal(id) {
         const modal = document.getElementById(id);
         if (!modal) return;
@@ -1437,6 +1600,8 @@
         modal.classList.add('hidden');
         if (id === 'schedule-modal') {
             resetScheduleForm();
+        } else if (id === 'capacity-modal') {
+            resetCapacityForm();
         } else {
             const form = modal.querySelector('form');
             if (form) {
@@ -1581,6 +1746,8 @@
     window.openLeaveModal = openLeaveModal;
     window.openScheduleModalForCreate = openScheduleModalForCreate;
     window.openScheduleModalForEdit = openScheduleModalForEdit;
+    window.openCapacityModalForCreate = openCapacityModalForCreate;
+    window.openCapacityModalForEdit = openCapacityModalForEdit;
 
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('input[name="override_type"]').forEach(radio => {
@@ -1589,6 +1756,18 @@
 
         if (scheduleForm) {
             resetScheduleForm();
+        }
+
+        if (capacityForm) {
+            resetCapacityForm();
+            capacityForm.addEventListener('submit', (event) => {
+                const hasDate = capacitySpecificDateInput && capacitySpecificDateInput.value;
+                const hasDay = capacityDaySelect && capacityDaySelect.value && capacityDaySelect.value !== 'none';
+                if (!hasDate && !hasDay) {
+                    event.preventDefault();
+                    alert('กรุณาระบุวันที่เฉพาะเจาะจงหรือเลือกวันในสัปดาห์อย่างน้อยหนึ่งรายการ');
+                }
+            });
         }
 
         const leaveSelect = document.getElementById('leave-provider-select');
