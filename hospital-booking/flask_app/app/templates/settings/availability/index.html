@@ -104,7 +104,8 @@
                                         <button type="button" 
                                                 class="p-1 text-gray-400 hover:text-red-600 transition-colors"
                                                 title="ลบ"
-                                                onclick="event.stopPropagation(); deleteTemplate({{ template.id }}, '{{ template.name }}')">
+                                                data-template-name="{{ template.name|e }}"
+                                                onclick="deleteTemplate(event, {{ template.id }})">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                             </svg>
@@ -333,17 +334,32 @@
 <script>
     let selectedTemplateId = null;
 
-    function deleteTemplate(templateId, templateName) {
+    function deleteTemplate(event, templateId) {
+        event.stopPropagation();
+        const deleteButton = event.currentTarget;
+        const templateName = deleteButton.dataset.templateName || '';
+
         // ถาม confirm
         if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบเทมเพลต "${templateName}"?\n\nหมายเหตุ: หาก Event Type ใดใช้เทมเพลตนี้อยู่ ระบบจะย้ายไปใช้เทมเพลตเริ่มต้นอัตโนมัติ`)) {
             return;
         }
         
+        const originalHTML = deleteButton.innerHTML;
+        deleteButton.disabled = true;
+        deleteButton.innerHTML = '<span class="animate-pulse">กำลังลบ...</span>';
+        
         // สร้าง form ใหม่แบบ dynamic (ไม่แสดงบนหน้าจอ)
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = `/settings/availability/template/${templateId}/delete`;
         form.style.display = 'none';
+
+        const actionUrl = new URL(`/settings/availability/template/${templateId}/delete`, window.location.origin);
+        const currentUrl = new URL(window.location.href);
+        const subdomainParam = currentUrl.searchParams.get('subdomain');
+        if (subdomainParam) {
+            actionUrl.searchParams.set('subdomain', subdomainParam);
+        }
+        form.action = actionUrl.toString();
         
         // เพิ่ม CSRF token (จำเป็นสำหรับ Flask security)
         const csrfToken = document.createElement('input');
@@ -352,7 +368,25 @@
         csrfToken.value = '{{ csrf_token() }}';
         form.appendChild(csrfToken);
         
-        // เพิ่ม form ลงใน body และ submit ทันที
+        // เก็บ URL เดิมไว้เช็ค
+        const originalUrl = window.location.href;
+        
+        // เพิ่ม error handling หาก form submit ไม่สำเร็จ
+        setTimeout(() => {
+            // หากยังอยู่หน้าเดิม แสดงว่าอาจมีปัญหา
+            if (window.location.href === originalUrl) {
+                deleteButton.disabled = false;
+                deleteButton.innerHTML = originalHTML;
+                
+                // ตรวจสอบว่ามี flash message หรือไม่
+                const flashMessages = document.querySelectorAll('[role="alert"]');
+                if (flashMessages.length === 0) {
+                    alert('เกิดข้อผิดพลาดในการลบ กรุณาลองใหม่ หรือรีเฟรชหน้าเว็บ');
+                }
+            }
+        }, 3000); // รอ 3 วินาที
+        
+        // เพิ่ม form ลงใน body และ submit
         document.body.appendChild(form);
         form.submit();
     }

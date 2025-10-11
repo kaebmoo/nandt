@@ -2,7 +2,7 @@
 
 import os
 import requests
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, abort, g
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, abort, g, make_response
 from .auth import login_required, check_tenant_access
 from .core.tenant_manager import with_tenant  # import decorator
 from .forms import (
@@ -102,12 +102,20 @@ def availability_settings():
         if overrides_data:
             template_overrides = overrides_data.get('date_overrides', [])
     
-    return render_template('settings/availability/index.html',
-                         current_user=current_user,
-                         templates=templates,
-                         selected_template=selected_template,
-                         template_overrides=template_overrides,
-                         subdomain=subdomain)
+    # สร้าง response และเพิ่ม cache control headers
+    response = make_response(render_template('settings/availability/index.html',
+                                            current_user=current_user,
+                                            templates=templates,
+                                            selected_template=selected_template,
+                                            template_overrides=template_overrides,
+                                            subdomain=subdomain))
+    
+    # ป้องกัน browser cache เพื่อให้ข้อมูลอัปเดตทันที
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
 # ===== CREATE TEMPLATE =====
 @availability_bp.route('/availability/template/new', methods=['GET', 'POST'])
@@ -122,8 +130,11 @@ def create_template():
         flash('ไม่สามารถเข้าถึงได้', 'error')
         return redirect(build_url_with_context('main.index'))
     
-    # Handle quick setup
+    # Initialize form first to avoid UnboundLocalError
+    form = AvailabilityTemplateForm()
     quick_form = QuickSetupForm()
+    
+    # Handle quick setup
     if request.method == 'POST' and 'quick_setup' in request.form:
         if quick_form.validate_on_submit() and quick_form.preset.data != 'custom':
             preset_data = quick_form.get_preset_schedule()
@@ -134,15 +145,15 @@ def create_template():
                 
                 if error:
                     flash(f'เกิดข้อผิดพลาดในการสร้างเทมเพลต: {error}', 'error')
+                    # แม้ error ก็ให้ใช้ default form
+                    form = create_default_template_form()
                 else:
                     flash('สร้างเทมเพลตจาก preset เรียบร้อยแล้ว!', 'success')
                     return redirect(build_url_with_context('availability.availability_settings'))
     
     # Handle manual form
-    if request.method == 'GET' or (request.method == 'POST' and 'quick_setup' not in request.form):
-        form = AvailabilityTemplateForm()
-        
-        if request.method == 'POST' and form.validate_on_submit():
+    elif request.method == 'POST' and 'quick_setup' not in request.form:
+        if form.validate_on_submit():
             # ส่งข้อมูลไป API
             api_data, error = make_api_request('POST', '/availability', form.get_schedule_data())
             
@@ -155,11 +166,10 @@ def create_template():
                     return redirect(build_url_with_context('availability.availability_settings', selected_template=template_id))
                 else:
                     return redirect(build_url_with_context('availability.availability_settings'))
-                
-        
-        # ถ้าเป็น GET หรือ validation fail
-        if request.method == 'GET':
-            form = create_default_template_form()
+    
+    # For GET request, initialize with default values
+    if request.method == 'GET':
+        form = create_default_template_form()
     
     return render_template('settings/availability/form.html',
                          form=form,
@@ -266,7 +276,16 @@ def delete_template(template_id):
     api_data, error = make_api_request('DELETE', f'/availability/templates/{template_id}')
     
     if error:
-        flash(f'เกิดข้อผิดพลาดในการลบ: {error}', 'error')
+        # จัดการ error cases ต่างๆ ให้ดีขึ้น
+        error_str = str(error).lower()
+        if "404" in error_str or "not found" in error_str:
+            flash('เทมเพลตนี้ถูกลบไปแล้ว หรือไม่มีอยู่ในระบบ', 'warning')
+        elif "400" in error_str or "bad request" in error_str:
+            flash('ไม่สามารถลบเทมเพลตนี้ได้ เนื่องจากมีการใช้งานอยู่', 'error')
+        elif "connection" in error_str or "timeout" in error_str:
+            flash('ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง', 'error')
+        else:
+            flash(f'เกิดข้อผิดพลาดในการลบ: {error}', 'error')
     else:
         flash(api_data.get('message', 'ลบเทมเพลตเรียบร้อยแล้ว'), 'success')
         
@@ -275,6 +294,7 @@ def delete_template(template_id):
             moved_events = ', '.join(api_data['moved_events'])
             flash(f'Event Types ที่ถูกย้ายไปใช้เทมเพลตเริ่มต้น: {moved_events}', 'info')
     
+    # Redirect โดยไม่ส่ง selected_template parameter เพื่อป้องกันการแสดง template ที่ถูกลบ
     return redirect(build_url_with_context('availability.availability_settings'))
 
 # ===== DATE OVERRIDES =====

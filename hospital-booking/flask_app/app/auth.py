@@ -89,10 +89,25 @@ def login_required(f):
     return decorated_function
 
 # Helper function สำหรับตรวจสอบสิทธิ์เข้าถึง tenant
-# แก้ไข check_tenant_access ให้ใช้ TenantManager
 def check_tenant_access(subdomain):
     """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""
-    return TenantManager.validate_tenant_access(subdomain)
+    
+    if 'user_id' not in session:
+        return False
+    
+    db = get_db_session()
+    try:
+        user = db.query(User).filter_by(id=session['user_id']).first()
+        if not user:
+            return False
+            
+        hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
+        if not hospital:
+            return False
+            
+        return hospital.subdomain == subdomain
+    finally:
+        db.close()
 
 def get_current_user():
     """ดึงข้อมูลผู้ใช้ปัจจุบัน (Centralized Function)"""
@@ -115,24 +130,3 @@ def get_current_user():
         if close_db:
             db.close()
             
-'''
-def check_tenant_access(subdomain):
-    """ตรวจสอบว่าผู้ใช้มีสิทธิ์เข้าถึง tenant นี้หรือไม่"""
-    
-    if 'user_id' not in session:
-        return False
-    
-    db = get_db_session()
-    try:
-        user = db.query(User).filter_by(id=session['user_id']).first()
-        if not user:
-            return False
-            
-        hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
-        if not hospital:
-            return False
-            
-        return hospital.subdomain == subdomain
-    finally:
-        db.close()
-'''

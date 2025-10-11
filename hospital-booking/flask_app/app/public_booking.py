@@ -5,11 +5,12 @@ import requests
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, g
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import calendar
 import json
 from redis import Redis
 from rq import Queue
+from typing import Optional, Dict, Set
 
 from .utils.url_helper import build_url_with_context
 from .core.tenant_manager import TenantManager
@@ -28,6 +29,75 @@ def get_subdomain():
     """Get subdomain from TenantManager"""
     tenant_schema, subdomain = TenantManager.get_tenant_context()
     return subdomain
+
+
+def fetch_unavailable_override_dates(subdomain: str, template_id: Optional[int]) -> Dict[str, str]:
+    if not subdomain:
+        return {}
+
+    try:
+        response = requests.get(
+            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/date-overrides"
+        )
+    except Exception:
+        return {}
+
+    if not response.ok:
+        return {}
+
+    overrides = response.json().get('date_overrides', [])
+    blocked: Dict[str, str] = {}
+
+    for override in overrides:
+        override_template_id = override.get('template_id')
+        scope = override.get('template_scope')
+        if not override.get('is_unavailable'):
+            continue
+
+        is_global = scope == 'global'
+        is_matching_template = template_id is not None and override_template_id == template_id
+
+        if not (is_global or is_matching_template):
+            continue
+
+        override_date = override.get('date')
+        if not override_date:
+            continue
+
+        label = override.get('reason') or 'วันหยุดพิเศษ'
+        blocked[override_date] = label
+
+    return blocked
+
+
+def fetch_holiday_dates(subdomain: str, years: Set[int]) -> Dict[str, str]:
+    if not subdomain or not years:
+        return {}
+
+    holidays_map: Dict[str, str] = {}
+    base_url = f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/holidays"
+
+    for target_year in sorted(years):
+        try:
+            response = requests.get(base_url, params={'year': target_year, 'is_active': True})
+        except Exception:
+            continue
+
+        if not response.ok:
+            continue
+
+        try:
+            holidays = response.json()
+        except ValueError:
+            holidays = []
+
+        for holiday in holidays or []:
+            holiday_date = holiday.get('date') if isinstance(holiday, dict) else None
+            if not holiday_date:
+                continue
+            holidays_map[holiday_date] = holiday.get('name', 'วันหยุด') if isinstance(holiday, dict) else 'วันหยุด'
+
+    return holidays_map
 
 # --- Public Booking Pages (No Login Required) ---
 
@@ -109,12 +179,30 @@ def book_service(event_type_id):
                 avail_data = avail_response.json()
                 availability_schedule = avail_data.get('schedule', {})
         
-        # 3. Generate calendar data
-        today = datetime.now()
+        template_id = event_type.get('template_id')
+        now = datetime.now()
+        today_date = now.date()
+        unavailable_overrides = fetch_unavailable_override_dates(subdomain, template_id)
+
+        max_advance_days = event_type.get('max_advance_days')
+        max_date = None
+        holiday_years: Set[int] = {today_date.year}
+        if isinstance(max_advance_days, int):
+            max_date = today_date + timedelta(days=max_advance_days)
+            holiday_years.add(max_date.year)
+        else:
+            holiday_years.add(today_date.year + 1)
+
+        holiday_dates = fetch_holiday_dates(subdomain, holiday_years)
+
         calendar_data = generate_calendar_for_booking(
-            today.year, 
-            today.month, 
-            availability_schedule
+            now.year,
+            now.month,
+            availability_schedule,
+            unavailable_dates=unavailable_overrides,
+            holiday_dates=holiday_dates,
+            max_advance_days=max_advance_days,
+            today=today_date
         )
         
         return render_template('booking/select_time.html',
@@ -122,9 +210,10 @@ def book_service(event_type_id):
                              calendar_data=calendar_data,
                              availability_schedule=availability_schedule,
                              subdomain=subdomain,
-                             today=today.date().isoformat(),
-                             current_month=today.month,
-                             current_year=today.year)
+                             today=today_date.isoformat(),
+                             current_month=now.month,
+                             current_year=now.year,
+                             max_advance_days=max_advance_days)
                              
     except Exception as e:
         print(f"Error: {e}")
@@ -439,6 +528,7 @@ def reschedule_booking(reference):
         
         # 2. ดึงข้อมูล event type และ availability
         event_type_id = booking.get('event_type', {}).get('id')
+        event_type_data = None
         if event_type_id:
             # ดึง event type details พร้อม availability schedule
             evt_response = requests.get(
@@ -457,20 +547,39 @@ def reschedule_booking(reference):
                         availability_data = avail_response.json()
                         booking['availability_schedule'] = availability_data.get('schedule', {})
         
-        # 3. สร้าง calendar data
-        today = datetime.now()
+        availability_schedule = booking.get('availability_schedule', {})
+        template_id = event_type_data.get('template_id') if event_type_data else None
+        now = datetime.now()
+        today_date = now.date()
+        unavailable_overrides = fetch_unavailable_override_dates(subdomain, template_id)
+
+        max_advance_days = event_type_data.get('max_advance_days') if event_type_data else None
+        holiday_years: Set[int] = {today_date.year}
+        if isinstance(max_advance_days, int):
+            max_date = today_date + timedelta(days=max_advance_days)
+            holiday_years.add(max_date.year)
+        else:
+            holiday_years.add(today_date.year + 1)
+
+        holiday_dates = fetch_holiday_dates(subdomain, holiday_years)
+
         calendar_data = generate_calendar_for_booking(
-            today.year, 
-            today.month,
-            booking.get('availability_schedule', {})
+            now.year,
+            now.month,
+            availability_schedule,
+            unavailable_dates=unavailable_overrides,
+            holiday_dates=holiday_dates,
+            max_advance_days=max_advance_days,
+            today=today_date
         )
         
         return render_template('booking/reschedule.html',
                              booking=booking,
                              calendar_data=calendar_data,
-                             availability_schedule=booking.get('availability_schedule', {}), 
+                             availability_schedule=availability_schedule, 
                              subdomain=subdomain,
-                             today=today.isoformat())
+                             today=today_date.isoformat(),
+                             max_advance_days=max_advance_days)
                              
     except Exception as e:
         print(f"Error in reschedule: {e}")
@@ -639,70 +748,114 @@ def resend_otp():
     return jsonify({'success': True, 'message': 'ส่ง OTP ใหม่แล้ว'})
 
 # --- Helper Functions ---
-def generate_calendar_for_booking(year, month, availability_schedule):
-    """Generate calendar data with correct day alignment"""
+def generate_calendar_for_booking(
+    year: int,
+    month: int,
+    availability_schedule: Dict[str, list],
+    unavailable_dates: Optional[Dict[str, str]] = None,
+    holiday_dates: Optional[Dict[str, str]] = None,
+    max_advance_days: Optional[int] = None,
+    today: Optional[date] = None
+) -> Dict[str, object]:
     import calendar
-    from datetime import date
-    
-    # Get first day of month (0=Monday, 6=Sunday)
+
+    today = today or date.today()
+    unavailable_dates = unavailable_dates or {}
+    holiday_dates = holiday_dates or {}
+
     first_weekday, days_in_month = calendar.monthrange(year, month)
-    # Convert to Sunday start (0=Sunday, 6=Saturday)
     first_weekday = (first_weekday + 1) % 7
-    
-    today = date.today()
-    
+
     month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
                    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-    
-    # Build calendar weeks
+
+    max_date = None
+    if isinstance(max_advance_days, int):
+        max_date = today + timedelta(days=max_advance_days)
+
     weeks = []
     current_week = []
-    
-    # Add empty days at start
+
     for _ in range(first_weekday):
         current_week.append({
             'day': 0,
             'date': None,
             'available': False,
-            'past': False
+            'past': False,
+            'today': False,
+            'disabled_reason': None,
+            'disabled_label': '',
+            'is_holiday': False,
+            'is_special_closure': False,
+            'beyond_max_range': False
         })
-    
-    # Add days of month
+
     for day in range(1, days_in_month + 1):
         date_obj = date(year, month, day)
-        # Python weekday: 0=Monday, 6=Sunday
         python_weekday = date_obj.weekday()
-        # Convert to our system: 0=Sunday, 1=Monday, etc.
         our_weekday = 0 if python_weekday == 6 else python_weekday + 1
-        
-        # Check if available
-        is_available = str(our_weekday) in availability_schedule and date_obj >= today
-        
+        iso_date = date_obj.isoformat()
+
+        is_past = date_obj < today
+        is_today = date_obj == today
+        is_override_closed = iso_date in unavailable_dates
+        is_holiday = iso_date in holiday_dates
+        beyond_max_range = max_date is not None and date_obj > max_date
+
+        disabled_reason = None
+        disabled_label = ''
+
+        if is_past:
+            disabled_reason = 'past'
+            disabled_label = 'วันที่ผ่านมาแล้ว'
+        elif beyond_max_range:
+            disabled_reason = 'beyond_max_range'
+            if isinstance(max_advance_days, int):
+                disabled_label = f'จองได้ไม่เกิน {max_advance_days} วันล่วงหน้า'
+        elif is_override_closed:
+            disabled_reason = 'override'
+            disabled_label = unavailable_dates.get(iso_date, 'วันหยุดพิเศษ')
+        elif is_holiday:
+            disabled_reason = 'holiday'
+            disabled_label = holiday_dates.get(iso_date, 'วันหยุด')
+
+        has_schedule = str(our_weekday) in availability_schedule
+        is_available = has_schedule and disabled_reason is None and not is_past
+
         current_week.append({
             'day': day,
-            'date': date_obj.isoformat(),
+            'date': iso_date,
             'day_of_week': our_weekday,
             'available': is_available,
-            'past': date_obj < today,
-            'today': date_obj == today
+            'past': is_past,
+            'today': is_today,
+            'disabled_reason': disabled_reason,
+            'disabled_label': disabled_label,
+            'is_holiday': is_holiday,
+            'is_special_closure': is_override_closed,
+            'beyond_max_range': beyond_max_range
         })
-        
-        # Start new week if needed
+
         if len(current_week) == 7:
             weeks.append(current_week)
             current_week = []
-    
-    # Add remaining days
+
     if current_week:
         while len(current_week) < 7:
             current_week.append({
                 'day': 0,
                 'date': None,
                 'available': False,
-                'past': False
+                'past': False,
+                'today': False,
+                'disabled_reason': None,
+                'disabled_label': '',
+                'is_holiday': False,
+                'is_special_closure': False,
+                'beyond_max_range': False
             })
         weeks.append(current_week)
-    
+
     return {
         'year': year,
         'month': month,
@@ -712,7 +865,7 @@ def generate_calendar_for_booking(year, month, availability_schedule):
         'prev_year': year if month > 1 else year - 1,
         'next_month': month + 1 if month < 12 else 1,
         'next_year': year if month < 12 else year + 1,
-        'can_go_previous': date(year, month, 1) > date.today().replace(day=1)
+        'can_go_previous': date(year, month, 1) > today.replace(day=1)
     }
 
 # เพิ่ม AJAX endpoint สำหรับ calendar navigation
@@ -729,6 +882,11 @@ def get_calendar(year, month):
     event_type_id = request.args.get('event_type_id', type=int)
     
     availability_schedule = {}
+    unavailable_overrides: Dict[str, str] = {}
+    holiday_dates: Dict[str, str] = {}
+    max_advance_days: Optional[int] = None
+    today_date = date.today()
+    holiday_years: Set[int] = {year, today_date.year}
     
     if event_type_id:
         try:
@@ -738,16 +896,36 @@ def get_calendar(year, month):
             )
             if response.ok:
                 event_type = response.json()
+                max_advance_days = event_type.get('max_advance_days')
+                template_id = event_type.get('template_id')
                 if event_type.get('template_id'):
                     avail_response = requests.get(
                         f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{event_type['template_id']}/details"
                     )
                     if avail_response.ok:
                         availability_schedule = avail_response.json().get('schedule', {})
+
+                unavailable_overrides = fetch_unavailable_override_dates(subdomain, template_id)
+
+                if isinstance(max_advance_days, int):
+                    max_date = today_date + timedelta(days=max_advance_days)
+                    holiday_years.add(max_date.year)
+                else:
+                    holiday_years.add(today_date.year + 1)
+
+                holiday_dates = fetch_holiday_dates(subdomain, holiday_years)
         except:
             pass
-    
-    calendar_data = generate_calendar_for_booking(year, month, availability_schedule)
+
+    calendar_data = generate_calendar_for_booking(
+        year,
+        month,
+        availability_schedule,
+        unavailable_dates=unavailable_overrides,
+        holiday_dates=holiday_dates,
+        max_advance_days=max_advance_days,
+        today=today_date
+    )
     return jsonify(calendar_data)
 
 def generate_calendar_with_availability(year, month, availability_schedule):

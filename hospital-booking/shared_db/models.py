@@ -65,7 +65,7 @@ class AvailabilityTemplate(TenantBase):
     __tablename__ = 'availability_templates'
     
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False, unique=True)  # "จันทร์-ศุกร์ (08:30-16:30)"
+    name = Column(String(100), nullable=False)  # "จันทร์-ศุกร์ (08:30-16:30)" - removed unique=True for multi-tenant support
     description = Column(Text)
     timezone = Column(String(50), default='Asia/Bangkok')
     is_active = Column(Boolean, default=True)

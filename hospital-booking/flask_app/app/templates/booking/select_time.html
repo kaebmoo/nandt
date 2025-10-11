@@ -29,6 +29,14 @@
             cursor: not-allowed;
             background-color: transparent;
         }
+        .calendar-day.blocked {
+            background-color: #fef2f2;
+            color: #b91c1c;
+        }
+        .calendar-day.holiday, .calendar-day.special-closure {
+            background-color: #fee2e2;
+            color: #be123c;
+        }
         .calendar-day.past {
             color: #9ca3af;
             cursor: not-allowed;
@@ -136,14 +144,17 @@
                             {% if day_info.day == 0 %}
                                 <div class="p-3"></div>
                             {% else %}
-                                <div class="calendar-day p-3 text-center rounded-lg
-                                           {% if day_info.past %}past disabled{% endif %}
-                                           {% if day_info.today %}today{% endif %}
-                                           {% if day_info.available and not day_info.past %}available{% else %}disabled{% endif %}"
+                                <div class="calendar-day p-3 text-center rounded-lg{% if day_info.available %} available{% else %} disabled{% endif %}{% if day_info.past %} past{% endif %}{% if day_info.today %} today{% endif %}{% if day_info.disabled_reason == 'holiday' %} holiday{% endif %}{% if day_info.disabled_reason == 'override' %} special-closure{% endif %}{% if day_info.beyond_max_range %} blocked{% endif %}"
                                      data-date="{{ day_info.date }}"
                                      data-day-of-week="{{ day_info.day_of_week }}"
-                                     {% if day_info.available and not day_info.past %}onclick="selectDate(this)"{% endif %}>
+                                     data-disabled-reason="{{ (day_info.disabled_reason or '')|e }}"
+                                     data-disabled-label="{{ (day_info.disabled_label or '')|e }}"
+                                     {% if day_info.disabled_label %}title="{{ day_info.disabled_label|e }}"{% endif %}
+                                     {% if day_info.available %}onclick="selectDate(this)"{% endif %}>
                                     {{ day_info.day }}
+                                    {% if day_info.disabled_reason in ['holiday', 'override'] %}
+                                        <div class="text-[10px] mt-1">ปิด</div>
+                                    {% endif %}
                                 </div>
                             {% endif %}
                         {% endfor %}
@@ -368,26 +379,44 @@
                     } else {
                         let classes = 'calendar-day p-3 text-center rounded-lg';
                         let onclick = '';
-                        
-                        if (dayInfo.past) {
-                            classes += ' past disabled';
-                        } else if (dayInfo.available) {
+                        const disabledReason = dayInfo.disabled_reason || '';
+                        const labelText = dayInfo.disabled_label ? String(dayInfo.disabled_label) : '';
+
+                        if (dayInfo.available) {
                             classes += ' available';
                             onclick = `onclick="selectDate(this)"`;
                         } else {
                             classes += ' disabled';
                         }
-                        
+
+                        if (dayInfo.past) {
+                            classes += ' past';
+                        }
                         if (dayInfo.today) {
                             classes += ' today';
                         }
-                        
+                        if (disabledReason === 'holiday') {
+                            classes += ' holiday';
+                        }
+                        if (disabledReason === 'override') {
+                            classes += ' special-closure';
+                        }
+                        if (dayInfo.beyond_max_range) {
+                            classes += ' blocked';
+                        }
+
+                        const titleAttr = labelText ? ` title="${labelText.replace(/"/g, '&quot;')}"` : '';
+                        const disabledBadge = (disabledReason === 'holiday' || disabledReason === 'override') ? '<div class="text-[10px] mt-1">ปิด</div>' : '';
+
                         grid.innerHTML += `
                             <div class="${classes}"
-                                 data-date="${dayInfo.date}"
-                                 data-day-of-week="${dayInfo.day_of_week}"
-                                 ${onclick}>
+                                 data-date="${dayInfo.date || ''}"
+                                 data-day-of-week="${dayInfo.day_of_week !== undefined ? dayInfo.day_of_week : ''}"
+                                 data-disabled-reason="${disabledReason}"
+                                 data-disabled-label="${labelText}"
+                                 ${onclick}${titleAttr}>
                                 ${dayInfo.day}
+                                ${disabledBadge}
                             </div>
                         `;
                     }

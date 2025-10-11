@@ -10,7 +10,7 @@ from pydantic import BaseModel, EmailStr, constr
 from typing import Literal
 from dotenv import load_dotenv
 from datetime import time
-from .holidays import router as holidays_router
+
 
 load_dotenv()
 
@@ -25,6 +25,7 @@ from shared_db.database import SessionLocal, engine
 from .event_types import router as event_types_router
 from .availability import router as availability_router
 from .booking import router as booking_router
+from .holidays import router as holidays_router
 
 # สร้างเฉพาะ public tables
 models.PublicBase.metadata.create_all(bind=engine)

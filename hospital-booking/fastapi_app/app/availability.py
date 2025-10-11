@@ -236,9 +236,30 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
     try:
         get_tenant_db(subdomain, db)
         
-        # สร้าง template ก่อน
+        # ตรวจสอบว่ามี template ชื่อเดียวกันแล้วหรือไม่ (optional warning)
+        existing_template = db.query(models.AvailabilityTemplate).filter(
+            models.AvailabilityTemplate.name == schedule_data.name,
+            models.AvailabilityTemplate.is_active == True
+        ).first()
+        
+        template_name = schedule_data.name
+        if existing_template:
+            # สร้างชื่อใหม่ที่ไม่ซ้ำ
+            counter = 1
+            while True:
+                new_name = f"{schedule_data.name} ({counter})"
+                exists = db.query(models.AvailabilityTemplate).filter(
+                    models.AvailabilityTemplate.name == new_name,
+                    models.AvailabilityTemplate.is_active == True
+                ).first()
+                if not exists:
+                    template_name = new_name
+                    break
+                counter += 1
+        
+        # สร้าง template
         template = models.AvailabilityTemplate(
-            name=schedule_data.name,
+            name=template_name,
             description=schedule_data.description,
             timezone=schedule_data.timezone,
             is_active=True
@@ -271,14 +292,35 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
                 created_ids.append(availability.id)
         
         db.commit()
-        return {
+        
+        # Return response with information about any name changes
+        response = {
             "message": "Availability template created successfully",
             "template_id": template.id,
+            "template_name": template_name,
             "ids": created_ids
         }
+        
+        if template_name != schedule_data.name:
+            response["warning"] = f"Template name was changed from '{schedule_data.name}' to '{template_name}' to avoid duplication"
+        
+        return response
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        # Better error handling for common database issues
+        error_msg = str(e)
+        if "duplicate key value" in error_msg.lower():
+            raise HTTPException(
+                status_code=409, 
+                detail="A template with this name already exists. Please choose a different name."
+            )
+        elif "violates foreign key constraint" in error_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid reference to another table. Please check your data."
+            )
+        else:
+            raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
 
 @router.put("/availability/templates/{template_id}", response_model=dict)
 async def update_availability_template(subdomain: str, template_id: int, schedule_data: WeeklySchedule, db: Session = Depends(get_db)):

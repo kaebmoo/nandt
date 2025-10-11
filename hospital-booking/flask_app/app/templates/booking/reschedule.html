@@ -13,6 +13,9 @@
         .calendar-day {
             transition: all 0.2s ease;
         }
+        .calendar-day.available {
+            cursor: pointer;
+        }
         .calendar-day.available:hover:not(.selected) {
             background-color: #e0e7ff;
             transform: scale(1.05);
@@ -20,6 +23,18 @@
         .calendar-day.selected {
             background-color: #6366f1;
             color: white;
+        }
+        .calendar-day.disabled {
+            color: #d1d5db;
+            cursor: not-allowed;
+        }
+        .calendar-day.blocked {
+            background-color: #fef2f2;
+            color: #b91c1c;
+        }
+        .calendar-day.holiday, .calendar-day.special-closure {
+            background-color: #fee2e2;
+            color: #be123c;
         }
         .time-slot {
             transition: all 0.2s ease;
@@ -128,14 +143,16 @@
                                 {% if day_info.day == 0 %}
                                     <div class="p-3"></div>
                                 {% else %}
-                                    <div class="calendar-day p-3 text-center rounded-lg 
-                                               {% if day_info.past %}text-gray-300 cursor-not-allowed{% endif %}
-                                               {% if day_info.today %}border-2 border-purple-400{% endif %}
-                                               {% if day_info.available and not day_info.past %}hover:bg-gray-100 cursor-pointer{% endif %}
-                                               {% if not day_info.available and not day_info.past %}text-gray-400 bg-gray-50{% endif %}"
+                                    <div class="calendar-day p-3 text-center rounded-lg{% if day_info.available %} available hover:bg-gray-100{% else %} disabled{% endif %}{% if day_info.past %} text-gray-300{% endif %}{% if day_info.today %} border-2 border-purple-400{% endif %}{% if day_info.disabled_reason == 'holiday' %} holiday{% endif %}{% if day_info.disabled_reason == 'override' %} special-closure{% endif %}{% if day_info.beyond_max_range %} blocked{% endif %}"
                                          data-date="{{ day_info.date }}"
-                                         {% if day_info.available and not day_info.past %}onclick="selectDate(this)"{% endif %}>
+                                         data-disabled-reason="{{ (day_info.disabled_reason or '')|e }}"
+                                         data-disabled-label="{{ (day_info.disabled_label or '')|e }}"
+                                         {% if day_info.disabled_label %}title="{{ day_info.disabled_label|e }}"{% endif %}
+                                         {% if day_info.available %}onclick="selectDate(this)"{% endif %}>
                                         {{ day_info.day }}
+                                        {% if day_info.disabled_reason in ['holiday', 'override'] %}
+                                            <div class="text-[10px] mt-1">ปิด</div>
+                                        {% endif %}
                                     </div>
                                 {% endif %}
                             {% endfor %}
@@ -362,25 +379,43 @@
                     } else {
                         let classes = 'calendar-day p-3 text-center rounded-lg';
                         let onclick = '';
-                        
-                        if (dayInfo.past) {
-                            classes += ' text-gray-300 cursor-not-allowed';
-                        } else if (dayInfo.available) {
-                            classes += ' hover:bg-gray-100 cursor-pointer';
+                        const disabledReason = dayInfo.disabled_reason || '';
+                        const labelText = dayInfo.disabled_label ? String(dayInfo.disabled_label) : '';
+
+                        if (dayInfo.available) {
+                            classes += ' available hover:bg-gray-100';
                             onclick = `onclick="selectDate(this)"`;
                         } else {
-                            classes += ' text-gray-400 bg-gray-50';
+                            classes += ' disabled';
                         }
-                        
+
+                        if (dayInfo.past) {
+                            classes += ' text-gray-300';
+                        }
                         if (dayInfo.today) {
                             classes += ' border-2 border-purple-400';
                         }
-                        
+                        if (disabledReason === 'holiday') {
+                            classes += ' holiday';
+                        }
+                        if (disabledReason === 'override') {
+                            classes += ' special-closure';
+                        }
+                        if (dayInfo.beyond_max_range) {
+                            classes += ' blocked';
+                        }
+
+                        const titleAttr = labelText ? ` title="${labelText.replace(/"/g, '&quot;')}"` : '';
+                        const disabledBadge = (disabledReason === 'holiday' || disabledReason === 'override') ? '<div class="text-[10px] mt-1">ปิด</div>' : '';
+
                         grid.innerHTML += `
                             <div class="${classes}"
-                                 data-date="${dayInfo.date}"
-                                 ${onclick}>
+                                 data-date="${dayInfo.date || ''}"
+                                 data-disabled-reason="${disabledReason}"
+                                 data-disabled-label="${labelText}"
+                                 ${onclick}${titleAttr}>
                                 ${dayInfo.day}
+                                ${disabledBadge}
                             </div>
                         `;
                     }
