@@ -290,6 +290,8 @@ def admin_reschedule_appointment(appointment_id):
                 result = response.json()
                 booking_ref = result.get('booking_reference', appointment.booking_reference)
                 message = result.get('message', 'เลื่อนนัดเรียบร้อยแล้ว')
+                session.pop('admin_reschedule_warning', None)
+                session.pop('admin_reschedule_warning_type', None)
                 flash(f"{message} - รหัส: {booking_ref}", 'success')
                 
                 # ส่ง notification ถ้ามี email/phone
@@ -305,6 +307,11 @@ def admin_reschedule_appointment(appointment_id):
         # GET - แสดง form
         current_user = get_current_user()
         hospital_name = current_user.hospital.name
+
+        warning_message = session.pop('admin_reschedule_warning', None)
+        warning_category = session.pop('admin_reschedule_warning_type', None)
+        if warning_message:
+            flash(warning_message, warning_category or 'error')
         
         return render_template('appointments/admin_reschedule.html',
                              appointment=appointment,
@@ -479,13 +486,19 @@ def request_reschedule(appointment_id):
 @with_tenant(require_access=True)
 def admin_cancel_appointment(appointment_id):
     """Admin ยกเลิกนัดหมาย พร้อมระบุเหตุผล"""
-    
-    db = get_db_session()
+
+    db = SessionLocal()
     tenant_schema = g.tenant_schema
     subdomain = g.subdomain
     
     try:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        db.commit()
         
         appointment = db.query(Appointment).filter_by(id=appointment_id).first()
         
@@ -531,15 +544,19 @@ def admin_cancel_appointment(appointment_id):
                              current_user=current_user)
                              
     except Exception as e:
-        if db:
-            try:
-                db.rollback()
-            except Exception:
-                pass
+        try:
+            db.rollback()
+        except Exception:
+            pass
         current_app.logger.error(f"Error in admin cancel: {str(e)}")
         flash('เกิดข้อผิดพลาด', 'error')
         # แก้ไขตรงนี้ด้วย
         return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
     
 # ==================== Appointment Management via FastAPI ====================
 
@@ -624,10 +641,13 @@ def restore_appointment(appointment_id):
         except ValueError:
             message = 'ไม่สามารถกู้คืนนัดหมายได้'
 
-        flash(message, 'error')
         status_code = response.status_code
         if status_code == 409:
+            session['admin_reschedule_warning'] = message
+            session['admin_reschedule_warning_type'] = 'error'
             return redirect(build_url_with_context('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain))
+
+        flash(message, 'error')
         return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
     except Exception as e:
