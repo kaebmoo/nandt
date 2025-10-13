@@ -29,7 +29,30 @@
                     <div>วันเวลาเดิม: {{ appointment.start_time.strftime('%d/%m/%Y %H:%M') }}</div>
                 </div>
             </div>
-
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages mb-6 space-y-3"> {# เพิ่ม mb-6 เพื่อให้มีระยะห่างกับฟอร์ม #}
+                        {% for category, message in messages %}
+                            {# 
+                                ปรับแก้ CSS ให้เข้ากับ Tailwind CSS
+                                - warning (สีเหลือง)
+                                - error (สีแดง)
+                                - success (สีเขียว)
+                                - info (สีฟ้า)
+                            #}
+                            {% set alert_classes = {
+                                'warning': 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700',
+                                'error': 'bg-red-100 border-l-4 border-red-500 text-red-700',
+                                'success': 'bg-green-100 border-l-4 border-green-500 text-green-700',
+                                'info': 'bg-blue-100 border-l-4 border-blue-500 text-blue-700'
+                            } %}
+                            <div class="{{ alert_classes.get(category, alert_classes['info']) }} p-4" role="alert">
+                                <p>{{ message }}</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
             <form method="POST" action="" class="space-y-6">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="new_time" id="new-time-input" value="">

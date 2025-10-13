@@ -259,6 +259,10 @@ def admin_reschedule_appointment(appointment_id):
                 })
         
         if request.method == 'POST':
+            # Clear warning messages
+            session.pop('admin_reschedule_warning', None)
+            session.pop('admin_reschedule_warning_type', None)
+            
             # Process reschedule
             new_date = request.form.get('new_date')
             new_time = request.form.get('new_time')
@@ -290,8 +294,6 @@ def admin_reschedule_appointment(appointment_id):
                 result = response.json()
                 booking_ref = result.get('booking_reference', appointment.booking_reference)
                 message = result.get('message', 'เลื่อนนัดเรียบร้อยแล้ว')
-                session.pop('admin_reschedule_warning', None)
-                session.pop('admin_reschedule_warning_type', None)
                 flash(f"{message} - รหัส: {booking_ref}", 'success')
                 
                 # ส่ง notification ถ้ามี email/phone
@@ -308,10 +310,17 @@ def admin_reschedule_appointment(appointment_id):
         current_user = get_current_user()
         hospital_name = current_user.hospital.name
 
-        warning_message = session.pop('admin_reschedule_warning', None)
-        warning_category = session.pop('admin_reschedule_warning_type', None)
-        if warning_message:
-            flash(warning_message, warning_category or 'error')
+        # ตรวจสอบ error message จาก restore ผ่าน query parameter
+        restore_error = request.args.get('restore_error')
+        if restore_error:
+            from urllib.parse import unquote
+            flash(unquote(restore_error), 'warning')
+        else:
+            # ตรวจสอบจาก session (กรณีเก่า)
+            warning_message = session.pop('admin_reschedule_warning', None)
+            warning_category = session.pop('admin_reschedule_warning_type', None)
+            if warning_message:
+                flash(warning_message, warning_category or 'error')
         
         return render_template('appointments/admin_reschedule.html',
                              appointment=appointment,
@@ -643,9 +652,14 @@ def restore_appointment(appointment_id):
 
         status_code = response.status_code
         if status_code == 409:
-            session['admin_reschedule_warning'] = message
-            session['admin_reschedule_warning_type'] = 'error'
-            return redirect(build_url_with_context('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain))
+            # ไม่ใช้ flash แต่ส่ง message ผ่าน URL parameter
+            from urllib.parse import quote
+            return redirect(build_url_with_context(
+                'main.admin_reschedule_appointment', 
+                appointment_id=appointment.id, 
+                subdomain=subdomain,
+                restore_error=quote(message)  # encode message ให้ปลอดภัยสำหรับ URL
+            ))
 
         flash(message, 'error')
         return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))

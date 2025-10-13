@@ -396,7 +396,7 @@ def create_booking():
     ]
     
     # ตรวจสอบจำนวนการจอง
-    if len(session['booking_history']) >= 3:
+    if len(session['booking_history']) >= 5:
         remaining_time = 60 - int((datetime.now() - datetime.fromisoformat(session['booking_history'][0]['time'])).seconds / 60)
         flash(f'คุณจองบ่อยเกินไป กรุณารออีก {remaining_time} นาที', 'error')
         return redirect(build_url_with_context('booking.booking_home'))
