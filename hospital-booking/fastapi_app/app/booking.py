@@ -114,6 +114,11 @@ class RescheduleRequest(BaseModel):
     provider_id: Optional[int] = None
     reason: Optional[str] = None
 
+
+class RestoreRequest(BaseModel):
+    booking_reference: str
+    reason: Optional[str] = None
+
 class EventTypeDetail(BaseModel):
     id: int
     name: str
@@ -954,16 +959,16 @@ async def reschedule_booking(
     
     try:
         # 1. Find original appointment
-        original = db.query(models.Appointment).filter_by(
-            booking_reference=request.booking_reference,
-            status='confirmed'
+        original = db.query(models.Appointment).filter(
+            models.Appointment.booking_reference == request.booking_reference,
+            models.Appointment.status.in_(['confirmed', 'cancelled'])
         ).first()
         
         if not original:
             raise HTTPException(404, "Booking not found or already modified")
         
         # 2. Check if can reschedule
-        if original.start_time <= datetime.now() + timedelta(hours=4):
+        if original.status == 'confirmed' and original.start_time <= datetime.now() + timedelta(hours=4):
             raise HTTPException(400, "Cannot reschedule within 4 hours of appointment")
         
         # 3. Parse new datetime
@@ -1028,6 +1033,9 @@ async def reschedule_booking(
         original.end_time = new_end
         original.provider_id = assigned_provider_id
         original.status = 'confirmed'
+        original.cancelled_at = None
+        original.cancelled_by = None
+        original.cancellation_reason = None
         original.reschedule_count = (original.reschedule_count or 0) + 1
 
         if request.reason:
@@ -1060,6 +1068,99 @@ async def reschedule_booking(
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error rescheduling: {str(e)}")
+
+
+@router.post("/booking/restore")
+async def restore_booking(
+    subdomain: str,
+    request: RestoreRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Restore a previously cancelled booking if the original slot is still available."""
+
+    schema_name = f"tenant_{subdomain}"
+    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    db.commit()
+
+    try:
+        appointment = db.query(models.Appointment).filter_by(
+            booking_reference=request.booking_reference
+        ).first()
+
+        if not appointment:
+            raise HTTPException(404, "ไม่พบนัดหมายที่ต้องการกู้คืน")
+
+        if appointment.status != 'cancelled':
+            raise HTTPException(400, "นัดหมายนี้ไม่ได้อยู่ในสถานะถูกยกเลิก")
+
+        if appointment.start_time <= datetime.now():
+            raise HTTPException(400, "ไม่สามารถกู้คืนนัดหมายที่เลยเวลาแล้วได้")
+
+        event_type = db.query(models.EventType).filter_by(
+            id=appointment.event_type_id
+        ).first()
+
+        if not event_type:
+            raise HTTPException(400, "ไม่พบบริการของนัดหมายนี้")
+
+        template = event_type.availability_template
+
+        if not template:
+            raise HTTPException(400, "บริการนี้ยังไม่ได้ตั้งค่าเวลาทำการ")
+
+        slot_start = appointment.start_time
+        slot_end = appointment.end_time
+
+        try:
+            assigned_provider_id = ensure_slot_capacity(
+                db,
+                event_type,
+                template,
+                slot_start,
+                slot_end,
+                appointment.provider_id
+            )
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                raise HTTPException(409, "ไม่สามารถกู้คืนนัดหมายได้ เนื่องจากช่วงเวลานี้ถูกจองแล้ว กรุณาเลื่อนนัดไปเวลาอื่น")
+            raise
+
+        appointment.status = 'confirmed'
+        appointment.cancelled_at = None
+        appointment.cancelled_by = None
+        appointment.cancellation_reason = None
+        appointment.provider_id = assigned_provider_id
+        appointment.reschedule_count = appointment.reschedule_count or 0
+
+        if request.reason:
+            note_entry = f"[Restore] {request.reason}"
+            if appointment.internal_notes:
+                appointment.internal_notes = f"{appointment.internal_notes}\n{note_entry}"
+            else:
+                appointment.internal_notes = note_entry
+
+        db.commit()
+
+        if appointment.guest_email:
+            background_tasks.add_task(
+                send_reschedule_email,
+                appointment.guest_email,
+                appointment,
+                event_type
+            )
+
+        return {
+            "success": True,
+            "booking_reference": appointment.booking_reference,
+            "message": "กู้คืนนัดหมายเรียบร้อยแล้ว"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error restoring booking: {str(e)}")
 
 @router.post("/booking/cancel")
 async def cancel_booking(

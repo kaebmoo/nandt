@@ -191,6 +191,9 @@
                                                 {% if appointment.booking_reference %}
                                                 <div>🔖 {{ appointment.booking_reference }}</div>
                                                 {% endif %}
+                                                {% if appointment.provider %}
+                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
@@ -273,6 +276,9 @@
                                                 {% if appointment.booking_reference %}
                                                 <div>🔖 {{ appointment.booking_reference }}</div>
                                                 {% endif %}
+                                                {% if appointment.provider %}
+                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
@@ -342,6 +348,9 @@
                                                 {% endif %}
                                                 {% if appointment.booking_reference %}
                                                 <div class="">🔖 {{ appointment.booking_reference }}</div>
+                                                {% endif %}
+                                                {% if appointment.provider %}
+                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
                                                 {% endif %}
                                                 <div class="text-red-500">
                                                     ยกเลิกเมื่อ: {{ appointment.cancelled_at.strftime('%d/%m/%Y %H:%M') if appointment.cancelled_at else 'ไม่ระบุ' }}

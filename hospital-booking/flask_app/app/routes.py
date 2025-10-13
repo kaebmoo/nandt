@@ -110,6 +110,9 @@ def dashboard():
         appointments = db.query(Appointment)\
              .order_by(Appointment.start_time.asc())\
              .all()
+        # เพิ่มการดึงข้อมูล providers และสร้าง dictionary
+        providers = db.query(Provider).all()
+        providers_dict = {provider.id: provider for provider in providers}
         
         hospital_display_name = current_user.hospital.name
         
@@ -123,6 +126,12 @@ def dashboard():
         canceled_appointments = []
         
         for apt in appointments:
+            # เพิ่ม provider object เข้าไปใน appointment
+            if apt.provider_id and apt.provider_id in providers_dict:
+                apt.provider = providers_dict[apt.provider_id]
+            else:
+                apt.provider = None
+                
             if apt.status and apt.status.lower() == 'cancelled':
                 canceled_appointments.append(apt)
             elif apt.start_time and apt.start_time >= now:
@@ -583,25 +592,50 @@ def restore_appointment(appointment_id):
         
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
-            return redirect(build_url_with_context('main.dashboard'))
-        
-        # กู้คืน status
-        appointment.status = 'confirmed'
-        appointment.cancelled_at = None
-        appointment.cancelled_by = None
-        appointment.cancellation_reason = None
-        
-        db.commit()
-        
-        flash('กู้คืนนัดหมายเรียบร้อยแล้ว', 'success')
-        return redirect(build_url_with_context('main.dashboard'))
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+
+        if not appointment.booking_reference:
+            flash('ไม่พบรหัสอ้างอิงการจองของนัดหมายนี้', 'error')
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+
+        payload = {
+            'booking_reference': appointment.booking_reference
+        }
+
+        try:
+            response = requests.post(
+                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/restore",
+                json=payload,
+                timeout=10
+            )
+        except requests.RequestException as exc:
+            current_app.logger.error(f"Failed to call restore API: {exc}")
+            flash('ไม่สามารถเชื่อมต่อบริการได้ กรุณาลองใหม่ภายหลัง', 'error')
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+
+        if response.ok:
+            result = response.json()
+            flash(result.get('message', 'กู้คืนนัดหมายเรียบร้อยแล้ว'), 'success')
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
+
+        try:
+            error_data = response.json()
+            message = error_data.get('detail') or error_data.get('message') or 'ไม่สามารถกู้คืนนัดหมายได้'
+        except ValueError:
+            message = 'ไม่สามารถกู้คืนนัดหมายได้'
+
+        flash(message, 'error')
+        status_code = response.status_code
+        if status_code == 409:
+            return redirect(build_url_with_context('main.admin_reschedule_appointment', appointment_id=appointment.id, subdomain=subdomain))
+        return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
     except Exception as e:
         current_app.logger.error(f"Error restoring appointment: {str(e)}")
         if db:
             db.rollback()
         flash('เกิดข้อผิดพลาดในการกู้คืนนัดหมาย', 'error')
-        return redirect(build_url_with_context('main.dashboard'))
+        return redirect(build_url_with_context('main.dashboard', subdomain=g.subdomain))
 
 @bp.route('/appointments/<int:appointment_id>/delete', methods=['POST'])
 @login_required
@@ -611,24 +645,38 @@ def delete_appointment(appointment_id):
     try:
         db = get_db_session()
         tenant_schema = g.tenant_schema
-        
+        subdomain = g.subdomain
+
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
         
         appointment = db.query(Appointment).filter_by(id=appointment_id).first()
         
         if not appointment:
-            return jsonify({'error': 'ไม่พบนัดหมาย'}), 404
+            message = 'ไม่พบนัดหมาย'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.best == 'application/json':
+                return jsonify({'error': message}), 404
+            flash(message, 'error')
+            return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         db.delete(appointment)
         db.commit()
-        
-        return jsonify({'success': True, 'message': 'ลบนัดหมายเรียบร้อยแล้ว'})
+
+        success_message = 'ลบนัดหมายเรียบร้อยแล้ว'
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.best == 'application/json':
+            return jsonify({'success': True, 'message': success_message})
+
+        flash(success_message, 'success')
+        return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
     except Exception as e:
         current_app.logger.error(f"Error deleting appointment: {str(e)}")
         if db:
             db.rollback()
-        return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.best == 'application/json':
+            return jsonify({'error': 'เกิดข้อผิดพลาด'}), 500
+        flash('เกิดข้อผิดพลาดในการลบนัดหมาย', 'error')
+        return redirect(build_url_with_context('main.dashboard', subdomain=g.subdomain))
 
 @bp.route('/appointments/create')
 @login_required
