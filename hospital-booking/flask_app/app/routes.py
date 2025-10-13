@@ -121,6 +121,26 @@ def dashboard():
         now = datetime.now()
         
         # แบ่งนัดหมายตามสถานะ
+        def group_appointments_by_event_type(appointment_list):
+            grouped = []
+            group_index = {}
+
+            for apt in appointment_list:
+                event_type_name = apt.event_type.name if getattr(apt, 'event_type', None) else 'ไม่ระบุประเภท'
+
+                group = group_index.get(event_type_name)
+                if not group:
+                    group = {
+                        'event_type_name': event_type_name,
+                        'appointments': []
+                    }
+                    group_index[event_type_name] = group
+                    grouped.append(group)
+
+                group['appointments'].append(apt)
+
+            return grouped
+
         upcoming_appointments = []
         past_appointments = []
         canceled_appointments = []
@@ -144,6 +164,10 @@ def dashboard():
         past_appointments.sort(key=lambda x: x.start_time, reverse=True)
         canceled_appointments.sort(key=lambda x: x.cancelled_at if x.cancelled_at else x.start_time, reverse=True)
         
+        upcoming_groups = group_appointments_by_event_type(upcoming_appointments)
+        past_groups = group_appointments_by_event_type(past_appointments)
+        canceled_groups = group_appointments_by_event_type(canceled_appointments)
+
         today_count = sum(1 for apt in upcoming_appointments 
                          if apt.start_time.date() == today)
         
@@ -155,6 +179,9 @@ def dashboard():
                              upcoming_appointments=upcoming_appointments,
                              past_appointments=past_appointments,
                              canceled_appointments=canceled_appointments,
+                             upcoming_groups=upcoming_groups,
+                             past_groups=past_groups,
+                             canceled_groups=canceled_groups,
                              today_count=today_count,
                              now=now)
                              

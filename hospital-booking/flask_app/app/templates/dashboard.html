@@ -152,79 +152,91 @@
             <div id="appointments-container">
                 <!-- Upcoming Appointments -->
                 <div id="upcoming-appointments" class="tab-content">
-                    {% if upcoming_appointments %}
-                    <ul class="divide-y divide-gray-200">
-                        {% for appointment in upcoming_appointments|sort(attribute='start_time') %}
-                        <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-start space-x-4">
-                                    <!-- Date/Time Column -->
-                                    <div class="flex-shrink-0 text-center">
-                                        <div class="text-xs text-gray-500">{{ appointment.start_time.strftime('%b')|upper }}</div>
-                                        <div class="text-2xl font-bold text-gray-900">{{ appointment.start_time.strftime('%-d') }}</div>
-                                        <div class="text-xs text-gray-500">{{ appointment.start_time.strftime('%Y') }}</div>
-                                        <div class="mt-1 text-sm text-gray-600">
-                                            {{ appointment.start_time.strftime('%H:%M') }}
-                                        </div>
-                                    </div>
+                    {% if upcoming_groups %}
+                    <div class="space-y-6">
+                        {% for group in upcoming_groups %}
+                        <div class="border border-gray-200 rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 sm:px-6 bg-gray-50 flex items-center justify-between">
+                                <h4 class="text-sm font-semibold text-gray-700">{{ group.event_type_name }}</h4>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    {{ group.appointments|length }} นัด
+                                </span>
+                            </div>
+                            <ul class="divide-y divide-gray-200">
+                                {% for appointment in group.appointments %}
+                                <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-start space-x-4">
+                                            <!-- Date/Time Column -->
+                                            <div class="flex-shrink-0 text-center">
+                                                <div class="text-xs text-gray-500">{{ appointment.start_time.strftime('%b')|upper }}</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ appointment.start_time.strftime('%-d') }}</div>
+                                                <div class="text-xs text-gray-500">{{ appointment.start_time.strftime('%Y') }}</div>
+                                                <div class="mt-1 text-sm text-gray-600">
+                                                    {{ appointment.start_time.strftime('%H:%M') }}
+                                                </div>
+                                            </div>
 
-                                    <!-- Details Column -->
-                                    <div class="flex-1">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                                {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="mt-2">
-                                            <p class="text-sm font-medium text-gray-900">
-                                                {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
-                                            </p>
-                                            
-                                            <div class="mt-1 text-sm text-gray-500 space-y-1">
-                                                {% if appointment.guest_email %}
-                                                <div>📧 {{ appointment.guest_email }}</div>
-                                                {% endif %}
-                                                {% if appointment.guest_phone %}
-                                                <div>📱 {{ appointment.guest_phone }}</div>
-                                                {% endif %}
-                                                {% if appointment.booking_reference %}
-                                                <div>🔖 {{ appointment.booking_reference }}</div>
-                                                {% endif %}
-                                                {% if appointment.provider %}
-                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
-                                                {% endif %}
+                                            <!-- Details Column -->
+                                            <div class="flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                                        {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div class="mt-2">
+                                                    <p class="text-sm font-medium text-gray-900">
+                                                        {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
+                                                    </p>
+                                                    
+                                                    <div class="mt-1 text-sm text-gray-500 space-y-1">
+                                                        {% if appointment.guest_email %}
+                                                        <div>📧 {{ appointment.guest_email }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.guest_phone %}
+                                                        <div>📱 {{ appointment.guest_phone }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.booking_reference %}
+                                                        <div>🔖 {{ appointment.booking_reference }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.provider %}
+                                                        <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                <!-- Actions -->
-                                <div class="flex items-center space-x-2">
-                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
-                                       class="text-gray-600 hover:text-gray-900 p-2" title="ดูรายละเอียด">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </a>
-                                    <a href="{{ url('main.admin_reschedule_appointment', appointment_id=appointment.id) }}" 
-                                       class="text-blue-600 hover:text-blue-900 p-2" title="เลื่อนนัด">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                    </a>
-                                    <a href="{{ url('main.admin_cancel_appointment', appointment_id=appointment.id) }}" 
-                                       class="text-red-600 hover:text-red-900 p-2" title="ยกเลิกนัด">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </a>
-                                </div>
-                            </div>
-                        </li>
+                                        <!-- Actions -->
+                                        <div class="flex items-center space-x-2">
+                                            <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
+                                               class="text-gray-600 hover:text-gray-900 p-2" title="ดูรายละเอียด">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </a>
+                                            <a href="{{ url('main.admin_reschedule_appointment', appointment_id=appointment.id) }}" 
+                                               class="text-blue-600 hover:text-blue-900 p-2" title="เลื่อนนัด">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </a>
+                                            <a href="{{ url('main.admin_cancel_appointment', appointment_id=appointment.id) }}" 
+                                               class="text-red-600 hover:text-red-900 p-2" title="ยกเลิกนัด">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
                         {% endfor %}
-                    </ul>
+                    </div>
                     {% else %}
                     <div class="text-center py-12">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -237,67 +249,79 @@
 
                 <!-- Past Appointments -->
                 <div id="past-appointments" class="tab-content hidden">
-                    {% if past_appointments %}
-                    <ul class="divide-y divide-gray-200">
-                        {% for appointment in past_appointments|sort(attribute='start_time', reverse=true) %}
-                        <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors opacity-75">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-start space-x-4">
-                                    <!-- Date/Time Column -->
-                                    <div class="flex-shrink-0 text-center">
-                                        <div class="text-xs text-gray-400">{{ appointment.start_time.strftime('%b')|upper }}</div>
-                                        <div class="text-2xl font-bold text-gray-400">{{ appointment.start_time.strftime('%-d') }}</div>
-                                        <div class="text-xs text-gray-400">{{ appointment.start_time.strftime('%Y') }}</div>
-                                        <div class="mt-1 text-sm text-gray-400">
-                                            {{ appointment.start_time.strftime('%H:%M') }}
-                                        </div>
-                                    </div>
+                    {% if past_groups %}
+                    <div class="space-y-6">
+                        {% for group in past_groups %}
+                        <div class="border border-gray-200 rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 sm:px-6 bg-gray-50 flex items-center justify-between">
+                                <h4 class="text-sm font-semibold text-gray-700">{{ group.event_type_name }}</h4>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                    {{ group.appointments|length }} นัด
+                                </span>
+                            </div>
+                            <ul class="divide-y divide-gray-200">
+                                {% for appointment in group.appointments %}
+                                <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors opacity-75">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-start space-x-4">
+                                            <!-- Date/Time Column -->
+                                            <div class="flex-shrink-0 text-center">
+                                                <div class="text-xs text-gray-400">{{ appointment.start_time.strftime('%b')|upper }}</div>
+                                                <div class="text-2xl font-bold text-gray-400">{{ appointment.start_time.strftime('%-d') }}</div>
+                                                <div class="text-xs text-gray-400">{{ appointment.start_time.strftime('%Y') }}</div>
+                                                <div class="mt-1 text-sm text-gray-400">
+                                                    {{ appointment.start_time.strftime('%H:%M') }}
+                                                </div>
+                                            </div>
 
-                                    <!-- Details Column -->
-                                    <div class="flex-1">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="mt-2">
-                                            <p class="text-sm font-medium text-gray-700">
-                                                {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
-                                            </p>
-                                            
-                                            <div class="mt-1 text-sm text-gray-400 space-y-1">
-                                                {% if appointment.guest_email %}
-                                                <div>📧 {{ appointment.guest_email }}</div>
-                                                {% endif %}
-                                                {% if appointment.guest_phone %}
-                                                <div>📱 {{ appointment.guest_phone }}</div>
-                                                {% endif %}
-                                                {% if appointment.booking_reference %}
-                                                <div>🔖 {{ appointment.booking_reference }}</div>
-                                                {% endif %}
-                                                {% if appointment.provider %}
-                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
-                                                {% endif %}
+                                            <!-- Details Column -->
+                                            <div class="flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                        {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div class="mt-2">
+                                                    <p class="text-sm font-medium text-gray-700">
+                                                        {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
+                                                    </p>
+                                                    
+                                                    <div class="mt-1 text-sm text-gray-400 space-y-1">
+                                                        {% if appointment.guest_email %}
+                                                        <div>📧 {{ appointment.guest_email }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.guest_phone %}
+                                                        <div>📱 {{ appointment.guest_phone }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.booking_reference %}
+                                                        <div>🔖 {{ appointment.booking_reference }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.provider %}
+                                                        <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                <!-- Actions -->
-                                <div class="flex items-center space-x-2">
-                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
-                                       class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </a>
-                                </div>
-                            </div>
-                        </li>
+                                        <!-- Actions -->
+                                        <div class="flex items-center space-x-2">
+                                            <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
+                                               class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
                         {% endfor %}
-                    </ul>
+                    </div>
                     {% else %}
                     <div class="text-center py-12">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -310,94 +334,106 @@
 
                 <!-- Canceled Appointments -->
                 <div id="canceled-appointments" class="tab-content hidden">
-                    {% if canceled_appointments %}
-                    <ul class="divide-y divide-gray-200">
-                        {% for appointment in canceled_appointments %}
-                        <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-start space-x-4">
-                                    <!-- Date/Time Column -->
-                                    <div class="flex-shrink-0 text-center">
-                                        <div class="text-xs text-red-400">ยกเลิก</div>
-                                        <div class="text-2xl font-bold text-red-400">{{ appointment.start_time.strftime('%-d') }}</div>
-                                        <div class="text-xs text-red-400">{{ appointment.start_time.strftime('%b')|upper }}</div>
-                                        <div class="mt-1 text-sm text-red-400">
-                                            {{ appointment.start_time.strftime('%H:%M') }}
-                                        </div>
-                                    </div>
-
-                                    <!-- Details Column -->
-                                    <div class="flex-1 opacity-50">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
-                                                {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="mt-2">
-                                            <p class="text-sm font-medium text-gray-600 line-through">
-                                                {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
-                                            </p>
-                                            
-                                            <div class="mt-1 text-sm text-gray-400 space-y-1">
-                                                {% if appointment.guest_email %}
-                                                <div class="">📧 {{ appointment.guest_email }}</div>
-                                                {% endif %}
-                                                {% if appointment.guest_phone %}
-                                                <div class="">📱 {{ appointment.guest_phone }}</div>
-                                                {% endif %}
-                                                {% if appointment.booking_reference %}
-                                                <div class="">🔖 {{ appointment.booking_reference }}</div>
-                                                {% endif %}
-                                                {% if appointment.provider %}
-                                                <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
-                                                {% endif %}
-                                                <div class="text-red-500">
-                                                    ยกเลิกเมื่อ: {{ appointment.cancelled_at.strftime('%d/%m/%Y %H:%M') if appointment.cancelled_at else 'ไม่ระบุ' }}
+                    {% if canceled_groups %}
+                    <div class="space-y-6">
+                        {% for group in canceled_groups %}
+                        <div class="border border-gray-200 rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 sm:px-6 bg-gray-50 flex items-center justify-between">
+                                <h4 class="text-sm font-semibold text-gray-700">{{ group.event_type_name }}</h4>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+                                    {{ group.appointments|length }} นัด
+                                </span>
+                            </div>
+                            <ul class="divide-y divide-gray-200">
+                                {% for appointment in group.appointments %}
+                                <li class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-start space-x-4">
+                                            <!-- Date/Time Column -->
+                                            <div class="flex-shrink-0 text-center">
+                                                <div class="text-xs text-red-400">ยกเลิก</div>
+                                                <div class="text-2xl font-bold text-red-400">{{ appointment.start_time.strftime('%-d') }}</div>
+                                                <div class="text-xs text-red-400">{{ appointment.start_time.strftime('%b')|upper }}</div>
+                                                <div class="mt-1 text-sm text-red-400">
+                                                    {{ appointment.start_time.strftime('%H:%M') }}
                                                 </div>
-                                                {% if appointment.cancellation_reason %}
-                                                <div class="text-xs text-red-400">เหตุผล: {{ appointment.cancellation_reason }}</div>
-                                                {% endif %}
+                                            </div>
+
+                                            <!-- Details Column -->
+                                            <div class="flex-1 opacity-50">
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+                                                        {{ appointment.event_type.name if appointment.event_type else 'การนัดหมาย' }}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div class="mt-2">
+                                                    <p class="text-sm font-medium text-gray-600 line-through">
+                                                        {{ appointment.guest_name or (appointment.patient.name if appointment.patient else 'ไม่ระบุ') }}
+                                                    </p>
+                                                    
+                                                    <div class="mt-1 text-sm text-gray-400 space-y-1">
+                                                        {% if appointment.guest_email %}
+                                                        <div class="">📧 {{ appointment.guest_email }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.guest_phone %}
+                                                        <div class="">📱 {{ appointment.guest_phone }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.booking_reference %}
+                                                        <div class="">🔖 {{ appointment.booking_reference }}</div>
+                                                        {% endif %}
+                                                        {% if appointment.provider %}
+                                                        <div>👩‍⚕️ {{ appointment.provider.name }}{% if appointment.provider.title %} ({{ appointment.provider.title }}){% endif %}</div>
+                                                        {% endif %}
+                                                        <div class="text-red-500">
+                                                            ยกเลิกเมื่อ: {{ appointment.cancelled_at.strftime('%d/%m/%Y %H:%M') if appointment.cancelled_at else 'ไม่ระบุ' }}
+                                                        </div>
+                                                        {% if appointment.cancellation_reason %}
+                                                        <div class="text-xs text-red-400">เหตุผล: {{ appointment.cancellation_reason }}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                <!-- Actions -->
-                                <div class="flex items-center space-x-2">
-                                    <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
-                                       class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </a>
-                                    <form method="POST" action="{{ url('main.restore_appointment', appointment_id=appointment.id) }}" style="display: inline;">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" 
-                                                onclick="return confirm('คุณต้องการกู้คืนนัดหมายนี้ใช่หรือไม่?')"
-                                                class="text-green-600 hover:text-green-900 p-2" title="กู้คืนนัดหมาย">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                        </button>
-                                    </form>
-                                    <form method="POST" action="{{ url('main.delete_appointment', appointment_id=appointment.id) }}" 
+                                        <!-- Actions -->
+                                        <div class="flex items-center space-x-2">
+                                            <a href="{{ url('main.view_appointment', appointment_id=appointment.id) }}" 
+                                               class="text-gray-400 hover:text-gray-600 p-2" title="ดูรายละเอียด">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </a>
+                                            <form method="POST" action="{{ url('main.restore_appointment', appointment_id=appointment.id) }}" style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" 
+                                                        onclick="return confirm('คุณต้องการกู้คืนนัดหมายนี้ใช่หรือไม่?')"
+                                                        class="text-green-600 hover:text-green-900 p-2" title="กู้คืนนัดหมาย">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ url('main.delete_appointment', appointment_id=appointment.id) }}" 
                           onsubmit="return confirm('คุณต้องการลบนัดหมายนี้ถาวรใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้');" 
                           style="display: inline;">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="_method" value="DELETE">
-                                        <button type="submit" class="text-red-600 hover:text-red-900 p-2" title="ลบถาวร">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </li>
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="_method" value="DELETE">
+                                                <button type="submit" class="text-red-600 hover:text-red-900 p-2" title="ลบถาวร">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
                         {% endfor %}
-                    </ul>
+                    </div>
                     {% else %}
                     <div class="text-center py-12">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
