@@ -138,7 +138,7 @@
     </div>
 
     <script>
-        const availabilityEndpoint = "{{ url('main.admin_reschedule_availability', appointment_id=appointment.id) }}";
+        const availabilityEndpoint = "{{ url('main.admin_reschedule_availability', appointment_id=appointment.id, subdomain=subdomain) }}";
         const dateInput = document.getElementById('date-input');
         const providerSelect = document.getElementById('provider-select');
         const slotsContainer = document.getElementById('slots-container');
@@ -258,7 +258,9 @@
             slotsContainer.innerHTML = '<div class="text-sm text-gray-500">กำลังโหลดข้อมูล...</div>';
 
             try {
-                const response = await fetch(`${availabilityEndpoint}?${params.toString()}`);
+                // ตรวจสอบว่า URL มี ? อยู่แล้วหรือไม่
+                const separator = availabilityEndpoint.includes('?') ? '&' : '?';
+                const response = await fetch(`${availabilityEndpoint}${separator}${params.toString()}`);
                 const data = await response.json();
 
                 if (!response.ok) {

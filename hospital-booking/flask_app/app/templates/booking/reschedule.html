@@ -267,10 +267,8 @@
             loading.classList.remove('hidden');
             
             try {
-                // Call FastAPI through Flask proxy
-                // const response = await fetch(`/book/api/availability/${eventTypeId}/${date}?subdomain=${subdomain}`);
-                const response = await fetch(getApiPath(`/book/api/calendar/${currentYear}/${currentMonth}`) + 
-                            `${subdomain ? '&' : '?'}event_type_id=${eventTypeId}`);
+                // เรียก availability API เพื่อดึง time slots
+                const response = await fetch(getApiPath(`/book/api/availability/${eventTypeId}/${date}`));
                 const data = await response.json();
                 
                 if (data.slots && data.slots.length > 0) {
@@ -303,6 +301,7 @@
                     `;
                 }
             } catch (error) {
+                console.error('Error loading slots:', error);
                 container.innerHTML = '<div class="text-center py-8 text-red-500">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>';
             } finally {
                 loading.classList.add('hidden');

@@ -385,6 +385,12 @@ def admin_reschedule_availability(appointment_id):
         return jsonify({'error': 'ไม่พบข้อมูล tenant'}), 400
 
     db = SessionLocal()
+    
+    # เก็บค่าที่ต้องใช้ไว้ก่อน เพื่อไม่ให้เกิด lazy loading problem
+    event_type_id = None
+    current_start_time = None
+    requires_provider = False
+    
     try:
         try:
             db.rollback()
@@ -402,13 +408,17 @@ def admin_reschedule_availability(appointment_id):
         if not event_type:
             return jsonify({'error': 'ไม่พบบริการ'}), 404
 
+        # Load template และเก็บค่าไว้ก่อนปิด session
         template = event_type.availability_template
-
+        
+        # เก็บค่าที่ต้องการใช้ไว้ก่อน
+        event_type_id = event_type.id
         current_start_time = appointment.start_time
         requires_provider = bool(template and template.requires_provider_assignment)
+        
     except Exception as exc:
         db.rollback()
-        current_app.logger.error(f"Error preparing availability: {exc}")
+        current_app.logger.error(f"Error preparing availability: {exc}", exc_info=True)
         return jsonify({'error': 'ไม่สามารถดึงข้อมูลได้'}), 500
     finally:
         try:
@@ -416,18 +426,27 @@ def admin_reschedule_availability(appointment_id):
         except Exception:
             pass
 
+    # ตรวจสอบว่าได้ event_type_id มาหรือไม่
+    if not event_type_id:
+        current_app.logger.error(f"event_type_id is None for appointment {appointment_id}")
+        return jsonify({'error': 'ไม่พบข้อมูลบริการ'}), 404
+
     params = {'date': date_str}
     if provider_id:
         params['provider_id'] = provider_id
 
     try:
+        fastapi_url = get_fastapi_url()
+        api_endpoint = f"{fastapi_url}/api/v1/tenants/{subdomain}/booking/availability/{event_type_id}"
+        current_app.logger.debug(f"Calling FastAPI endpoint: {api_endpoint} with params: {params}")
+        
         response = requests.get(
-            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/availability/{event_type.id}",
+            api_endpoint,
             params=params,
             timeout=10
         )
     except requests.RequestException as exc:
-        current_app.logger.error(f"Failed to fetch availability: {exc}")
+        current_app.logger.error(f"Failed to fetch availability from FastAPI: {exc}", exc_info=True)
         return jsonify({'error': 'ไม่สามารถเชื่อมต่อบริการได้'}), 502
 
     if not response.ok:
@@ -436,11 +455,13 @@ def admin_reschedule_availability(appointment_id):
         except ValueError:
             data = {}
         message = data.get('detail') or data.get('message') or 'ไม่สามารถดึงข้อมูลได้'
+        current_app.logger.error(f"FastAPI returned error: {response.status_code} - {message}")
         return jsonify({'error': message}), response.status_code
 
     data = response.json()
     slots = data.get('slots', [])
 
+    # ทำเครื่องหมายช่วงเวลาปัจจุบันว่าไม่สามารถเลือกได้
     if current_start_time and current_start_time.strftime('%Y-%m-%d') == date_str:
         current_time_str = current_start_time.strftime('%H:%M')
         for slot in slots:

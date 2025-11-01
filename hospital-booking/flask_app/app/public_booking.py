@@ -613,26 +613,49 @@ def reschedule_booking(reference):
         # 2. ดึงข้อมูล event type และ availability
         event_type_id = booking.get('event_type', {}).get('id')
         event_type_data = None
-        if event_type_id:
-            # ดึง event type details พร้อม availability schedule
-            evt_response = requests.get(
-                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types/{event_type_id}"
-            )
-            if evt_response.ok:
-                event_type_data = evt_response.json()
-                booking['event_type_full'] = event_type_data
-                
-                # ดึง availability schedule จาก template
-                if event_type_data.get('template_id'):
-                    avail_response = requests.get(
-                        f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{event_type_data['template_id']}/details"
-                    )
-                    if avail_response.ok:
-                        availability_data = avail_response.json()
-                        booking['availability_schedule'] = availability_data.get('schedule', {})
+        availability_schedule = {}
+        template_id = None
         
-        availability_schedule = booking.get('availability_schedule', {})
-        template_id = event_type_data.get('template_id') if event_type_data else None
+        if event_type_id:
+            try:
+                # ดึง event type details พร้อม availability schedule
+                evt_response = requests.get(
+                    f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types/{event_type_id}",
+                    timeout=10
+                )
+                if evt_response.ok:
+                    event_type_data = evt_response.json()
+                    booking['event_type_full'] = event_type_data
+                    template_id = event_type_data.get('template_id')
+                    
+                    # ดึง availability schedule จาก template
+                    if template_id:
+                        avail_response = requests.get(
+                            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{template_id}/details",
+                            timeout=10
+                        )
+                        if avail_response.ok:
+                            availability_data = avail_response.json()
+                            availability_schedule = availability_data.get('schedule', {})
+                            booking['availability_schedule'] = availability_schedule
+                        else:
+                            print(f"⚠️ Warning: Failed to fetch availability template {template_id}")
+                    else:
+                        print(f"⚠️ Warning: Event type {event_type_id} has no template_id")
+                else:
+                    print(f"⚠️ Warning: Failed to fetch event type {event_type_id}: {evt_response.status_code}")
+            except Exception as e:
+                print(f"❌ Error fetching event type data: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("❌ No event_type_id found in booking data")
+        
+        # ตรวจสอบว่ามีข้อมูลครบหรือไม่
+        if not availability_schedule:
+            flash('ไม่สามารถโหลดข้อมูลตารางเวลาได้ กรุณาติดต่อผู้ดูแลระบบ', 'error')
+            return redirect(build_url_with_context('booking.manage_booking', reference=reference))
+        
         now = datetime.now()
         today_date = now.date()
         unavailable_overrides = fetch_unavailable_override_dates(subdomain, template_id)
@@ -859,6 +882,11 @@ def generate_calendar_for_booking(
 
     weeks = []
     current_week = []
+    
+    print(f"\nฟའ️ Generating calendar for {month_names[month-1]} {year+543}")
+    print(f"   Today: {today}")
+    print(f"   Max advance: {max_advance_days} days (until {max_date})")
+    print(f"   Availability schedule: {list(availability_schedule.keys())}")
 
     for _ in range(first_weekday):
         current_week.append({
@@ -874,6 +902,7 @@ def generate_calendar_for_booking(
             'beyond_max_range': False
         })
 
+    available_count = 0
     for day in range(1, days_in_month + 1):
         date_obj = date(year, month, day)
         python_weekday = date_obj.weekday()
@@ -905,6 +934,27 @@ def generate_calendar_for_booking(
 
         has_schedule = str(our_weekday) in availability_schedule
         is_available = has_schedule and disabled_reason is None and not is_past
+        
+        # Debug logging สำหรับวันที่ควรจะว่าง
+        if day <= 10:  # แสดงแค่ 10 วันแรก
+            day_name = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'][our_weekday]
+            status = "✅" if is_available else "❌"
+            reason = ""
+            if not has_schedule:
+                reason = f"(no schedule for day {our_weekday})"
+            elif is_past:
+                reason = "(past)"
+            elif beyond_max_range:
+                reason = "(beyond max)"
+            elif is_override_closed:
+                reason = "(override)"
+            elif is_holiday:
+                reason = f"(holiday: {disabled_label})"
+            
+            print(f"   {status} {date_obj} ({day_name}): weekday={our_weekday}, has_schedule={has_schedule} {reason}")
+        
+        if is_available:
+            available_count += 1
 
         current_week.append({
             'day': day,
@@ -939,6 +989,8 @@ def generate_calendar_for_booking(
                 'beyond_max_range': False
             })
         weeks.append(current_week)
+    
+    print(f"   ฟມ̌ RESULT: {available_count} available days found\n")
 
     return {
         'year': year,
@@ -952,10 +1004,9 @@ def generate_calendar_for_booking(
         'can_go_previous': date(year, month, 1) > today.replace(day=1)
     }
 
-# เพิ่ม AJAX endpoint สำหรับ calendar navigation
 @public_bp.route('/api/calendar/<year>/<month>')
 def get_calendar(year, month):
-    """AJAX endpoint สำหรับดึง calendar data"""
+    """เพิ่ม AJAX endpoint สำหรับดึง calendar data และเพิ่ม debug logging"""
     try:
         year = int(year)
         month = int(month)
@@ -969,27 +1020,43 @@ def get_calendar(year, month):
     unavailable_overrides: Dict[str, str] = {}
     holiday_dates: Dict[str, str] = {}
     max_advance_days: Optional[int] = None
+    template_id: Optional[int] = None
     today_date = date.today()
     holiday_years: Set[int] = {year, today_date.year}
+    
+    print(f"\nฟ้འ️ [Calendar AJAX] event_type_id={event_type_id}, year={year}, month={month}")
     
     if event_type_id:
         try:
             # ดึง event type และ availability
-            response = requests.get(
-                f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types/{event_type_id}"
-            )
+            evt_url = f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types/{event_type_id}"
+            print(f"  ฟມ̩ Fetching event type: {evt_url}")
+            
+            response = requests.get(evt_url, timeout=10)
             if response.ok:
                 event_type = response.json()
                 max_advance_days = event_type.get('max_advance_days')
                 template_id = event_type.get('template_id')
-                if event_type.get('template_id'):
-                    avail_response = requests.get(
-                        f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{event_type['template_id']}/details"
-                    )
+                
+                print(f"  ✅ Event type loaded: template_id={template_id}, max_advance_days={max_advance_days}")
+                
+                if template_id:
+                    avail_url = f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/availability/template/{template_id}/details"
+                    print(f"  ฟມ̩ Fetching availability: {avail_url}")
+                    
+                    avail_response = requests.get(avail_url, timeout=10)
                     if avail_response.ok:
-                        availability_schedule = avail_response.json().get('schedule', {})
+                        avail_data = avail_response.json()
+                        availability_schedule = avail_data.get('schedule', {})
+                        print(f"  ✅ Availability loaded: {len(availability_schedule)} days configured")
+                        print(f"     Days: {list(availability_schedule.keys())}")
+                    else:
+                        print(f"  ❌ Failed to fetch availability: {avail_response.status_code}")
+                else:
+                    print(f"  ⚠️ No template_id in event type!")
 
                 unavailable_overrides = fetch_unavailable_override_dates(subdomain, template_id)
+                print(f"  ฟྩ️ Date overrides: {len(unavailable_overrides)} dates blocked")
 
                 if isinstance(max_advance_days, int):
                     max_date = today_date + timedelta(days=max_advance_days)
@@ -998,9 +1065,16 @@ def get_calendar(year, month):
                     holiday_years.add(today_date.year + 1)
 
                 holiday_dates = fetch_holiday_dates(subdomain, holiday_years)
-        except:
-            pass
+                print(f"  ฟྩ‍♂️ Holidays: {len(holiday_dates)} days")
+            else:
+                print(f"  ❌ Failed to fetch event type: {response.status_code}")
+        except Exception as e:
+            print(f"  ❌ Error in calendar AJAX: {e}")
+            import traceback
+            traceback.print_exc()
 
+    print(f"\nฟྣ Generating calendar with availability_schedule: {availability_schedule}\n")
+    
     calendar_data = generate_calendar_for_booking(
         year,
         month,

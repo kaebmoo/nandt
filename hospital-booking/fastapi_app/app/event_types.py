@@ -105,6 +105,26 @@ async def get_event_types(subdomain: str, db: Session = Depends(get_tenant_sessi
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching event types: {str(e)}")
 
+@router.get("/event-types/{event_type_id}", response_model=EventTypeResponse)
+async def get_event_type(subdomain: str, event_type_id: int, db: Session = Depends(get_tenant_session)):
+    """Get a single event type by ID"""
+    try:
+        event_type = db.query(models.EventType).options(
+            joinedload(models.EventType.availability_template)
+        ).filter(models.EventType.id == event_type_id).first()
+        
+        if not event_type:
+            raise HTTPException(status_code=404, detail="Event type not found")
+        
+        et_dict = EventTypeResponse.from_orm(event_type).dict()
+        et_dict['availability_name'] = event_type.availability_template.name if event_type.availability_template else "ไม่ได้กำหนด"
+        
+        return et_dict
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching event type: {str(e)}")
+
 @router.post("/event-types", response_model=EventTypeResponse)
 async def create_event_type(subdomain: str, event_type_data: EventTypeCreate, db: Session = Depends(get_tenant_session)):
     """Create a new event type"""
