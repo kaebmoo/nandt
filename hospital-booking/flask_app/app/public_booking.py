@@ -521,11 +521,21 @@ def manage_booking(reference):
             
             # Format datetime
             dt = datetime.fromisoformat(booking['appointment_datetime'])
+            end_dt = datetime.fromisoformat(booking['end_time']) if booking.get('end_time') else None
+            
             thai_day_names = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์', 'วันอาทิตย์']
             thai_month_names = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
 
             booking['time_display'] = dt.strftime('%H:%M')
+            booking['end_time_display'] = end_dt.strftime('%H:%M') if end_dt else None
             booking['full_date_display'] = f"{thai_day_names[dt.weekday()]}ที่ {dt.day} {thai_month_names[dt.month - 1]} {dt.year + 543}"
+            booking['date_display'] = dt.strftime('%d/%m/%Y')
+            
+            # Add formatted time range
+            if booking['end_time_display']:
+                booking['time_range_display'] = f"{booking['time_display']} - {booking['end_time_display']}"
+            else:
+                booking['time_range_display'] = booking['time_display']
             
             return render_template('booking/manage.html',
                                  booking=booking,
