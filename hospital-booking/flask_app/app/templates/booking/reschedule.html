@@ -218,6 +218,10 @@
         const subdomain = '{{ subdomain }}';
         const today = '{{ today }}';
         const availabilitySchedule = {{ availability_schedule|tojson|safe }};
+        
+        // เก็บข้อมูลนัดเดิม เพื่อไม่ให้เลือกซ้ำ
+        const currentAppointmentDate = '{{ booking.appointment_datetime[:10] }}';
+        const currentAppointmentTime = '{{ booking.time_display }}';
 
         const getApiPath = (path) => {
             {% if subdomain %}
@@ -273,9 +277,14 @@
                 
                 if (data.slots && data.slots.length > 0) {
                     let slotsHtml = '<div class="grid grid-cols-3 gap-2">';
+                    let availableSlotsCount = 0;
                     
                     data.slots.forEach(slot => {
-                        if (slot.available) {
+                        // ตรวจสอบว่าเป็นเวลาเดิมหรือไม่
+                        const isCurrentSlot = (date === currentAppointmentDate && slot.time === currentAppointmentTime);
+                        
+                        if (slot.available && !isCurrentSlot) {
+                            availableSlotsCount++;
                             slotsHtml += `
                                 <button type="button" 
                                         class="time-slot p-2 border-2 border-gray-200 rounded-lg hover:border-purple-400"
@@ -284,10 +293,38 @@
                                 </button>
                             `;
                         }
+                        // แสดง slot เดิมแต่เป็น disabled (ถ้าต้องการให้เห็น)
+                        // ถ้าไม่ต้องการให้เห็นเลย ก็ comment ส่วนนี้ออก
+                        else if (isCurrentSlot) {
+                            slotsHtml += `
+                                <button type="button" 
+                                        class="time-slot p-2 border-2 border-gray-300 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed"
+                                        disabled
+                                        title="เวลานัดปัจจุบัน">
+                                    ${slot.time}
+                                    <div class="text-[10px] mt-1">นัดเดิม</div>
+                                </button>
+                            `;
+                        }
                     });
                     
                     slotsHtml += '</div>';
-                    container.innerHTML = slotsHtml;
+                    
+                    // ถ้าไม่มี slot ที่ใช้ได้เลย (มีแต่เวลาเดิม)
+                    if (availableSlotsCount === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-gray-500">
+                                <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M12 12h.01M12 12h-.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <p>ไม่มีเวลาว่างในวันนี้</p>
+                                <p class="text-sm mt-1">กรุณาเลือกวันอื่น</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = slotsHtml;
+                    }
                 } else {
                     container.innerHTML = `
                         <div class="text-center py-8 text-gray-500">
