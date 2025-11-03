@@ -1236,8 +1236,10 @@ async def search_appointments(
         query = db.query(models.Appointment)
         
         if search.search_type == 'email':
+            # ✅ Case-insensitive email search
+            from sqlalchemy import func
             query = query.filter(
-                models.Appointment.guest_email == search.search_value
+                func.lower(models.Appointment.guest_email) == func.lower(search.search_value)
             )
         elif search.search_type == 'phone':
             # Clean phone number (remove spaces, dashes)

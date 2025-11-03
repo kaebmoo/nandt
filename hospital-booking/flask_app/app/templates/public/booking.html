@@ -414,11 +414,17 @@
         let selectedEventType = { id: 1, name: '15 Min Meeting', duration: 15 };
         let selectedDate = null;
         let selectedTime = null;
-        let currentMonth = new Date(2025, 7); // August 2025
+        let currentMonth = new Date();
         
-        const API_BASE = 'http://localhost:8000/api/v1';
-        const SUBDOMAIN = 'demo';
-        const PROVIDER_ID = 1;
+        // ⚠️ ใช้ค่าจาก template แทนค่าคงที่
+        const API_BASE = '{{ fastapi_url }}/api/v1';
+        const SUBDOMAIN = '{{ subdomain }}';
+        const PROVIDER_ID = {{ provider.id if provider else 1 }};
+        
+        // 🔍 Debug logging
+        console.log('🔍 API_BASE:', API_BASE);
+        console.log('🔍 SUBDOMAIN:', SUBDOMAIN);
+        console.log('🔍 PROVIDER_ID:', PROVIDER_ID);
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {

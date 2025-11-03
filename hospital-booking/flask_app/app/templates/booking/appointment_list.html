@@ -1,4 +1,3 @@
-<!-- templates/booking/appointment_list.html -->
 {% extends "base.html" %}
 
 {% block title %}นัดหมายของฉัน - NudDee{% endblock %}
@@ -10,12 +9,11 @@
 {% endblock %}
 
 {% block content %}
-    <!-- Header -->
     <div class="bg-white shadow-sm">
         <div class="max-w-6xl mx-auto px-4 py-6">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
-                    <a href="{{ url('booking.my_appointments') }}" 
+                    <a href="{{ url('booking.my_appointments', subdomain=subdomain) }}" 
                        class="text-gray-600 hover:text-gray-900">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -35,7 +33,7 @@
                         </p>
                     </div>
                 </div>
-                <a href="{{ url('booking.booking_home') }}"
+                <a href="{{ url('booking.booking_home', subdomain=subdomain) }}"
                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
                     จองนัดหมายใหม่
                 </a>
@@ -43,7 +41,6 @@
         </div>
     </div>
 
-    <!-- Appointments List -->
     <div class="max-w-6xl mx-auto px-4 py-8">
         {% if appointments %}
         <div class="space-y-4">
@@ -52,7 +49,6 @@
                         {% if apt.is_upcoming %}border-l-4 border-green-500{% else %}opacity-75{% endif %}">
                 <div class="flex justify-between items-start">
                     <div class="flex-1">
-                        <!-- Status Badge -->
                         <div class="mb-3">
                             {% if apt.is_upcoming %}
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -68,7 +64,6 @@
                             {% endif %}
                         </div>
                         
-                        <!-- Appointment Details -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <p class="text-sm text-gray-500">รหัสการจอง</p>
@@ -107,14 +102,13 @@
                         {% endif %}
                     </div>
                     
-                    <!-- Action Buttons -->
                     <div class="ml-6 space-y-2">
-                        <a href="{{ url('booking.manage_booking', reference=apt.booking_reference) }}"
+                        <a href="{{ url('booking.manage_booking', reference=apt.booking_reference, subdomain=subdomain) }}"
                            class="block px-4 py-2 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 text-sm">
                             ดูรายละเอียด
                         </a>
                         {% if apt.can_manage %}
-                        <a href="{{ url('booking.reschedule_booking', reference=apt.booking_reference) }}"
+                        <a href="{{ url('booking.reschedule_booking', reference=apt.booking_reference, subdomain=subdomain) }}"
                            class="block px-4 py-2 border border-gray-300 text-center rounded-lg hover:bg-gray-50 text-sm">
                             เลื่อนนัด
                         </a>
@@ -135,9 +129,8 @@
         </div>
         {% endif %}
         
-        <!-- Back to Search -->
         <div class="mt-8 text-center">
-            <a href="{{ url('booking.my_appointments') }}"
+            <a href="{{ url('booking.my_appointments', subdomain=subdomain) }}"
                class="inline-block px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                 ค้นหานัดหมายอื่น
             </a>

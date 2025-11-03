@@ -2,7 +2,7 @@
 
 import os
 import requests
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, g
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, g, current_app
 import secrets
 import time
 from datetime import datetime, timedelta, date
@@ -106,13 +106,19 @@ def booking_home():
     """หน้าแรก - เลือกประเภทการนัด"""
     subdomain = get_subdomain()
     
+    # 🔍 Debug logging
+    print(f"🔍 DEBUG [booking_home] - subdomain = {subdomain}")
+    print(f"🔍 DEBUG [booking_home] - request.args = {request.args}")
+    print(f"🔍 DEBUG [booking_home] - request.host = {request.host}")
+    
     if not subdomain:
         # ลองดูจาก session
         subdomain = session.get('last_subdomain')
+        print(f"🔍 DEBUG [booking_home] - subdomain from session = {subdomain}")
         
         if not subdomain:
             # แสดงหน้าให้เลือกโรงพยาบาล หรือ error
-            flash('กรุณาเลือกโรงพยาบาล', 'info')
+            flash('กรุณาเปิด URL พร้อม ?subdomain=humnoi', 'info')
             
             # Option 1: กลับไปหน้าหลัก
             return redirect(url_for('main.index'))
@@ -125,9 +131,14 @@ def booking_home():
     
     # Get event types from API
     try:
-        response = requests.get(
-            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/event-types"
-        )
+        fastapi_url = get_fastapi_url()
+        api_url = f"{fastapi_url}/api/v1/tenants/{subdomain}/event-types"
+        
+        # 🔍 Debug logging
+        print(f"🔍 DEBUG [booking_home] - Calling API: {api_url}")
+        
+        response = requests.get(api_url)
+        
         if response.ok:
             data = response.json()
             event_types = data.get('event_types', [])
@@ -135,17 +146,28 @@ def booking_home():
             # Filter active only
             active_types = [et for et in event_types if et.get('is_active', True)]
             
+            print(f"✅ DEBUG [booking_home] - Found {len(active_types)} active event types")
+            
+            # ⚠️ สำคัญ: ส่ง fastapi_url ไปด้วย
             return render_template('booking/home.html',
                                  event_types=active_types,
-                                 subdomain=subdomain)
+                                 subdomain=subdomain,
+                                 fastapi_url=fastapi_url)
         else:
+            print(f"❌ DEBUG [booking_home] - API Error: {response.status_code} - {response.text}")
             flash('ไม่สามารถโหลดประเภทการนัดได้', 'error')
-            return render_template('booking/error.html', subdomain=subdomain)
+            return render_template('booking/error.html', 
+                                 subdomain=subdomain,
+                                 fastapi_url=get_fastapi_url())
             
     except Exception as e:
-        print(f"Error loading event types: {e}")
+        print(f"❌ DEBUG [booking_home] - Exception: {e}")
+        import traceback
+        traceback.print_exc()
         flash('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error')
-        return render_template('booking/error.html', subdomain=subdomain)
+        return render_template('booking/error.html', 
+                             subdomain=subdomain,
+                             fastapi_url=get_fastapi_url())
 
 @public_bp.route('/service/<int:event_type_id>')
 def book_service(event_type_id):
@@ -404,6 +426,10 @@ def create_booking():
     # รับข้อมูลจาก form
     guest_email = request.form.get('guest_email', '').strip()
     guest_phone = request.form.get('guest_phone', '').strip()
+    
+    # ✅ Normalize email to lowercase
+    if guest_email:
+        guest_email = guest_email.lower()
     
     booking_data = {
         'event_type_id': int(request.form.get('event_type_id')),
@@ -741,8 +767,29 @@ def my_appointments():
 def search_appointments():
     subdomain = get_subdomain()
     
+    # 🔍 Debug
+    print(f"🔍 DEBUG [search_appointments] - subdomain = {subdomain}")
+    print(f"🔍 DEBUG [search_appointments] - request.host = {request.host}")
+    
+    # ถ้า subdomain ผิด ให้ลองใช้จาก session
+    if not subdomain or subdomain.isdigit():
+        subdomain = session.get('last_subdomain')
+        print(f"⚠️ WARNING [search_appointments] - Using subdomain from session: {subdomain}")
+    
+    if not subdomain:
+        flash('กรุณาเลือกโรงพยาบาล', 'info')
+        return redirect(url_for('main.index'))
+    
+    # บันทึก subdomain ลง session
+    session['last_subdomain'] = subdomain
+    
     search_type = request.form.get('search_type')
-    search_value = request.form.get('search_value')
+    search_value = request.form.get('search_value', '').strip()
+    
+    # ✅ Normalize email to lowercase
+    if search_type == 'email' and search_value:
+        search_value = search_value.lower()
+        print(f"🔡 DEBUG [search_appointments] - Email normalized to: {search_value}")
     
     if not search_value:
         flash('กรุณากรอกข้อมูลที่ต้องการค้นหา', 'error')
@@ -768,6 +815,13 @@ def search_appointments():
         masked_phone = search_value[:3] + '****' + search_value[-3:]
         flash(f'รหัส OTP ถูกส่งไปยัง {masked_phone}', 'info')
     
+    # ENVIRONMENT="development"
+    # LOG_LEVEL=DEBUG 
+    # ถ้าอยู่ใน development mode ให้แสดง OTP บนหน้าจอ
+    if current_app.config.get('LOG_LEVEL') == 'DEBUG' or current_app.config.get('ENVIRONMENT') == 'development':
+        display_otp = otp
+        flash(f'🔧 [DEV MODE] OTP: {otp}', 'warning')
+
     # Store search info in session (สำหรับ email/phone เท่านั้น)
     session['pending_search'] = {
         'type': search_type,
@@ -777,12 +831,27 @@ def search_appointments():
     return render_template('booking/verify_otp.html',
                          search_type=search_type,
                          search_value=search_value,
-                         subdomain=subdomain)
+                         subdomain=subdomain,
+                         display_otp=display_otp)
 
 @public_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
     subdomain = get_subdomain()
     otp_input = request.form.get('otp')
+    
+    # 🔍 Debug subdomain
+    print(f"🔍 DEBUG [verify_otp] - subdomain from get_subdomain() = {subdomain}")
+    print(f"🔍 DEBUG [verify_otp] - request.host = {request.host}")
+    print(f"🔍 DEBUG [verify_otp] - session.get('last_subdomain') = {session.get('last_subdomain')}")
+    
+    # ถ้า subdomain เป็น None หรือผิดพลาด ให้ลองใช้จาก session
+    if not subdomain or subdomain.isdigit():
+        subdomain = session.get('last_subdomain')
+        print(f"⚠️ WARNING [verify_otp] - Using subdomain from session: {subdomain}")
+    
+    if not subdomain:
+        flash('เกิดข้อผิดพลาดในการระบุโรงพยาบาล กรุณาลองใหม่', 'error')
+        return redirect(url_for('booking.my_appointments'))
     
     if 'pending_search' not in session:
         flash('ข้อมูลหมดอายุ กรุณาค้นหาใหม่', 'error')
@@ -808,22 +877,95 @@ def verify_otp():
     
     # Fetch appointments
     try:
-        response = requests.post(
-            f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/search",
-            json={
-                'search_type': search_info['type'],
-                'search_value': search_info['value']
-            }
-        )
+        api_url = f"{get_fastapi_url()}/api/v1/tenants/{subdomain}/booking/search"
+        payload = {
+            'search_type': search_info['type'],
+            'search_value': search_info['value']
+        }
+        
+        print(f"🔍 DEBUG [verify_otp] - Calling API: {api_url}")
+        print(f"🔍 DEBUG [verify_otp] - Payload: {payload}")
+        
+        response = requests.post(api_url, json=payload)
         
         if response.ok:
-            appointments = response.json()
-            # Process appointments...
+            raw_appointments = response.json()
+            
+            print(f"🔍 DEBUG: Received {len(raw_appointments)} appointments from API")
+            if raw_appointments:
+                print(f"🔍 DEBUG: First appointment keys: {raw_appointments[0].keys()}")
+            
+            # Process appointments เพื่อเพิ่ม display fields
+            appointments = []
+            now = datetime.now()
+            
+            for apt in raw_appointments:
+                # Parse datetime - ลอง field หลายตัว
+                start_time = None
+                datetime_value = apt.get('appointment_datetime') or apt.get('start_time')
+                
+                print(f"🔍 DEBUG: Processing booking {apt.get('booking_reference')}: datetime_value={datetime_value}")
+                
+                if datetime_value:
+                    try:
+                        # Try ISO format first
+                        start_time = datetime.fromisoformat(datetime_value.replace('Z', '+00:00'))
+                        print(f"  ✅ Parsed datetime: {start_time}")
+                    except Exception as e:
+                        print(f"  ❌ Failed to parse datetime: {e}")
+                        # Try other formats if needed
+                        pass
+                
+                # Format date display (วันที่ DD เดือน YYYY)
+                date_display = ''
+                time_display = ''
+                
+                if start_time:
+                    thai_months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                                  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+                    thai_year = start_time.year + 543
+                    date_display = f"{start_time.day} {thai_months[start_time.month - 1]} {thai_year}"
+                    
+                    # Format time (HH:MM)
+                    time_display = start_time.strftime('%H:%M')
+                    
+                    # Add end time if duration available or end_time field exists
+                    end_time_value = apt.get('end_time')
+                    if end_time_value:
+                        try:
+                            end_time = datetime.fromisoformat(end_time_value.replace('Z', '+00:00'))
+                            time_display += f" - {end_time.strftime('%H:%M')}"
+                        except:
+                            pass
+                    elif apt.get('duration_minutes'):
+                        end_time = start_time + timedelta(minutes=apt['duration_minutes'])
+                        time_display += f" - {end_time.strftime('%H:%M')}"
+                
+                # Add computed fields
+                apt['date_display'] = date_display
+                apt['time_display'] = time_display
+                apt['is_upcoming'] = start_time and start_time > now if start_time else False
+                apt['can_manage'] = start_time and start_time > now + timedelta(hours=4) if start_time else False
+                
+                print(f"  📅 Final: date={date_display}, time={time_display}")
+                
+                appointments.append(apt)
+            
+            print(f"✅ DEBUG: Rendering appointment_list with {len(appointments)} appointments")
+            
             return render_template('booking/appointment_list.html',
                                  appointments=appointments,
+                                 search_type=search_info['type'],
+                                 search_value=search_info['value'],
                                  subdomain=subdomain)
-    except:
-        flash('เกิดข้อผิดพลาด', 'error')
+        else:
+            print(f"❌ API Error: {response.status_code} - {response.text}")
+            flash('ไม่สามารถค้นหานัดหมายได้', 'error')
+    except Exception as e:
+        print(f"❌ Exception in search: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'เกิดข้อผิดพลาด: {str(e)}', 'error')
     
     return redirect(build_url_with_context('booking.my_appointments'))
 

@@ -91,6 +91,10 @@ def create_app() -> Flask:
     # ตั้งค่าหลักๆ สำหรับ Flask และ Celery จาก .env
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "a-dev-secret-key"),
+
+        LOG_LEVEL=os.environ.get('LOG_LEVEL', 'INFO'),
+        ENVIRONMENT=os.environ.get('ENVIRONMENT', 'production'),
+
         # เพิ่มการตั้งค่าสำหรับ session
         SESSION_TYPE='filesystem',
         # สร้าง Absolute Path ไปยังโฟลเดอร์ flask_session ที่อยู่นอก flask_app/
@@ -158,7 +162,8 @@ def create_app() -> Flask:
         g.subdomain_from_host = False
         
         if subdomain_param:
-            subdomain = subdomain_param
+            # subdomain = subdomain_param
+            subdomain = subdomain_param.split('?')[0]
         else:
             # ตรวจสอบจาก hostname (สำหรับ production)
             hostname = request.host.split(':')[0]

@@ -1094,11 +1094,14 @@ def public_booking(provider_url, event_slug=None):
                 is_active=True
             ).first()
         
+        fastapi_url = get_fastapi_url()
+        
         return render_template('public/booking.html',
                              provider=provider,
                              event_types=event_types,
                              selected_event=selected_event,
-                             subdomain=subdomain)
+                             subdomain=subdomain,
+                             fastapi_url=fastapi_url)
                              
     except Exception as e:
         print(f"Error in public booking: {e}")
