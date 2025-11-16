@@ -332,5 +332,43 @@ def create_default_template_form():
     form.template_type.data = 'dedicated'
     form.max_concurrent_slots.data = 1
     form.requires_provider_assignment.data = True
-    
+
     return form
+
+# ===== Provider Management Forms =====
+class ProviderForm(FlaskForm):
+    """Form สำหรับสร้าง/แก้ไขผู้ให้บริการ"""
+    name = StringField(
+        'ชื่อ-นามสกุล',
+        validators=[DataRequired(message='กรุณาใส่ชื่อผู้ให้บริการ'), Length(1, 200)]
+    )
+    title = StringField(
+        'ตำแหน่ง',
+        validators=[Optional(), Length(0, 100)],
+        description='เช่น แพทย์, ทันตแพทย์, นักกายภาพบำบัด'
+    )
+    department = StringField(
+        'แผนก',
+        validators=[Optional(), Length(0, 100)],
+        description='เช่น ศัลยกรรม, อายุรกรรม, กุมารเวชกรรม'
+    )
+    email = StringField(
+        'อีเมล',
+        validators=[Optional(), Length(0, 200)],
+        description='สำหรับการติดต่อและการแจ้งเตือน'
+    )
+    phone = StringField(
+        'เบอร์โทรศัพท์',
+        validators=[Optional(), Length(0, 50)],
+        description='เช่น 081-234-5678'
+    )
+    bio = TextAreaField(
+        'ประวัติและความเชี่ยวชาญ',
+        validators=[Optional()],
+        description='ประวัติการศึกษา ความเชี่ยวชาญ ประสบการณ์'
+    )
+    is_active = BooleanField(
+        'เปิดใช้งาน',
+        default=True,
+        description='ผู้ให้บริการที่เปิดใช้งานเท่านั้นจะสามารถรับการจองได้'
+    )

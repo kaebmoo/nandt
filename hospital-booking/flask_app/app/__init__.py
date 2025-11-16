@@ -287,6 +287,10 @@ def create_app() -> Flask:
     from .holiday_routes import holiday_bp
     app.register_blueprint(holiday_bp)
 
+    # 6. ลงทะเบียน Provider Management Routes
+    from .provider_routes import provider_bp
+    app.register_blueprint(provider_bp)
+
     # Exempt the specific view from CSRF protection
     # csrf.exempt('booking.get_availability')
 
