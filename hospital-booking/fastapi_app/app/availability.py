@@ -260,6 +260,41 @@ class ProviderLeaveUpdate(BaseModel):
     approved_by: Optional[str]
     is_approved: Optional[bool]
 
+# --- Provider Management Schemas ---
+class ProviderCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    title: Optional[str] = Field(None, max_length=100)
+    department: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=200)
+    phone: Optional[str] = Field(None, max_length=50)
+    bio: Optional[str] = None
+    is_active: bool = True
+
+class ProviderUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    title: Optional[str] = Field(None, max_length=100)
+    department: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=200)
+    phone: Optional[str] = Field(None, max_length=50)
+    bio: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ProviderResponse(BaseModel):
+    id: int
+    name: str
+    title: Optional[str]
+    department: Optional[str]
+    email: Optional[str]
+    phone: Optional[str]
+    bio: Optional[str]
+    is_active: bool
+    public_booking_url: Optional[str]
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime]
+
+    class Config:
+        from_attributes = True
+
 def parse_time(time_str: str) -> time:
     try:
         hour, minute = map(int, time_str.split(':'))
@@ -1449,4 +1484,174 @@ async def get_providers(subdomain: str, db: Session = Depends(get_db)):
         
         return {"providers": result}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Provider CRUD Operations ---
+
+@router.post("/providers", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
+async def create_provider(subdomain: str, payload: ProviderCreate, db: Session = Depends(get_db)):
+    """Create a new provider"""
+    try:
+        get_tenant_db(subdomain, db)
+
+        # Check for duplicate name
+        existing = db.query(models.Provider).filter(
+            models.Provider.name == payload.name
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Provider with name '{payload.name}' already exists"
+            )
+
+        # Create provider
+        provider = models.Provider(
+            name=payload.name,
+            title=payload.title,
+            department=payload.department,
+            email=payload.email,
+            phone=payload.phone,
+            bio=payload.bio,
+            is_active=payload.is_active
+        )
+
+        db.add(provider)
+        db.commit()
+        db.refresh(provider)
+
+        return provider
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/providers/{provider_id}", response_model=ProviderResponse)
+async def get_provider(subdomain: str, provider_id: int, db: Session = Depends(get_db)):
+    """Get provider by ID"""
+    try:
+        get_tenant_db(subdomain, db)
+
+        provider = db.query(models.Provider).filter(
+            models.Provider.id == provider_id
+        ).first()
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        return provider
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/providers/{provider_id}", response_model=ProviderResponse)
+async def update_provider(subdomain: str, provider_id: int, payload: ProviderUpdate, db: Session = Depends(get_db)):
+    """Update provider"""
+    try:
+        get_tenant_db(subdomain, db)
+
+        provider = db.query(models.Provider).filter(
+            models.Provider.id == provider_id
+        ).first()
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        # Check for duplicate name if updating name
+        if payload.name and payload.name != provider.name:
+            existing = db.query(models.Provider).filter(
+                models.Provider.name == payload.name,
+                models.Provider.id != provider_id
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Provider with name '{payload.name}' already exists"
+                )
+
+        # Update fields
+        update_data = payload.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(provider, field, value)
+
+        db.commit()
+        db.refresh(provider)
+
+        return provider
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_provider(subdomain: str, provider_id: int, db: Session = Depends(get_db)):
+    """Delete provider (soft delete by setting is_active=False)"""
+    try:
+        get_tenant_db(subdomain, db)
+
+        provider = db.query(models.Provider).filter(
+            models.Provider.id == provider_id
+        ).first()
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        # Check if provider has any appointments
+        appointments_count = db.query(models.Appointment).filter(
+            models.Appointment.provider_id == provider_id
+        ).count()
+
+        if appointments_count > 0:
+            # Soft delete instead of hard delete
+            provider.is_active = False
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete provider with {appointments_count} appointments. Provider has been deactivated instead."
+            )
+
+        # Hard delete if no appointments
+        db.delete(provider)
+        db.commit()
+
+        return None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/providers/{provider_id}/toggle", response_model=ProviderResponse)
+async def toggle_provider_active(subdomain: str, provider_id: int, db: Session = Depends(get_db)):
+    """Toggle provider active status"""
+    try:
+        get_tenant_db(subdomain, db)
+
+        provider = db.query(models.Provider).filter(
+            models.Provider.id == provider_id
+        ).first()
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        provider.is_active = not provider.is_active
+        db.commit()
+        db.refresh(provider)
+
+        return provider
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
