@@ -1464,23 +1464,29 @@ async def delete_date_override(subdomain: str, override_id: int, db: Session = D
 
 @router.get("/providers", response_model=dict)
 async def get_providers(subdomain: str, db: Session = Depends(get_db)):
-    """Get providers for dropdown"""
+    """Get all providers (both active and inactive)"""
     try:
         get_tenant_db(subdomain, db)
-        
-        providers = db.query(models.Provider).filter(
-            models.Provider.is_active == True
-        ).order_by(models.Provider.name).all()
-        
+
+        # แสดงผู้ให้บริการทั้งหมด เรียงตาม is_active (เปิดใช้งานก่อน) และชื่อ
+        providers = db.query(models.Provider).order_by(
+            models.Provider.is_active.desc(),
+            models.Provider.name
+        ).all()
+
         result = []
         for provider in providers:
             result.append({
                 "id": provider.id,
                 "name": provider.name,
                 "title": provider.title,
-                "department": provider.department
+                "department": provider.department,
+                "email": provider.email,
+                "phone": provider.phone,
+                "bio": provider.bio,
+                "is_active": provider.is_active
             })
-        
+
         return {"providers": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
