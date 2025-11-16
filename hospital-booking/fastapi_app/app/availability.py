@@ -289,8 +289,7 @@ class ProviderResponse(BaseModel):
     bio: Optional[str]
     is_active: bool
     public_booking_url: Optional[str]
-    created_at: datetime.datetime
-    updated_at: Optional[datetime.datetime]
+    profile_image_url: Optional[str]
 
     class Config:
         from_attributes = True
@@ -1591,7 +1590,7 @@ async def update_provider(subdomain: str, provider_id: int, payload: ProviderUpd
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/providers/{provider_id}")
 async def delete_provider(subdomain: str, provider_id: int, db: Session = Depends(get_db)):
     """Delete provider (soft delete by setting is_active=False)"""
     try:
@@ -1603,6 +1602,8 @@ async def delete_provider(subdomain: str, provider_id: int, db: Session = Depend
 
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
+
+        provider_name = provider.name
 
         # Check if provider has any appointments
         appointments_count = db.query(models.Appointment).filter(
@@ -1622,7 +1623,7 @@ async def delete_provider(subdomain: str, provider_id: int, db: Session = Depend
         db.delete(provider)
         db.commit()
 
-        return None
+        return {"message": f"Provider '{provider_name}' deleted successfully", "deleted": True}
 
     except HTTPException:
         raise
