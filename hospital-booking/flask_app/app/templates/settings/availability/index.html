@@ -1881,7 +1881,7 @@ function toggleSelectAllProviders() {
         form.action = form.dataset.createAction;
 
         // Auto-fill เวลาจาก template schedule
-        const templateSchedule = {{ schedule_map | tojson | safe }};
+        const templateSchedule = {{ (schedule_map if schedule_map is defined else {}) | tojson | safe }};
 
         // หาวันแรกที่มีตารางเวลา (ลองหาวันจันทร์ก่อน, ถ้าไม่มีก็หาวันอื่น)
         let firstSlot = null;
