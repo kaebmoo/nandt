@@ -454,6 +454,72 @@ def add_template_provider(template_id):
     return redirect_to_template_settings(template_id)
 
 
+@availability_bp.route('/availability/template/<int:template_id>/providers/add-batch', methods=['POST'])
+@login_required
+def add_template_providers_batch(template_id):
+    """เพิ่มผู้ให้บริการหลายคนพร้อมกันในเทมเพลต"""
+    current_user = get_current_user()
+    tenant_schema, subdomain = TenantManager.get_tenant_context()
+
+    if not current_user or not check_tenant_access(subdomain):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+
+    # รับ list ของ provider_ids ที่เลือก
+    provider_ids = request.form.getlist('provider_ids')
+
+    if not provider_ids:
+        flash('กรุณาเลือกผู้ให้บริการอย่างน้อย 1 คน', 'error')
+        return redirect_to_template_settings(template_id)
+
+    # รับค่า default settings
+    default_is_primary = request.form.get('default_is_primary') == 'on'
+    default_can_auto_assign = request.form.get('default_can_auto_assign') == 'on'
+    default_priority_value = request.form.get('default_priority', '0')
+    try:
+        default_priority = int(default_priority_value)
+    except ValueError:
+        default_priority = 0
+
+    # เก็บผลลัพธ์
+    success_count = 0
+    errors = []
+
+    # วนลูปเพิ่มผู้ให้บริการทีละคน
+    for provider_id_str in provider_ids:
+        try:
+            provider_id = int(provider_id_str)
+            payload = {
+                'provider_id': provider_id,
+                'is_primary': default_is_primary,
+                'can_auto_assign': default_can_auto_assign,
+                'priority': default_priority
+            }
+
+            _, error = make_api_request('POST', f'/availability/templates/{template_id}/providers', payload)
+
+            if error:
+                errors.append(f'Provider ID {provider_id}: {error}')
+            else:
+                success_count += 1
+
+        except (TypeError, ValueError):
+            errors.append(f'Invalid provider ID: {provider_id_str}')
+
+    # แสดง flash message สรุปผลลัพธ์
+    if success_count > 0:
+        flash(f'เพิ่มผู้ให้บริการสำเร็จ {success_count} คน', 'success')
+
+    if errors:
+        # แสดงเฉพาะ 3 error แรก เพื่อไม่ให้ message ยาวเกินไป
+        for error in errors[:3]:
+            flash(error, 'error')
+        if len(errors) > 3:
+            flash(f'และมี error อีก {len(errors) - 3} รายการ', 'warning')
+
+    return redirect_to_template_settings(template_id)
+
+
 @availability_bp.route('/availability/template/<int:template_id>/providers/<int:provider_id>/update', methods=['POST'])
 @login_required
 def update_template_provider(template_id, provider_id):
