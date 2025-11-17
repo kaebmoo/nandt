@@ -174,7 +174,8 @@ def convert_python_weekday(python_weekday: int) -> int:
 
 def resolve_resource_limits(template: models.AvailabilityTemplate, target_date: date) -> Dict[str, Optional[int]]:
     """Determine capacity limits based on template settings and resource rules."""
-    rooms_limit = template.max_concurrent_slots or 1
+    # Default to 999 (virtually unlimited) if not set, allowing maximum flexibility
+    rooms_limit = template.max_concurrent_slots if template.max_concurrent_slots else 999
     rule_limit = None
 
     specific_rules = [r for r in template.resource_capacities if r.is_active and r.specific_date == target_date]
