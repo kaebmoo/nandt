@@ -253,15 +253,18 @@ def collect_available_providers(
     date_override: Optional[models.DateOverride] = None
 ) -> List[int]:
     """Return provider IDs available for the given slot."""
-    logger.info(f"=== collect_available_providers DEBUG ===")
-    logger.info(f"Template ID: {template.id}, Target Date: {target_date}, Slot: {slot_start} - {slot_end}")
+    print(f"\n{'='*80}")
+    print(f"🔍 collect_available_providers DEBUG")
+    print(f"{'='*80}")
+    print(f"Template ID: {template.id}, Target Date: {target_date}")
+    print(f"Slot: {slot_start.time()} - {slot_end.time()}")
 
     if is_slot_blocked_by_override(date_override, target_date, slot_start, slot_end):
-        logger.info("Slot blocked by date override")
+        print("❌ Slot blocked by date override")
         return []
 
     target_day = convert_python_weekday(target_date.weekday())
-    logger.info(f"Target day (converted): {target_day} (Python weekday: {target_date.weekday()})")
+    print(f"Target day (converted): {target_day} (Python weekday: {target_date.weekday()})")
 
     schedules = db.query(models.ProviderSchedule).filter(
         models.ProviderSchedule.template_id == template.id,
@@ -270,38 +273,38 @@ def collect_available_providers(
         (models.ProviderSchedule.end_date.is_(None) | (models.ProviderSchedule.end_date >= target_date))
     ).all()
 
-    logger.info(f"Found {len(schedules)} provider schedules for template {template.id}")
+    print(f"\n📋 Found {len(schedules)} provider schedules for template {template.id}")
 
     available_ids = []
     for schedule in schedules:
         provider = schedule.provider
-        logger.info(f"\n--- Checking Schedule ID {schedule.id} ---")
-        logger.info(f"Provider: [{schedule.provider_id}] {provider.name if provider else 'None'}")
+        print(f"\n--- Checking Schedule ID {schedule.id} ---")
+        print(f"Provider: [{schedule.provider_id}] {provider.name if provider else 'None'}")
 
         if not provider or not provider.is_active:
-            logger.info(f"❌ Provider inactive or missing")
+            print(f"❌ Provider inactive or missing")
             continue
 
         days = schedule.days_of_week or []
-        logger.info(f"Days of week: {days} (type: {type(days)})")
-        logger.info(f"Checking if {target_day} in {days}: {target_day in days}")
+        print(f"Days of week: {days} (type: {type(days)})")
+        print(f"Checking if {target_day} in {days}: {target_day in days}")
 
         if target_day not in days:
-            logger.info(f"❌ Target day {target_day} not in schedule days {days}")
+            print(f"❌ Target day {target_day} not in schedule days {days}")
             continue
 
         # Respect custom time windows if provided
         if schedule.custom_start_time:
             schedule_start = datetime.combine(target_date, schedule.custom_start_time)
-            logger.info(f"Custom start time: {schedule.custom_start_time}, slot start: {slot_start}")
+            print(f"Custom start time: {schedule.custom_start_time}, slot start: {slot_start.time()}")
             if slot_start < schedule_start:
-                logger.info(f"❌ Slot start {slot_start} before custom start {schedule_start}")
+                print(f"❌ Slot start {slot_start.time()} before custom start {schedule.custom_start_time}")
                 continue
         if schedule.custom_end_time:
             schedule_end = datetime.combine(target_date, schedule.custom_end_time)
-            logger.info(f"Custom end time: {schedule.custom_end_time}, slot end: {slot_end}")
+            print(f"Custom end time: {schedule.custom_end_time}, slot end: {slot_end.time()}")
             if slot_end > schedule_end:
-                logger.info(f"❌ Slot end {slot_end} after custom end {schedule_end}")
+                print(f"❌ Slot end {slot_end.time()} after custom end {schedule.custom_end_time}")
                 continue
 
         # Exclude providers on leave
@@ -311,13 +314,15 @@ def collect_available_providers(
             models.ProviderLeave.end_date >= target_date,
         ).first()
         if leave_exists:
-            logger.info(f"❌ Provider on leave: {leave_exists.start_date} to {leave_exists.end_date}")
+            print(f"❌ Provider on leave: {leave_exists.start_date} to {leave_exists.end_date}")
             continue
 
-        logger.info(f"✅ Provider {provider.id} ({provider.name}) is available")
+        print(f"✅ Provider {provider.id} ({provider.name}) is available")
         available_ids.append(provider.id)
 
-    logger.info(f"\n=== RESULT: {len(available_ids)} providers available: {available_ids} ===\n")
+    print(f"\n{'='*80}")
+    print(f"📊 RESULT: {len(available_ids)} providers available: {available_ids}")
+    print(f"{'='*80}\n")
     return available_ids
 
 
