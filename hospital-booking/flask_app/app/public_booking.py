@@ -313,13 +313,26 @@ def confirm_booking():
 
                     if providers_response.ok:
                         providers_data = providers_response.json().get('providers', [])
+
+                        print(f"\n{'='*80}")
+                        print(f"🔍 Flask confirm route DEBUG")
+                        print(f"{'='*80}")
+                        print(f"Available provider IDs from slot: {available_provider_ids}")
+                        print(f"Template providers from API ({len(providers_data)} total):")
+                        for p in providers_data:
+                            print(f"  - Provider ID {p.get('provider_id')}: {p.get('name')} (is_active: {p.get('is_active')})")
+                        print(f"{'='*80}\n")
+
                         for assignment in providers_data:
                             provider_id = assignment.get('provider_id')
                             if provider_id not in available_provider_ids:
+                                print(f"  ❌ Skipping provider {provider_id}: not in available_provider_ids")
                                 continue
                             if assignment.get('is_active') is False:
+                                print(f"  ❌ Skipping provider {provider_id}: is_active = False")
                                 continue
 
+                            print(f"  ✅ Adding provider {provider_id} to choices")
                             provider_choices.append({
                                 'id': provider_id,
                                 'name': assignment.get('name'),
