@@ -527,29 +527,33 @@ def add_template_providers_batch(template_id):
         schedule_map = template_data.get('schedule', {})
         days_of_week = sorted([int(day) for day in schedule_map.keys() if schedule_map[day]])
 
-        if days_of_week:
-            for provider_id in added_provider_ids:
-                try:
-                    schedule_payload = {
-                        'provider_id': provider_id,
-                        'effective_date': date.today().isoformat(),
-                        'end_date': None,
-                        'days_of_week': days_of_week,
-                        'custom_start_time': None,  # ใช้ตาม template
-                        'custom_end_time': None,
-                        'schedule_type': 'regular',
-                        'notes': 'สร้างอัตโนมัติจากการเพิ่มผู้ให้บริการ'
-                    }
+        if not days_of_week:
+            # ถ้า template ไม่มีวันทำงาน ให้ใช้จันทร์-ศุกร์ เป็น default
+            days_of_week = [1, 2, 3, 4, 5]  # Monday to Friday
+            flash('เทมเพลตไม่มีตารางเวลา ระบบใช้วันจันทร์-ศุกร์เป็นค่าเริ่มต้น', 'info')
 
-                    _, schedule_error = make_api_request('POST', f'/availability/templates/{template_id}/schedules', schedule_payload)
+        for provider_id in added_provider_ids:
+            try:
+                schedule_payload = {
+                    'provider_id': provider_id,
+                    'effective_date': date.today().isoformat(),
+                    'end_date': None,
+                    'days_of_week': days_of_week,
+                    'custom_start_time': None,  # ใช้ตาม template
+                    'custom_end_time': None,
+                    'schedule_type': 'regular',
+                    'notes': 'สร้างอัตโนมัติจากการเพิ่มผู้ให้บริการ'
+                }
 
-                    if schedule_error:
-                        schedule_errors.append(f'Provider ID {provider_id}: {schedule_error}')
-                    else:
-                        schedule_created_count += 1
+                _, schedule_error = make_api_request('POST', f'/availability/templates/{template_id}/schedules', schedule_payload)
 
-                except Exception as e:
-                    schedule_errors.append(f'Provider ID {provider_id}: {str(e)}')
+                if schedule_error:
+                    schedule_errors.append(f'Provider ID {provider_id}: {schedule_error}')
+                else:
+                    schedule_created_count += 1
+
+            except Exception as e:
+                schedule_errors.append(f'Provider ID {provider_id}: {str(e)}')
 
     # แสดง flash message สรุปผลลัพธ์
     if success_count > 0:
