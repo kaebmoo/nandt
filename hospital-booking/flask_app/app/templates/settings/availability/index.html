@@ -370,9 +370,9 @@
                                                     {{ schedule.schedule_type|default('regular')|capitalize }}
                                                 </span>
                                                 <span class="text-xs text-gray-500">
-                                                    เริ่ม {{ schedule.effective_date }}
+                                                    เริ่ม {{ schedule.effective_date | thai_date }}
                                                     {% if schedule.end_date %}
-                                                        • ถึง {{ schedule.end_date }}
+                                                        • ถึง {{ schedule.end_date | thai_date }}
                                                     {% else %}
                                                         • ไม่มีวันสิ้นสุด
                                                     {% endif %}
@@ -1730,7 +1730,11 @@ function toggleSelectAllProviders() {
         if (Number.isNaN(date.getTime())) {
             return escapeHtml(value);
         }
-        return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+        // Format เป็น dd/mm/yyyy
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
     }
 
     function renderProviderLeaves(providerId, leaves) {
