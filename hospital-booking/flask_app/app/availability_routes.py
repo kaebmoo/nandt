@@ -476,14 +476,26 @@ def add_template_providers_batch(template_id):
     default_is_primary = request.form.get('default_is_primary') == 'on'
     default_can_auto_assign = request.form.get('default_can_auto_assign') == 'on'
     default_priority_value = request.form.get('default_priority', '0')
+    auto_create_schedule = request.form.get('auto_create_schedule') == 'on'
+
     try:
         default_priority = int(default_priority_value)
     except ValueError:
         default_priority = 0
 
+    # ดึงข้อมูล template เพื่อใช้สร้าง schedule
+    template_data = None
+    if auto_create_schedule:
+        template_detail, _ = make_api_request('GET', f'/availability/template/{template_id}/details')
+        if template_detail:
+            template_data = template_detail
+
     # เก็บผลลัพธ์
     success_count = 0
+    schedule_created_count = 0
     errors = []
+    schedule_errors = []
+    added_provider_ids = []
 
     # วนลูปเพิ่มผู้ให้บริการทีละคน
     for provider_id_str in provider_ids:
@@ -502,13 +514,49 @@ def add_template_providers_batch(template_id):
                 errors.append(f'Provider ID {provider_id}: {error}')
             else:
                 success_count += 1
+                added_provider_ids.append(provider_id)
 
         except (TypeError, ValueError):
             errors.append(f'Invalid provider ID: {provider_id_str}')
 
+    # สร้าง schedule อัตโนมัติ ถ้าเลือก
+    if auto_create_schedule and added_provider_ids and template_data:
+        from datetime import date
+
+        # ดึงวันทำงานจาก template schedule
+        schedule_map = template_data.get('schedule', {})
+        days_of_week = sorted([int(day) for day in schedule_map.keys() if schedule_map[day]])
+
+        if days_of_week:
+            for provider_id in added_provider_ids:
+                try:
+                    schedule_payload = {
+                        'provider_id': provider_id,
+                        'effective_date': date.today().isoformat(),
+                        'end_date': None,
+                        'days_of_week': days_of_week,
+                        'custom_start_time': None,  # ใช้ตาม template
+                        'custom_end_time': None,
+                        'schedule_type': 'regular',
+                        'notes': 'สร้างอัตโนมัติจากการเพิ่มผู้ให้บริการ'
+                    }
+
+                    _, schedule_error = make_api_request('POST', f'/availability/templates/{template_id}/schedules', schedule_payload)
+
+                    if schedule_error:
+                        schedule_errors.append(f'Provider ID {provider_id}: {schedule_error}')
+                    else:
+                        schedule_created_count += 1
+
+                except Exception as e:
+                    schedule_errors.append(f'Provider ID {provider_id}: {str(e)}')
+
     # แสดง flash message สรุปผลลัพธ์
     if success_count > 0:
         flash(f'เพิ่มผู้ให้บริการสำเร็จ {success_count} คน', 'success')
+
+    if schedule_created_count > 0:
+        flash(f'สร้างตารางทำงานอัตโนมัติสำเร็จ {schedule_created_count} คน', 'success')
 
     if errors:
         # แสดงเฉพาะ 3 error แรก เพื่อไม่ให้ message ยาวเกินไป
@@ -516,6 +564,12 @@ def add_template_providers_batch(template_id):
             flash(error, 'error')
         if len(errors) > 3:
             flash(f'และมี error อีก {len(errors) - 3} รายการ', 'warning')
+
+    if schedule_errors:
+        for error in schedule_errors[:2]:
+            flash(f'ตาราง: {error}', 'warning')
+        if len(schedule_errors) > 2:
+            flash(f'และมี error ในการสร้างตารางอีก {len(schedule_errors) - 2} รายการ', 'warning')
 
     return redirect_to_template_settings(template_id)
 
