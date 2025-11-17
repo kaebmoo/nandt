@@ -68,7 +68,7 @@ class AvailabilityTemplate(TenantBase):
     name = Column(String(100), nullable=False)  # "จันทร์-ศุกร์ (08:30-16:30)" - removed unique=True for multi-tenant support
     description = Column(Text)
     template_type = Column(String(20), default='dedicated')  # dedicated, shared, pool
-    max_concurrent_slots = Column(Integer, default=1)
+    max_concurrent_slots = Column(Integer, default=10)  # Default 10 concurrent slots (can be adjusted per template/resource capacity)
     requires_provider_assignment = Column(Boolean, default=True)
     timezone = Column(String(50), default='Asia/Bangkok')
     is_active = Column(Boolean, default=True)

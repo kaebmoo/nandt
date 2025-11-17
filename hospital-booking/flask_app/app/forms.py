@@ -51,11 +51,11 @@ class AvailabilityTemplateForm(FlaskForm):
         'จำนวนการจองพร้อมกันสูงสุด',
         validators=[
             DataRequired(message='กรุณากำหนดจำนวนการจองพร้อมกัน'),
-            NumberRange(min=1, max=50, message='จำนวนการจองต้องอยู่ระหว่าง 1-50')
+            NumberRange(min=1, max=999, message='จำนวนการจองต้องอยู่ระหว่าง 1-999')
         ],
-        default=1,
-        description='จำกัดจำนวนการจองที่สามารถเกิดขึ้นพร้อมกันต่อช่วงเวลา',
-        render_kw={'min': 1, 'max': 50, 'step': 1, 'type': 'number'}
+        default=10,
+        description='จำกัดจำนวนการจองที่สามารถเกิดขึ้นพร้อมกันต่อช่วงเวลา (แนะนำ: 10 สำหรับบริการทั่วไป)',
+        render_kw={'min': 1, 'max': 999, 'step': 1, 'type': 'number'}
     )
     requires_provider_assignment = BooleanField(
         'ต้องเลือกผู้ให้บริการสำหรับทุกการจอง',
