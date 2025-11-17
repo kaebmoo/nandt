@@ -709,10 +709,15 @@ async def get_booking_availability(
                         occupied_slots = len(booked_provider_ids) + unassigned_bookings
                         capacity_limit = max(capacity_limit, 0)
                         remaining_slots = max(capacity_limit - occupied_slots, 0)
-                        remaining_slots = min(remaining_slots, len(remaining_providers))
-                        available_provider_ids = remaining_providers[:remaining_slots]
+
+                        # Keep all available providers for user selection
+                        # Don't limit by remaining_slots - user should see all available providers
+                        available_provider_ids = remaining_providers
+
+                        # But check if slot is still available
                         if remaining_slots == 0:
                             reason = reason or "fully_booked"
+                            available_provider_ids = []
                     else:
                         remaining_slots = max(capacity_limit - len(bookings), 0)
                         if remaining_slots == 0:
