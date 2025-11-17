@@ -1,8 +1,8 @@
 # hospital-booking/shared_db/models.py
 
 from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
-                        create_engine, event, Boolean, 
-                        Time, Text, Enum as SQLEnum, JSON, Date, UniqueConstraint)
+                        create_engine, event, Boolean,
+                        Time, Text, Enum as SQLEnum, JSON, Date, UniqueConstraint, ARRAY)
 # from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import CreateSchema
@@ -267,7 +267,7 @@ class ProviderSchedule(TenantBase):
     effective_date = Column(Date, nullable=False)
     end_date = Column(Date)
     recurrence_pattern = Column(String(50))  # e.g., weekly, biweekly
-    days_of_week = Column(JSON)  # list of DayOfWeek values
+    days_of_week = Column(ARRAY(Integer))  # list of DayOfWeek values (0=Sunday, 1=Monday, ...)
     custom_start_time = Column(Time)
     custom_end_time = Column(Time)
     schedule_type = Column(String(20), default='regular')  # regular, on_call, temporary
