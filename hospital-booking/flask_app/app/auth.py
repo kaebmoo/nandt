@@ -82,42 +82,59 @@ def profile():
 def edit_profile():
     """แก้ไขข้อมูลโปรไฟล์"""
 
+    print("=== /edit-profile called ===")
+    print(f"Session user_id: {session.get('user_id')}")
+    print(f"Request method: {request.method}")
+    print(f"Request form data: {dict(request.form)}")
+
     if 'user_id' not in session:
+        print("ERROR: No user_id in session")
         return jsonify({'success': False, 'message': 'กรุณาเข้าสู่ระบบ'}), 401
 
     db = get_db_session()
     try:
         user = db.query(User).filter_by(id=session['user_id']).first()
         if not user:
+            print("ERROR: User not found")
             return jsonify({'success': False, 'message': 'ไม่พบข้อมูลผู้ใช้'}), 404
+
+        print(f"Current user: {user.name}, {user.email}, {user.phone_number}")
 
         # รับข้อมูลจากฟอร์ม
         new_name = request.form.get('name', '').strip()
         new_email = request.form.get('email', '').strip()
         new_phone = request.form.get('phone_number', '').strip()
 
+        print(f"New data: name={new_name}, email={new_email}, phone={new_phone}")
+
         # ตรวจสอบว่ามีการเปลี่ยนแปลงหรือไม่
         name_changed = new_name and new_name != user.name
         email_changed = new_email and new_email != user.email
         phone_changed = new_phone and new_phone != user.phone_number
 
+        print(f"Changes: name={name_changed}, email={email_changed}, phone={phone_changed}")
+
         # ตรวจสอบว่ามีการเปลี่ยนแปลงอะไรบ้าง
         if not (name_changed or email_changed or phone_changed):
+            print("No changes detected")
             return jsonify({'success': False, 'message': 'ไม่มีข้อมูลที่เปลี่ยนแปลง'})
 
         # Validate email format if changed
         if email_changed:
             email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
             if not email_pattern.match(new_email):
+                print("ERROR: Invalid email format")
                 return jsonify({'success': False, 'message': 'รูปแบบอีเมลไม่ถูกต้อง'})
 
             # ตรวจสอบว่าอีเมลซ้ำหรือไม่
             existing_user = db.query(User).filter_by(email=new_email).first()
             if existing_user and existing_user.id != user.id:
+                print("ERROR: Email already exists")
                 return jsonify({'success': False, 'message': 'อีเมลนี้ถูกใช้งานแล้ว'})
 
         # ถ้ามีการเปลี่ยน email หรือ phone ต้องส่ง OTP
         if email_changed or phone_changed:
+            print("Changes require OTP verification")
             # เก็บข้อมูลใหม่ไว้ใน session ชั่วคราว
             session['pending_profile_update'] = {
                 'name': new_name if name_changed else user.name,
@@ -133,6 +150,7 @@ def edit_profile():
 
             try:
                 queue_otp_email(target_email, otp)
+                print(f"OTP sent to {target_email}")
                 return jsonify({
                     'success': True,
                     'requires_otp': True,
@@ -140,17 +158,24 @@ def edit_profile():
                     'target_email': target_email
                 })
             except Exception as e:
+                print(f"ERROR sending OTP: {e}")
                 return jsonify({'success': False, 'message': f'ไม่สามารถส่ง OTP ได้: {str(e)}'})
 
         # ถ้าแก้แค่ชื่อ ไม่ต้อง OTP
         if name_changed:
+            print("Updating name only (no OTP required)")
             user.name = new_name
             db.commit()
+            print("Name updated successfully")
             return jsonify({'success': True, 'requires_otp': False, 'message': 'บันทึกข้อมูลเรียบร้อย'})
 
+        print("Reached end without changes")
         return jsonify({'success': False, 'message': 'ไม่มีข้อมูลที่ต้องแก้ไข'})
 
     except Exception as e:
+        print(f"EXCEPTION in edit_profile: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
         return jsonify({'success': False, 'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
     finally:
