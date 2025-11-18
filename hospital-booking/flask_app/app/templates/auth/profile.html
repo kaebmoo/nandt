@@ -245,8 +245,14 @@
         }
 
         try {
+            // Get CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
             const response = await fetch('/auth/edit-profile', {
                 method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken || ''
+                },
                 body: formData
             });
 
@@ -284,8 +290,14 @@
         }
 
         try {
+            // Get CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
             const response = await fetch('/auth/change-password', {
                 method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken || ''
+                },
                 body: formData
             });
 
@@ -316,8 +328,14 @@
         const endpoint = otpType === 'profile' ? '/auth/verify-profile-otp' : '/auth/verify-password-otp';
 
         try {
+            // Get CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
             const response = await fetch(endpoint, {
                 method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken || ''
+                },
                 body: formData
             });
 
