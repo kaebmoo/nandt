@@ -97,25 +97,30 @@ def edit_profile():
         new_phone = request.form.get('phone_number', '').strip()
 
         # ตรวจสอบว่ามีการเปลี่ยนแปลงหรือไม่
+        name_changed = new_name and new_name != user.name
         email_changed = new_email and new_email != user.email
         phone_changed = new_phone and new_phone != user.phone_number
+
+        # ตรวจสอบว่ามีการเปลี่ยนแปลงอะไรบ้าง
+        if not (name_changed or email_changed or phone_changed):
+            return jsonify({'success': False, 'message': 'ไม่มีข้อมูลที่เปลี่ยนแปลง'})
 
         # Validate email format if changed
         if email_changed:
             email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
             if not email_pattern.match(new_email):
-                return jsonify({'success': False, 'message': 'รูปแบบอีเมลไม่ถูกต้อง'}), 400
+                return jsonify({'success': False, 'message': 'รูปแบบอีเมลไม่ถูกต้อง'})
 
             # ตรวจสอบว่าอีเมลซ้ำหรือไม่
             existing_user = db.query(User).filter_by(email=new_email).first()
             if existing_user and existing_user.id != user.id:
-                return jsonify({'success': False, 'message': 'อีเมลนี้ถูกใช้งานแล้ว'}), 400
+                return jsonify({'success': False, 'message': 'อีเมลนี้ถูกใช้งานแล้ว'})
 
         # ถ้ามีการเปลี่ยน email หรือ phone ต้องส่ง OTP
         if email_changed or phone_changed:
             # เก็บข้อมูลใหม่ไว้ใน session ชั่วคราว
             session['pending_profile_update'] = {
-                'name': new_name,
+                'name': new_name if name_changed else user.name,
                 'email': new_email if email_changed else user.email,
                 'phone_number': new_phone if phone_changed else user.phone_number,
                 'email_changed': email_changed,
@@ -135,15 +140,15 @@ def edit_profile():
                     'target_email': target_email
                 })
             except Exception as e:
-                return jsonify({'success': False, 'message': f'ไม่สามารถส่ง OTP ได้: {str(e)}'}), 500
+                return jsonify({'success': False, 'message': f'ไม่สามารถส่ง OTP ได้: {str(e)}'})
 
         # ถ้าแก้แค่ชื่อ ไม่ต้อง OTP
-        if new_name:
+        if name_changed:
             user.name = new_name
             db.commit()
             return jsonify({'success': True, 'requires_otp': False, 'message': 'บันทึกข้อมูลเรียบร้อย'})
 
-        return jsonify({'success': False, 'message': 'ไม่มีข้อมูลที่ต้องแก้ไข'}), 400
+        return jsonify({'success': False, 'message': 'ไม่มีข้อมูลที่ต้องแก้ไข'})
 
     except Exception as e:
         db.rollback()
