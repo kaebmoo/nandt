@@ -45,9 +45,9 @@ def queue_otp_email(recipient, otp, booking_info=None):
     try:
         queue = redis_manager.get_queue('default')
         job = queue.enqueue(
-            send_otp_email, 
-            recipient=recipient, 
-            otp=otp, 
+            'app.services.email_service.send_otp_email',  # Use string path instead of function reference
+            recipient=recipient,
+            otp=otp,
             booking_info=booking_info,
             job_timeout='5m'  # Set timeout for email jobs
         )
