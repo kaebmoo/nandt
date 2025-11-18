@@ -239,20 +239,20 @@
 
         const formData = new FormData(e.target);
 
+        // Add CSRF token to FormData
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken) {
+            formData.append('csrf_token', csrfToken);
+        }
+
         console.log('Edit Profile - Form data:');
         for (let [key, value] of formData.entries()) {
             console.log(`  ${key}: ${value}`);
         }
 
         try {
-            // Get CSRF token
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
             const response = await fetch('/auth/edit-profile', {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken || ''
-                },
                 body: formData
             });
 
@@ -284,20 +284,24 @@
 
         const formData = new FormData(e.target);
 
+        // Add CSRF token to FormData
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken) {
+            formData.append('csrf_token', csrfToken);
+        }
+
         console.log('Change Password - Form data:');
         for (let [key, value] of formData.entries()) {
-            console.log(`  ${key}: ${value ? '***' : '(empty)'}`);
+            if (key === 'csrf_token') {
+                console.log(`  ${key}: [token present]`);
+            } else {
+                console.log(`  ${key}: ${value ? '***' : '(empty)'}`);
+            }
         }
 
         try {
-            // Get CSRF token
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
             const response = await fetch('/auth/change-password', {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken || ''
-                },
                 body: formData
             });
 
@@ -325,17 +329,17 @@
         const formData = new FormData(e.target);
         const otpType = formData.get('otp_type');
 
+        // Add CSRF token to FormData
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken) {
+            formData.append('csrf_token', csrfToken);
+        }
+
         const endpoint = otpType === 'profile' ? '/auth/verify-profile-otp' : '/auth/verify-password-otp';
 
         try {
-            // Get CSRF token
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken || ''
-                },
                 body: formData
             });
 
