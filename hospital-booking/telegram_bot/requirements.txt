@@ -1,0 +1,17 @@
+# Telegram Bot Core
+python-telegram-bot==20.7
+
+# HTTP Client for FastAPI calls
+httpx==0.27.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Redis for state persistence
+redis==5.0.1
+
+# Date/Time utilities
+python-dateutil==2.8.2
+
+# Async support
+asyncio-redis==0.16.0
