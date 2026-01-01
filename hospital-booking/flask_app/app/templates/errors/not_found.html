@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}ไม่พบหน้าที่ต้องการ{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="py-5">
+                <i class="fas fa-search fa-5x text-muted mb-4"></i>
+                <h1 class="display-4 mb-3">404</h1>
+                <h2 class="mb-3">ไม่พบหน้าที่ต้องการ</h2>
+                <p class="lead mb-4">ขออภัย ไม่พบสถานที่บริการหรือหน้าที่คุณกำลังมองหา</p>
+
+                <div class="alert alert-secondary">
+                    <i class="fas fa-info-circle"></i>
+                    กรุณาตรวจสอบ URL ที่คุณพิมพ์ หรือติดต่อผู้ดูแลระบบ
+                </div>
+
+                <div class="mt-4">
+                    <a href="/" class="btn btn-primary">
+                        <i class="fas fa-home"></i> กลับหน้าแรก
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

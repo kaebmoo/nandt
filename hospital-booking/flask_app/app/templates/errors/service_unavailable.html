@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}ปิดให้บริการชั่วคราว{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="py-5">
+                <i class="fas fa-exclamation-triangle fa-5x text-warning mb-4"></i>
+                <h1 class="display-4 mb-3">ปิดให้บริการชั่วคราว</h1>
+                <p class="lead mb-4">ขออภัย มีการปิดให้บริการในขณะนี้</p>
+
+                <div class="alert alert-warning">
+                    <i class="fas fa-info-circle"></i>
+                    กรุณาลองอีกครั้งในภายหลัง หรือติดต่อผู้ให้บริการโดยตรง
+                </div>
+
+                <div class="mt-4">
+                    <a href="javascript:history.back()" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> ย้อนกลับ
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

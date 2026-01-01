@@ -193,7 +193,7 @@
                             <p class="text-sm text-gray-600 mt-1">{{ holiday.description }}</p>
                             {% endif %}
                             <div class="text-xs text-gray-500 mt-1">
-                                วัน{{ ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'][holiday.date.weekday()] }}
+                                วัน{{ ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'][holiday.date.weekday()] }}
                                 ที่ {{ holiday.date | thai_date }}
                             </div>
                         </div>

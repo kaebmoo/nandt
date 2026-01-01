@@ -38,7 +38,7 @@ def check_database_status():
         for table in public_tables:
             print(f"   - {table}")
         
-        # 3. ตรวจสอบข้อมูลโรงพยาบาล
+        # 3. ตรวจสอบข้อมูลผู้ให้บริการ
         print(f"\n🏥 Hospitals in database:")
         hospitals = db.query(models.Hospital).all()
         

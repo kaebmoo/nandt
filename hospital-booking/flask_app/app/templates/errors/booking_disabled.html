@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}ปิดให้บริการจองออนไลน์{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="py-5">
+                <i class="fas fa-calendar-times fa-5x text-warning mb-4"></i>
+                <h1 class="display-4 mb-3">ปิดให้บริการจองออนไลน์ชั่วคราว</h1>
+                <p class="lead mb-4">ขออภัย ปิดให้บริการจองนัดหมายออนไลน์ในขณะนี้</p>
+
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    กรุณาติดต่อผู้ให้บริการโดยตรงเพื่อนัดหมาย หรือลองอีกครั้งในภายหลัง
+                </div>
+
+                <div class="mt-4">
+                    <a href="javascript:history.back()" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> ย้อนกลับ
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

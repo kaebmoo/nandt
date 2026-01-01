@@ -4,6 +4,7 @@ import requests
 from datetime import datetime, date
 from typing import List, Dict
 import os
+from dotenv import load_dotenv
 
 class HolidayService:
     '''
@@ -15,6 +16,7 @@ class HolidayService:
     def fetch_from_bot_api(year: int) -> List[Dict]:
         """Fetch holidays from BOT API"""
         
+        load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
         token = os.environ.get('BOT_TOKEN', '')
         if not token:
             return []

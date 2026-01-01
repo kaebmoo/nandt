@@ -39,11 +39,11 @@ def login():
                 hospital = db.query(Hospital).filter_by(id=user.hospital_id).first()
                 
                 if hospital:
-                    # Redirect ไปยัง dashboard ของโรงพยาบาล
+                    # Redirect ไปยัง dashboard ของผู้ให้บริการ
                     dashboard_url = get_dashboard_url(hospital.subdomain)
                     return redirect(dashboard_url)
                 else:
-                    flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
+                    flash('ไม่พบข้อมูลผู้ให้บริการ', 'error')
             else:
                 flash('อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'error')
                 

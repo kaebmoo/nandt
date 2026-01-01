@@ -150,17 +150,20 @@ def create_app() -> Flask:
     # --- Middleware สำหรับ Multi-Tenancy ---
     @app.before_request
     def setup_tenant_session():
+        from flask import render_template
+        from shared_db.models import Hospital, HospitalStatus
+
         # ไม่ตรวจสอบ subdomain สำหรับ static files หรือ favicon
         if request.path.startswith('/static') or request.path == '/favicon.ico':
             return
 
         db = get_db_session()
-        
+
         # ตรวจสอบ subdomain จาก URL parameter ก่อน (สำหรับ development)
         subdomain_param = request.args.get('subdomain')
         subdomain = None
         g.subdomain_from_host = False
-        
+
         if subdomain_param:
             # subdomain = subdomain_param
             subdomain = subdomain_param.split('?')[0]
@@ -171,8 +174,9 @@ def create_app() -> Flask:
             if len(parts) > 1 and parts[0] not in ['localhost', 'www', 'api']:
                 subdomain = parts[0]
                 g.subdomain_from_host = True
-        
+
         hospital_schema = None
+        hospital = None
         if subdomain:
             # FIX: ครอบ SQL string ด้วย text()
             stmt = text("SELECT schema_name FROM public.hospitals WHERE subdomain = :subdomain")
@@ -180,15 +184,26 @@ def create_app() -> Flask:
             if result:
                 hospital_schema = result
 
+            # ตรวจสอบสถานะของ hospital
+            hospital = db.query(Hospital).filter_by(subdomain=subdomain).first()
+            if hospital:
+                # ตรวจสอบ status ของ hospital
+                if hospital.status == HospitalStatus.DELETED:
+                    return render_template('errors/not_found.html'), 404
+
+                if hospital.status == HospitalStatus.INACTIVE:
+                    return render_template('errors/service_unavailable.html'), 503
+
         g.tenant = hospital_schema
         g.subdomain = subdomain
-        
+        g.hospital = hospital
+
         if hospital_schema:
             # FIX: ใช้ text() กับคำสั่ง SET search_path ด้วยเพื่อความปลอดภัย
             db.execute(text(f'SET search_path TO "{hospital_schema}", public'))
         else:
             db.execute(text('SET search_path TO public'))
-            
+
         g.db = db
 
     @app.teardown_request

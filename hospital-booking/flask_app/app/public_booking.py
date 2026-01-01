@@ -22,6 +22,27 @@ from .services.sms_service import queue_otp_sms
 # สร้าง Blueprint
 public_bp = Blueprint('booking', __name__, url_prefix='/book')
 
+@public_bp.before_request
+def check_public_booking_enabled():
+    """
+    ตรวจสอบว่า tenant เปิดให้ใช้ public booking หรือไม่
+    ถ้าปิดไว้ จะแสดงหน้า error
+
+    Note: การตรวจสอบ hospital status (DELETED/INACTIVE) ทำที่ app-level before_request แล้ว
+    ที่นี่ตรวจสอบเฉพาะ is_public_booking_enabled
+    """
+    # Get hospital from g (already checked and loaded by app-level before_request)
+    hospital = g.get('hospital')
+
+    if not hospital:
+        flash('ไม่พบข้อมูลผู้ให้บริการ', 'error')
+        return render_template('errors/service_unavailable.html'), 503
+
+    # Check if public booking is enabled
+    if not hospital.is_public_booking_enabled:
+        flash('ขออภัย มีการปิดให้บริการจองออนไลน์ชั่วคราว', 'error')
+        return render_template('errors/booking_disabled.html'), 503
+
 def get_fastapi_url():
     return os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
@@ -117,13 +138,13 @@ def booking_home():
         print(f"🔍 DEBUG [booking_home] - subdomain from session = {subdomain}")
         
         if not subdomain:
-            # แสดงหน้าให้เลือกโรงพยาบาล หรือ error
+            # แสดงหน้าให้เลือกผู้ให้บริการ หรือ error
             flash('กรุณาเปิด URL พร้อม ?subdomain=humnoi', 'info')
             
             # Option 1: กลับไปหน้าหลัก
             return redirect(url_for('main.index'))
             
-            # Option 2: แสดงหน้าเลือกโรงพยาบาล (ถ้ามี)
+            # Option 2: แสดงหน้าเลือกผู้ให้บริการ (ถ้ามี)
             # return render_template('booking/select_hospital.html')
     
     # บันทึก subdomain ล่าสุดใน session
@@ -770,7 +791,7 @@ def my_appointments():
     subdomain = get_subdomain()
     
     if not subdomain:
-        flash('กรุณาเลือกโรงพยาบาล', 'info')
+        flash('กรุณาเลือกผู้ให้บริการ', 'info')
         return redirect(url_for('main.index'))
     
     return render_template('booking/my_appointments.html',
@@ -790,7 +811,7 @@ def search_appointments():
         print(f"⚠️ WARNING [search_appointments] - Using subdomain from session: {subdomain}")
     
     if not subdomain:
-        flash('กรุณาเลือกโรงพยาบาล', 'info')
+        flash('กรุณาเลือกผู้ให้บริการ', 'info')
         return redirect(url_for('main.index'))
     
     # บันทึก subdomain ลง session
@@ -863,7 +884,7 @@ def verify_otp():
         print(f"⚠️ WARNING [verify_otp] - Using subdomain from session: {subdomain}")
     
     if not subdomain:
-        flash('เกิดข้อผิดพลาดในการระบุโรงพยาบาล กรุณาลองใหม่', 'error')
+        flash('เกิดข้อผิดพลาดในการระบุผู้ให้บริการ กรุณาลองใหม่', 'error')
         return redirect(url_for('booking.my_appointments'))
     
     if 'pending_search' not in session:

@@ -97,7 +97,7 @@
                         </div>
                         <div class="ml-5 w-0 flex-1">
                             <dl>
-                                <dt class="text-sm font-medium text-gray-500 truncate">ผู้ป่วยทั้งหมด</dt>
+                                <dt class="text-sm font-medium text-gray-500 truncate">นัดหมายทั้งหมด</dt>
                                 <dd class="text-lg font-medium text-gray-900">
                                     {{ (upcoming_appointments + past_appointments)|map(attribute='patient_id')|unique|list|length if (upcoming_appointments and past_appointments) else 0 }}
                                 </dd>
@@ -114,7 +114,7 @@
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h3 class="text-lg leading-6 font-medium text-gray-900">รายการนัดหมาย</h3>
-                        <p class="mt-1 max-w-2xl text-sm text-gray-500">จัดการนัดหมายผู้ป่วย</p>
+                        <p class="mt-1 max-w-2xl text-sm text-gray-500">จัดการนัดหมาย</p>
                     </div>
                     <a href="{{ url('booking.booking_home') }}" 
                        class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 flex items-center space-x-2">

@@ -22,7 +22,7 @@ def needs_subdomain_param():
     # ตรวจสอบว่าส่วนแรกเป็น subdomain จริงหรือไม่
     potential_subdomain = hostname.split('.')[0]
     
-    # รายการ prefix ที่ไม่ใช่ subdomain ของโรงพยาบาล
+    # รายการ prefix ที่ไม่ใช่ subdomain ของผู้ให้บริการ
     non_subdomain_prefixes = ['localhost', 'www', 'api', '127', '192', 'app']
     
     # ถ้าเป็น IP address
@@ -64,7 +64,7 @@ def get_dashboard_url(subdomain):
     สร้าง URL สำหรับ dashboard โดยจัดการ subdomain ตาม environment
     
     Args:
-        subdomain: ชื่อ subdomain ของโรงพยาบาล
+        subdomain: ชื่อ subdomain ของผู้ให้บริการ
     
     Returns:
         URL string สำหรับ redirect ไป dashboard

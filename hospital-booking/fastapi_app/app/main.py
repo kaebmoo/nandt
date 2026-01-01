@@ -209,6 +209,40 @@ def create_tenant_setup(schema_name: str, db: Session):
             patient = models.Patient(**data)
             db.add(patient)
 
+        # --- [NEW] เชื่อมโยง Provider กับ Template (Assignment) ---
+        template_assignment = models.TemplateProvider(
+            template_id=default_template.id,
+            provider_id=provider.id,
+            is_primary=True,
+            can_auto_assign=True,
+            priority=0
+        )
+        db.add(template_assignment)
+        
+        # --- [NEW] สร้างตารางเวลาทำงาน (Schedule) ---
+        # ใช้วันทำงานเดียวกับ Template (Mon-Fri)
+        from datetime import date
+        provider_schedule = models.ProviderSchedule(
+            provider_id=provider.id,
+            template_id=default_template.id,
+            effective_date=date.today(),
+            end_date=None,
+            days_of_week=[
+                models.DayOfWeek.MONDAY, models.DayOfWeek.TUESDAY, 
+                models.DayOfWeek.WEDNESDAY, models.DayOfWeek.THURSDAY, 
+                models.DayOfWeek.FRIDAY
+            ], # หรือใช้ working_days ถ้าเก็บเป็น enum value
+            schedule_type='regular',
+            notes='Default schedule created during registration'
+        )
+        
+        # หมายเหตุ: days_of_week ใน ProviderSchedule เป็น ARRAY(Integer)
+        # แต่ models.DayOfWeek.MONDAY เป็น Enum
+        # ต้องแปลงเป็น integer ก่อนบันทึกลง column type ARRAY(Integer)
+        provider_schedule.days_of_week = [day.value for day in working_days]
+        
+        db.add(provider_schedule)
+
         # 5. Commit ข้อมูลทั้งหมดในครั้งเดียว
         db.commit()
         

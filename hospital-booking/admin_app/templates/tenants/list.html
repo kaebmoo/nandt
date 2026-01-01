@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Tenant Management{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="fas fa-building"></i> Tenant Management</h2>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('tenants.create_tenant') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> สร้าง Tenant ใหม่
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs">
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if not show_deleted else '' }}" href="{{ url_for('tenants.list_tenants') }}">
+                    <i class="fas fa-check-circle text-success"></i> Active Tenants
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if show_deleted else '' }}" href="{{ url_for('tenants.list_tenants', show_deleted='true') }}">
+                    <i class="fas fa-trash text-danger"></i> Trash (Deleted)
+                </a>
+            </li>
+        </ul>
+    </div>
+    <div class="card-body">
+        {% if tenant_stats %}
+        <div class="table-responsive">
+            <table class="table table-hover" id="tenantsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>ชื่อผู้ให้บริการ</th>
+                        <th>Subdomain</th>
+                        <th>Status</th>
+                        <th>Public Booking</th>
+                        <th>จำนวน Users</th>
+                        <th>{{ 'ลบเมื่อ' if show_deleted else 'สร้างเมื่อ' }}</th>
+                        <th>จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tenant_stats %}
+                    <tr id="tenant-{{ item.hospital.id }}" data-tenant-id="{{ item.hospital.id }}">
+                        <td>{{ item.hospital.id }}</td>
+                        <td>
+                            <strong>{{ item.hospital.name }}</strong>
+                            {% if item.hospital.description %}
+                            <br><small class="text-muted">{{ item.hospital.description[:50] }}...</small>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ item.hospital.subdomain }}</code></td>
+                        <td>
+                            <span class="badge bg-{{ 'secondary' if item.hospital.status.value == 'deleted' else ('success' if item.hospital.status.value == 'active' else 'secondary') }} status-badge">
+                                {{ item.hospital.status.value|upper }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ 'info' if item.hospital.is_public_booking_enabled else 'warning' }} booking-badge">
+                                {{ 'เปิด' if item.hospital.is_public_booking_enabled else 'ปิด' }}
+                            </span>
+                        </td>
+                        <td>{{ item.user_count }}</td>
+                        <td>
+                            {% if show_deleted and item.hospital.deleted_at %}
+                                <span class="text-danger">{{ item.hospital.deleted_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                            {% elif item.hospital.created_at %}
+                                {{ item.hospital.created_at.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                {% if show_deleted %}
+                                    <button class="btn btn-success"
+                                            onclick="restoreTenant({{ item.hospital.id }}, '{{ item.hospital.name }}')"
+                                            title="Restore (กู้คืน)">
+                                        <i class="fas fa-trash-restore"></i> Restore
+                                    </button>
+                                {% else %}
+                                    <a href="{{ url_for('tenants.view_tenant', tenant_id=item.hospital.id) }}"
+                                       class="btn btn-info" title="ดูรายละเอียด">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('tenants.edit_tenant', tenant_id=item.hospital.id) }}"
+                                       class="btn btn-warning" title="แก้ไข">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn btn-{{ 'secondary' if item.hospital.status.value == 'active' else 'success' }}"
+                                            onclick="toggleTenantStatus({{ item.hospital.id }}, '{{ item.hospital.name }}')"
+                                            title="{{ 'ปิดการใช้งาน' if item.hospital.status.value == 'active' else 'เปิดการใช้งาน' }}">
+                                        <i class="fas fa-{{ 'pause' if item.hospital.status.value == 'active' else 'play' }}"></i>
+                                    </button>
+                                    <button class="btn btn-danger"
+                                            onclick="deleteTenant({{ item.hospital.id }}, '{{ item.hospital.name }}')"
+                                            title="ลบ">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="fas fa-{{ 'trash' if show_deleted else 'inbox' }} fa-3x mb-3"></i>
+            <p>{{ 'ไม่มีรายการที่ถูกลบ' if show_deleted else 'ยังไม่มี tenant ในระบบ' }}</p>
+            {% if not show_deleted %}
+            <a href="{{ url_for('tenants.create_tenant') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-plus"></i> สร้าง Tenant แรก
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Get CSRF token from meta tag
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+function toggleTenantStatus(tenantId, tenantName) {
+    if (!confirm(`ต้องการเปลี่ยนสถานะ tenant "${tenantName}" หรือไม่?`)) {
+        return;
+    }
+
+    fetch(`/tenants/${tenantId}/toggle-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('เกิดข้อผิดพลาด: ' + error);
+    });
+}
+
+function deleteTenant(tenantId, tenantName) {
+    if (!confirm(`ต้องการลบ tenant "${tenantName}" หรือไม่?\n\n(นี่เป็น soft delete สามารถ restore ได้)`)) {
+        return;
+    }
+
+    fetch(`/tenants/${tenantId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('เกิดข้อผิดพลาด: ' + error);
+    });
+}
+
+function restoreTenant(tenantId, tenantName) {
+    if (!confirm(`ต้องการกู้คืน (Restore) tenant "${tenantName}" หรือไม่?`)) {
+        return;
+    }
+
+    fetch(`/tenants/${tenantId}/restore`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload page to removed from deleted list or just reload
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('เกิดข้อผิดพลาด: ' + error);
+    });
+}
+</script>
+{% endblock %}

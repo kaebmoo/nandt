@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NudDee - ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</title>
+    <title>NudDee - ระบบนัดหมายออนไลน์สำหรับผู้ให้บริการ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -116,7 +116,7 @@
         <div class="container mx-auto px-4 text-center">
             {% if current_user %}
                 <h1 class="text-5xl font-bold mb-6">ยินดีต้อนรับกลับ, {{ current_user.name.split()[0] if current_user.name else 'ผู้ใช้' }}!</h1>
-                <p class="text-xl mb-8 opacity-90">พร้อมที่จะจัดการนัดหมายของ {{ current_user.hospital.name if current_user.hospital else 'โรงพยาบาล' }} แล้วหรือยัง?</p>
+                <p class="text-xl mb-8 opacity-90">พร้อมที่จะจัดการนัดหมายของ {{ current_user.hospital.name if current_user.hospital else 'ผู้ให้บริการ' }} แล้วหรือยัง?</p>
                 <div class="flex justify-center space-x-4">
                     <a href="/dashboard?subdomain={{ current_user.hospital.subdomain if current_user.hospital else 'unknown' }}" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
                         🏥 เข้าสู่ Dashboard
@@ -126,8 +126,8 @@
                     </button>
                 </div>
             {% else %}
-                <h1 class="text-5xl font-bold mb-6">ระบบนัดหมายออนไลน์สำหรับโรงพยาบาล</h1>
-                <p class="text-xl mb-8 opacity-90">จัดการนัดหมายผู้ป่วย ลดเวลารอ เพิ่มประสิทธิภาพ</p>
+                <h1 class="text-5xl font-bold mb-6">ระบบนัดหมายออนไลน์สำหรับผู้ให้บริการ</h1>
+                <p class="text-xl mb-8 opacity-90">จัดการนัดหมาย ลดเวลารอ เพิ่มประสิทธิภาพ</p>
                 <div class="flex justify-center space-x-4">
                     <button onclick="showSignupModal()" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
                         ทดลองใช้ฟรี 14 วัน
@@ -187,7 +187,7 @@
                 {% if current_user %}
                     เปลี่ยนแพ็คเกจ หรือ อัปเกรด
                 {% else %}
-                    เลือกแพ็คเกจที่เหมาะกับโรงพยาบาลของคุณ
+                    เลือกแพ็คเกจที่เหมาะกับผู้ให้บริการของคุณ
                 {% endif %}
             </h2>
             
@@ -271,7 +271,7 @@
                     </div>
                     <h3 class="text-xl font-bold mb-2">Professional</h3>
                     <div class="text-3xl font-bold mb-4">฿4,990<span class="text-lg font-normal">/เดือน</span></div>
-                    <p class="text-gray-600 mb-6">โรงพยาบาลขนาดกลาง</p>
+                    <p class="text-gray-600 mb-6">ผู้ให้บริการขนาดกลาง</p>
                     <ul class="space-y-3 mb-6">
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -313,7 +313,7 @@
                 <div class="plan-card bg-white rounded-xl p-6 shadow-lg">
                     <h3 class="text-xl font-bold mb-2">Enterprise</h3>
                     <div class="text-3xl font-bold mb-4">ติดต่อเรา</div>
-                    <p class="text-gray-600 mb-6">โรงพยาบาลขนาดใหญ่</p>
+                    <p class="text-gray-600 mb-6">ผู้ให้บริการขนาดใหญ่</p>
                     <ul class="space-y-3 mb-6">
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -371,8 +371,8 @@
                 <div id="step1" class="step">
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium mb-1">ชื่อโรงพยาบาล/คลินิก</label>
-                            <input type="text" name="hospitalName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="โรงพยาบาลกรุงเทพ">
+                            <label class="block text-sm font-medium mb-1">ชื่อผู้ให้บริการ</label>
+                            <input type="text" name="hospitalName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="ผู้ให้บริการ">
                         </div>
                         
                         <div>
@@ -454,7 +454,7 @@
                         <label class="block">
                             <input type="radio" name="plan" value="professional" class="mr-2">
                             <span class="font-medium">Professional - ฿4,990/เดือน</span>
-                            <p class="text-sm text-gray-500 ml-6">สำหรับโรงพยาบาลขนาดกลาง</p>
+                            <p class="text-sm text-gray-500 ml-6">สำหรับผู้ให้บริการขนาดกลาง</p>
                         </label>
                     </div>
                     
@@ -503,7 +503,7 @@
                         </svg>
                         <span class="text-xl font-bold">NudDee</span>
                     </div>
-                    <p class="text-gray-400">ระบบนัดหมายออนไลน์ที่ทันสมัยสำหรับโรงพยาบาลและคลินิก</p>
+                    <p class="text-gray-400">ระบบนัดหมายออนไลน์ที่ทันสมัยสำหรับผู้ให้บริการ</p>
                 </div>
                 
                 <div>

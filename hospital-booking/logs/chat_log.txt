@@ -1,0 +1,878 @@
+ระบบลงทะเบียนการประชุมของเดิมอยู่ที่นี่ /Users/seal/Documents/GitHub/mt-registering/meeting-registration ซึ่งสามารถใช้งานได้ดีแล้ว แต่ผมได้ลองทำระบบใหม่ที่ให้มีรูปแบบเป็น SaaS เพื่อให้รองรับได้หลายองค์กรอยู่ที่ /Users/seal/Documents/GitHub/mt-registering/saas แต่ดูแล้วยังมีปัญหาอยู่หลายจุดที่จะสามารถทำให้ใช้ได้งาน คุณช่วยตรวจสอบให้ด้วยว่ามีจุดไหนที่ต้องแก้ไขเพื่อให้ทำงานได้ จากนั้นให้สร้าง todo.md ใน folder todo เพื่อผมจะได้ดูก่อนว่าจะทำอย่างไร แล้วค่อยตัดสินใจอีกที
+
+
+จากคำแนะนำ /Users/seal/Documents/GitHub/mt-registering/saas/todo/todo.md ขอให้ช่วยแก้ไขตามคำแนะนำใน phase 1 ให้ผมด้วย
+
+
+
+
+การเลือกวัน เพื่อจองตารางเวลา และการแสดงวันที่ สำหรับวันหยุดพิเศษ เราให้มันแสดงเป็น disable เหมือนวันหยุดปกติ หรือวันที่ผ่านมาแล้ว ได้ไหม เพื่อไม่ให้ผู้ใช้ต้องเสียเวลาไปกดดู
+และการจองที่มีกำหนดเช่น ให้ล่วงหน้าแค่ 30 วัน วันในอนาคตที่ เกิน 30 วันไป เราก็ให้มัน disable ไว้ก่อนได้หรือไม่ (หรือไม่จำเป็น เพราะกดเข้าไปก็ไม่ปรากฎตารางเวลาอยู่ดี เอาแบบไหนดี ที่เหมาะกับผู้ใช้งานที่สุด)
+
+http://localhost:5001/book/service/19?subdomain=humnoi
+
+
+ปรับตามแนวทางที่ว่ามาได้เลย แต่ช่วยตรวจสอบ code เดิมให้ละเอียดก่อนทำนะ ว่าใช้ตามที่เสนอได้หรือไม่ 
+
+เกิด error http://localhost:5001/settings/holidays?subdomain=humnoi&year=2025 ไม่มีวันหยุดแสดง ขึ้นข้อความที่ fastapi 
+INFO:     127.0.0.1:56055 - "GET /api/v1/tenants/humnoi/event-types HTTP/1.1" 200 OK
+Error fetching holidays: (psycopg2.errors.UndefinedTable) relation "holidays" does not exist
+LINE 2: FROM holidays 
+             ^
+
+[SQL: SELECT holidays.id AS holidays_id, holidays.name AS holidays_name, holidays.date AS holidays_date, holidays.source AS holidays_source, holidays.is_active AS holidays_is_active, holidays.is_recurring AS holidays_is_recurring, holidays.description AS holidays_description, holidays.created_at AS holidays_created_at, holidays.updated_at AS holidays_updated_at 
+FROM holidays 
+WHERE EXTRACT(year FROM holidays.date) = %(param_1)s AND holidays.is_active = true ORDER BY holidays.date]
+[parameters: {'param_1': 2025}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     127.0.0.1:56062 - "GET /api/v1/tenants/humnoi/holidays?year=2025 HTTP/1.1" 200 OK
+
+ช่วยตรวจสอบให้ด้วย
+
+
+ผมดูใน database มันมี table holidays นะ แต่จะอยู่ใน tenant -> tenant_humnoi
+
+
+แล้วได้มีการทำอะไรใน code ไปบ้าง การตรวจสอบ table ก่อนทุกครั้งมีความจำเป็นหรือไม่ใน code
+
+ถ้าอยากนั้นก็ช่วยแก้ไขแบบไม่ต้องให้เช็คซ้ำซ้อนได้ไหม หรือให้แก้ที่ root cause จริงจริง ว่าเป็นตรงไหนกันแน่ ใน code เพราะเดิมได้ migrate ไปก่อนหน้าแล้ว ในการสร้าง table ใน tenant 
+
+
+ช่วยตรวจสอบ data model ใน hospital-booking/shared_db/models.py ให้ด้วยว่า Provider มีความสัมพันธ์อย่างไรกับอะไรบ้าง 
+
+1	"สมชาย ใจดี"	"นพ."	"เวชศาสตร์ครอบครัว"			true	"dr-somchai"	"แพทย์เวชศาสตร์ครอบครัวที่มีประสบการณ์กว่า 10 ปี"	
+2	"พญ.สมหญิง สวยงาม"	"พญ."	"กุมารเวชกรรม"			true	"dr-somying"	"แพทย์เด็กที่มีประสบการณ์มากกว่า 10 ปี"	
+
+
+"id"	"name"	"title"	"department"	"email"	"phone"	"is_active"	"public_booking_url"	"bio"	"profile_image_url"
+1	"สมชาย ใจดี"	"นพ."	"เวชศาสตร์ครอบครัว"			true	"dr-somchai"	"แพทย์เวชศาสตร์ครอบครัวที่มีประสบการณ์กว่า 10 ปี"	
+2	"พญ.สมหญิง สวยงาม"	"พญ."	"กุมารเวชกรรม"			true	"dr-somying"	"แพทย์เด็กที่มีประสบการณ์มากกว่า 10 ปี"	
+
+นี่คือข้อมูลของ provider ถ้าเราจะต้อง implement เข้าไปกับระบบนัดหมาย เราจะทำอย่างไรได้บ้าง (ยังไม่ต้องทำ ให้รอผมตัดสินใจก่อน) ทำแบบไหนถึงจะดี ถ้าต้องการข้อมูลเพิ่มเติมให้แจ้งด้วย 
+
+
+⛬  แนวทางการผูก Provider กับระบบนัดหมาย
+
+   1. เชื่อมกับ Event Type (ขั้นพื้นฐานที่สุด)
+     •  เพิ่ม provider_id หรือหลายคน = ตารางกลาง event_type_providers
+     •  ฟอร์มจองเลือกประเภทบริการก่อน แล้วล็อก provider ตามที่กำหนดไว้
+     •  เหมาะถ้าแต่ละบริการมีหมอเฉพาะ (หรือหมอน้อยคน)
+
+   2. ให้ผู้ใช้เลือก Provider เองตอนจอง
+     •  หลังเลือกบริการ ระบบดึงรายชื่อ provider ที่ active และรองรับบริการนั้น
+     •  ปฏิทินดึง availability ตาม provider ที่เลือก
+     •  ต้องมี availability แยกตาม provider (ไม่ใช่แค่ template กลาง)
+
+   3. ระบบกระจายงานอัตโนมัติ (ไม่ให้ผู้ใช้เลือก)
+     •  ผู้ใช้เลือกเฉพาะบริการ → backend หาหมอว่าง (round-robin, workload)
+     •  ต้องรู้ slot ว่างของแต่ละ provider + logic เลือกคนที่เหมาะสม
+     •  ดีเมื่ออยากลดการตัดสินใจของผู้ใช้ แต่ต้องสื่อสารว่า “ระบบจัดหมอให้”
+
+   4. เปิดให้เลือกหรือสุ่มตามกรณี
+     •  ถ้าบริการนี้อยากให้เลือกหมอ → เปิด dropdown
+     •  ถ้าอยากให้ระบบสุ่ม → มี flag ควบคุมใน event type (เช่น “auto_assign_provider”)
+
+   สิ่งที่อาจต้องรู้เพิ่มเติม
+   •  slot availability ของแต่ละ provider แยกจาก template เดิมหรือใช้ template ร่วม?
+   •  ผู้ใช้ต้องเห็นโปรไฟล์หมอก่อนเลือกหรือไม่?
+   •  มีเงื่อนไขพิเศษ (เช่น เพศหมอ, ภาษา) หรือไม่?
+   •  ต้องรองรับการ reschedule โดยเลือกหมอคนเดิมหรือเปลี่ยนได้?
+
+   แจ้งได้เลยครับ ถ้าต้องการแผนลงรายละเอียดในแนวทางใดหรือมีข้อมูลอื่นเพิ่มเติม!
+
+จากคำถามนี้ 
+AvailabilityTemplate ถ้าต้องแยกไปตาม provider ที่มี มันจะมีมากเกินไปหรือไม่ ในบางกรณี เช่น แพทย์แผนไทย, หรือนักกายภาพบำบัด
+
+หรือใช้แบบ AvailabilityTemplate อันเดียว แต่มี provider ให้เลือกหลายคนในนั้น ซึ่งกรณีนี้ ในเวลาเดียวกันก็สามารถยังเลือกจองเวลานั้นได้ ถ้ายังมี provider เหลืออยู่ แต่ก็ต้องมีการทำ avaiability ของ provider อีก ว่ามีใครมาทำงานบ้าง
+
+หรือกรณีที่จะเลือก AvailabilityTemplate เพื่อเป็นของ provider เฉพาะทาง เช่น ตารางแพทย์เฉพาะทางโรคผิวหนัง ที่เจาะจงวันและเวลาตรวจ เช่น ทุกพุธเช้า โดย AvailabilityTemplate ก็จะมีแค่ provider เดียว
+
+หรือกรณีที่สุ่ม provider กับ AvailabilityTemplate ก็ต้องมีการกำหนดในแต่ละวันหรือเมื่อเริ่มต้นวัน ว่ามีห้องตรวจเปิดกี่ห้อง
+
+ผมไม่แน่ใจว่าครบทุกกรณีหรือยัง คุณมีความเห็นอย่างไร และแนวทางในการทำจะเป็นแบบไหนดี
+
+ได้แนวทางมาแบบนี้
+เยี่ยมมาก! คำถามนี้ลึกมากเลยครับ คุณคิดครบทุกมิติแล้ว 👏 มาออกแบบระบบที่รองรับทุกกรณีที่คุณยกมา
+
+## 🎯 ปัญหาหลักที่ต้องแก้
+
+1. **Capacity Management** - ในเวลาเดียวกันมี provider กี่คน (concurrent slots)
+2. **Provider Assignment** - provider ไหนทำงานวันไหน (rotation/schedule)
+3. **Resource Limits** - ห้องตรวจมีกี่ห้อง
+4. **Template Sharing** - template เดียว vs หลาย providers
+
+---
+
+## 🏗️ โครงสร้างที่แนะนำ: **Hybrid Model**
+
+```python
+# 1. AvailabilityTemplate (เพิ่ม capacity concept)
+class AvailabilityTemplate(TenantBase):
+    __tablename__ = 'availability_templates'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    
+    # 🆕 Template Type
+    template_type = Column(
+        String(20), 
+        default='dedicated'  # 'dedicated', 'shared', 'pool'
+    )
+    
+    # 🆕 Capacity Settings
+    max_concurrent_slots = Column(Integer, default=1)  # จำนวน slot พร้อมกันสูงสุด
+    requires_provider_assignment = Column(Boolean, default=True)  # ต้องระบุว่าใครมาทำงานไหม
+    
+    # Existing fields...
+    timezone = Column(String(50), default='Asia/Bangkok')
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    availabilities = relationship("Availability", back_populates="template")
+    date_overrides = relationship("DateOverride", back_populates="template")
+    event_types = relationship("EventType", back_populates="availability_template")
+    
+    # 🆕 Provider assignments
+    template_providers = relationship("TemplateProvider", back_populates="template")
+    provider_schedules = relationship("ProviderSchedule", back_populates="template")
+
+
+# 2. ตารางกลาง: Template <-> Provider (many-to-many)
+class TemplateProvider(TenantBase):
+    """กำหนดว่า provider ไหนใช้ template ไหนได้บ้าง"""
+    __tablename__ = 'template_providers'
+    
+    id = Column(Integer, primary_key=True)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'))
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'))
+    
+    # Settings
+    is_primary = Column(Boolean, default=False)  # provider หลักของ template นี้
+    can_auto_assign = Column(Boolean, default=True)  # ใช้สำหรับ auto-assignment ได้ไหม
+    priority = Column(Integer, default=0)  # ลำดับความสำคัญ (สำหรับ auto-assign)
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    template = relationship("AvailabilityTemplate", back_populates="template_providers")
+    provider = relationship("Provider", back_populates="template_assignments")
+    
+    __table_args__ = (
+        UniqueConstraint('template_id', 'provider_id', name='uq_template_provider'),
+    )
+
+
+# 3. กำหนดการทำงานจริง (Provider Schedule)
+class ProviderSchedule(TenantBase):
+    """กำหนดว่า provider ไหนทำงานวันไหน + ช่วงเวลาไหน"""
+    __tablename__ = 'provider_schedules'
+    
+    id = Column(Integer, primary_key=True)
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'), nullable=False)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'))
+    
+    # Date range
+    effective_date = Column(Date, nullable=False)  # วันที่เริ่มต้น
+    end_date = Column(Date)  # ถ้าไม่ระบุ = ใช้ไปเรื่อยๆ
+    
+    # Recurrence (optional - สำหรับ rotation)
+    recurrence_pattern = Column(String(50))  # 'weekly', 'biweekly', 'monthly', null
+    days_of_week = Column(JSON)  # [1, 3, 5] = จันทร์, พุธ, ศุกร์
+    
+    # Override times (ถ้าไม่ตรงกับ template)
+    custom_start_time = Column(Time)  # ถ้าเริ่มต่างจาก template
+    custom_end_time = Column(Time)    # ถ้าจบต่างจาก template
+    
+    # Status
+    is_active = Column(Boolean, default=True)
+    schedule_type = Column(String(20), default='regular')  # 'regular', 'on_call', 'temporary'
+    
+    notes = Column(Text)  # บันทึกเพิ่มเติม (เช่น "ปีนี้หมอหยุดทุกศุกร์")
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_by = Column(String(100))  # ใครสร้าง schedule นี้
+    
+    # Relationships
+    provider = relationship("Provider", back_populates="schedules")
+    template = relationship("AvailabilityTemplate", back_populates="provider_schedules")
+
+
+# 4. Resource Capacity (optional - สำหรับจำกัดห้อง/ทรัพยากร)
+class ResourceCapacity(TenantBase):
+    """กำหนดจำนวนห้อง/ทรัพยากรที่เปิดในแต่ละวัน"""
+    __tablename__ = 'resource_capacities'
+    
+    id = Column(Integer, primary_key=True)
+    template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='CASCADE'))
+    
+    # Date or recurring
+    specific_date = Column(Date)  # สำหรับวันเฉพาะ
+    day_of_week = Column(SQLEnum(DayOfWeek))  # สำหรับทุกวันจันทร์, ฯลฯ
+    
+    # Capacity
+    available_rooms = Column(Integer, nullable=False)  # ห้องที่เปิดใช้
+    max_concurrent_appointments = Column(Integer)  # นัดพร้อมกันสูงสุด
+    
+    # Time-based capacity (optional)
+    time_slot_start = Column(Time)  # ถ้าต้องการแยกช่วงเวลา
+    time_slot_end = Column(Time)
+    
+    notes = Column(Text)
+    is_active = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    template = relationship("AvailabilityTemplate")
+
+
+# 5. อัพเดท Provider model
+class Provider(TenantBase):
+    __tablename__ = 'providers'
+    
+    # ... existing fields ...
+    
+    # 🆕 Relationships
+    template_assignments = relationship("TemplateProvider", back_populates="provider")
+    schedules = relationship("ProviderSchedule", back_populates="provider")
+    
+    # 🆕 Leave/Unavailability
+    leaves = relationship("ProviderLeave", back_populates="provider")
+
+
+# 6. Provider Leave (ลา/ไม่ว่าง)
+class ProviderLeave(TenantBase):
+    """บันทึกการลาหรือไม่ว่างของ provider"""
+    __tablename__ = 'provider_leaves'
+    
+    id = Column(Integer, primary_key=True)
+    provider_id = Column(Integer, ForeignKey('providers.id', ondelete='CASCADE'))
+    
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    leave_type = Column(String(20))  # 'vacation', 'sick', 'conference', 'personal'
+    
+    reason = Column(Text)
+    approved_by = Column(String(100))
+    is_approved = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    provider = relationship("Provider", back_populates="leaves")
+```
+
+---
+
+## 📊 รองรับทุกกรณีที่คุณยกมา
+
+### **กรณีที่ 1: Shared Template (แพทย์แผนไทย 5 คน)**
+
+```python
+# Template: แพทย์แผนไทย (จ-ศ 9:00-16:00)
+template = AvailabilityTemplate(
+    name="แพทย์แผนไทย (จ-ศ 9:00-16:00)",
+    template_type='shared',
+    max_concurrent_slots=5,  # รองรับ 5 คนพร้อมกัน
+    requires_provider_assignment=True
+)
+
+# ผูก 5 providers เข้ากับ template
+for provider in thai_medicine_providers:
+    TemplateProvider(
+        template_id=template.id,
+        provider_id=provider.id,
+        can_auto_assign=True
+    )
+
+# กำหนดว่าใครทำงานวันไหน
+ProviderSchedule(
+    provider_id=provider1.id,
+    template_id=template.id,
+    days_of_week=[1, 2, 3],  # จ-พ
+    effective_date='2025-01-01'
+)
+```
+
+**Booking Logic:**
+```python
+# เมื่อ user เลือกวันที่ 2025-10-15 (พุธ) เวลา 10:00
+# ระบบตรวจสอบ:
+available_slots = db.query(ProviderSchedule).filter(
+    ProviderSchedule.template_id == template.id,
+    ProviderSchedule.effective_date <= date,
+    ProviderSchedule.is_active == True,
+    3 in ProviderSchedule.days_of_week  # วันพุธ
+).all()
+
+# ตรวจนัดหมายที่จองแล้ว
+booked_count = db.query(Appointment).filter(
+    Appointment.start_time == datetime(2025, 10, 15, 10, 0),
+    Appointment.provider_id.in_([s.provider_id for s in available_slots])
+).count()
+
+# คำนวณ slot ว่าง
+available_count = len(available_slots) - booked_count
+# ถ้า available_count > 0 → ยังจองได้
+```
+
+---
+
+### **กรณีที่ 2: Dedicated Template (หมอผิวหนังทุกพุธเช้า)**
+
+```python
+# Template เฉพาะ
+template = AvailabilityTemplate(
+    name="ตรวจผิวหนังเฉพาะทาง (ทุกพุธ 8:00-12:00)",
+    template_type='dedicated',
+    max_concurrent_slots=1,  # provider เดียว
+    requires_provider_assignment=False  # ไม่ต้องกำหนด schedule (มีแค่คนเดียว)
+)
+
+# ผูก provider เดียว
+TemplateProvider(
+    template_id=template.id,
+    provider_id=dermatologist.id,
+    is_primary=True
+)
+
+# Availability
+Availability(
+    template_id=template.id,
+    day_of_week=DayOfWeek.WEDNESDAY,
+    start_time=time(8, 0),
+    end_time=time(12, 0)
+)
+```
+
+---
+
+### **กรณีที่ 3: Pool with Resource Limits (ห้องตรวจจำกัด)**
+
+```python
+# Template: นักกายภาพ (มี 8 คน แต่ห้องมี 3 ห้อง)
+template = AvailabilityTemplate(
+    name="กายภาพบำบัด",
+    template_type='pool',
+    max_concurrent_slots=3,  # จำกัดที่ 3 ห้อง
+    requires_provider_assignment=True
+)
+
+# ผูก 8 providers
+for provider in physiotherapists:
+    TemplateProvider(template_id=template.id, provider_id=provider.id)
+
+# กำหนดว่าวันจันทร์เปิด 3 ห้อง
+ResourceCapacity(
+    template_id=template.id,
+    day_of_week=DayOfWeek.MONDAY,
+    available_rooms=3,
+    max_concurrent_appointments=3
+)
+
+# กำหนดว่าวันศุกร์เปิดแค่ 2 ห้อง
+ResourceCapacity(
+    template_id=template.id,
+    day_of_week=DayOfWeek.FRIDAY,
+    available_rooms=2,
+    max_concurrent_appointments=2
+)
+```
+
+**Booking Logic:**
+```python
+# ตรวจ capacity ของวันนั้น
+capacity = db.query(ResourceCapacity).filter(
+    ResourceCapacity.template_id == template.id,
+    ResourceCapacity.day_of_week == target_date.weekday()
+).first()
+
+max_slots = capacity.max_concurrent_appointments if capacity else template.max_concurrent_slots
+
+# นับจำนวนที่จองแล้ว
+booked = count_booked_appointments_at_time(target_datetime)
+
+# ถ้า booked < max_slots → ยังจองได้
+```
+
+---
+
+### **กรณีที่ 4: Provider Rotation/On-duty**
+
+```python
+# กำหนด rotation แต่ละสัปดาห์
+# สัปดาห์ที่ 1: หมอ A ทำจันทร์-พุธ
+ProviderSchedule(
+    provider_id=doctor_a.id,
+    template_id=template.id,
+    effective_date='2025-10-06',  # วันจันทร์สัปดาห์แรก
+    end_date='2025-10-08',  # วันพุธ
+    days_of_week=[1, 2, 3]
+)
+
+# สัปดาห์ที่ 1: หมอ B ทำพฤหัส-ศุกร์
+ProviderSchedule(
+    provider_id=doctor_b.id,
+    template_id=template.id,
+    effective_date='2025-10-09',
+    end_date='2025-10-10',
+    days_of_week=[4, 5]
+)
+
+# สัปดาห์ที่ 2: สลับกัน
+# ...
+```
+
+---
+
+## 🔍 การคำนวณ Available Slots (Core Logic)
+
+```python
+def get_available_slots(template_id, target_date, target_time):
+    """
+    คำนวณว่า slot นั้นว่างหรือไม่
+    
+    Returns:
+        {
+            'is_available': True/False,
+            'total_capacity': 5,
+            'booked_count': 2,
+            'available_count': 3,
+            'available_providers': [provider1, provider2, provider3]
+        }
+    """
+    
+    # 1. ดึง template
+    template = db.query(AvailabilityTemplate).get(template_id)
+    
+    # 2. ตรวจสอบ DateOverride (วันหยุด/ปิดพิเศษ)
+    override = db.query(DateOverride).filter(
+        DateOverride.template_id == template_id,
+        DateOverride.date == target_date
+    ).first()
+    
+    if override and override.is_unavailable:
+        return {'is_available': False, 'reason': 'Date closed'}
+    
+    # 3. ตรวจสอบ Holiday
+    holiday = db.query(Holiday).filter(
+        Holiday.date == target_date,
+        Holiday.is_active == True
+    ).first()
+    
+    if holiday:
+        return {'is_available': False, 'reason': 'Holiday'}
+    
+    # 4. หา providers ที่ทำงานวันนี้
+    day_of_week = target_date.weekday()
+    
+    working_providers = db.query(ProviderSchedule).filter(
+        ProviderSchedule.template_id == template_id,
+        ProviderSchedule.effective_date <= target_date,
+        or_(
+            ProviderSchedule.end_date.is_(None),
+            ProviderSchedule.end_date >= target_date
+        ),
+        ProviderSchedule.is_active == True,
+        ProviderSchedule.days_of_week.contains([day_of_week])
+    ).all()
+    
+    if not working_providers:
+        return {'is_available': False, 'reason': 'No providers scheduled'}
+    
+    # 5. กรอง providers ที่ลา
+    provider_ids = [s.provider_id for s in working_providers]
+    
+    on_leave = db.query(ProviderLeave).filter(
+        ProviderLeave.provider_id.in_(provider_ids),
+        ProviderLeave.start_date <= target_date,
+        ProviderLeave.end_date >= target_date,
+        ProviderLeave.is_approved == True
+    ).all()
+    
+    leave_provider_ids = [l.provider_id for l in on_leave]
+    available_provider_ids = [p for p in provider_ids if p not in leave_provider_ids]
+    
+    if not available_provider_ids:
+        return {'is_available': False, 'reason': 'All providers on leave'}
+    
+    # 6. ตรวจ Resource Capacity (ถ้ามี)
+    capacity = db.query(ResourceCapacity).filter(
+        ResourceCapacity.template_id == template_id,
+        or_(
+            ResourceCapacity.specific_date == target_date,
+            ResourceCapacity.day_of_week == DayOfWeek(day_of_week)
+        ),
+        ResourceCapacity.is_active == True
+    ).first()
+    
+    max_concurrent = capacity.max_concurrent_appointments if capacity else template.max_concurrent_slots
+    
+    # 7. นับจำนวนที่จองแล้ว
+    target_datetime = datetime.combine(target_date, target_time)
+    
+    booked_count = db.query(Appointment).filter(
+        Appointment.provider_id.in_(available_provider_ids),
+        Appointment.start_time == target_datetime,
+        Appointment.status.in_(['confirmed', 'pending'])
+    ).count()
+    
+    # 8. คำนวณ
+    available_count = min(len(available_provider_ids), max_concurrent) - booked_count
+    
+    return {
+        'is_available': available_count > 0,
+        'total_capacity': max_concurrent,
+        'booked_count': booked_count,
+        'available_count': available_count,
+        'available_providers': [
+            p for p in available_provider_ids 
+            if p not in already_booked_provider_ids
+        ][:available_count]
+    }
+```
+
+---
+
+## 🎨 UI/UX Flow
+
+### **กรณี Shared Template:**
+```
+[เลือกบริการ: แพทย์แผนไทย]
+    ↓
+[เลือกวันเวลา]
+┌───────────────────────────┐
+│ พุธ 15 ต.ค. 2568          │
+│ 🕐 10:00 - 10:30          │
+│ ว่าง 3/5 ช่อง            │  ← แสดง capacity
+│ [จองเลย]                  │
+└───────────────────────────┘
+    ↓
+💡 "ระบบจะจัดแพทย์ที่ว่างให้ท่าน"
+(หรือแสดงรายชื่อให้เลือก ถ้าต้องการ)
+```
+
+### **กรณี Dedicated Template:**
+```
+[เลือกบริการ: ตรวจผิวหนังเฉพาะทาง]
+    ↓
+👨‍⚕️ โดย: พญ.สมหญิง ผิวดี
+    ↓
+[เลือกวันเวลา - เฉพาะพุธเช้า]
+```
+
+---
+
+## ✅ สรุปแนวทาง
+
+| Template Type | Use Case | max_concurrent_slots | requires_provider_assignment | ResourceCapacity |
+|--------------|----------|---------------------|----------------------------|-----------------|
+| **dedicated** | หมอเฉพาะทาง | 1 | ❌ | ❌ |
+| **shared** | หลายคนใช้ตารางเดียวกัน | N (จำนวน providers) | ✅ | Optional |
+| **pool** | หลายคนแต่จำกัดทรัพยากร | N (จำกัดด้วยห้อง) | ✅ | ✅ |
+
+**ข้อดี:**
+- ✅ ยืดหยุ่น รองรับทุกกรณี
+- ✅ Scale ได้ (เพิ่ม provider/ห้องได้)
+- ✅ จัดการ rotation/leave ได้
+- ✅ จำกัด capacity ได้
+- ✅ ไม่ซับซ้อนเกินไป
+
+**ขั้นตอนการ Implement:**
+1. เพิ่ม 4 tables: `template_providers`, `provider_schedules`, `resource_capacities`, `provider_leaves`
+2. Update models ตามด้านบน
+3. สร้าง `get_available_slots()` function
+4. Update booking flow ให้เช็ค capacity
+
+⛬  แนวทางการผูก Provider กับระบบนัดหมาย
+
+   1. เชื่อมกับ Event Type (ขั้นพื้นฐานที่สุด)
+     •  เพิ่ม provider_id หรือหลายคน = ตารางกลาง event_type_providers
+     •  ฟอร์มจองเลือกประเภทบริการก่อน แล้วล็อก provider ตามที่กำหนดไว้
+     •  เหมาะถ้าแต่ละบริการมีหมอเฉพาะ (หรือหมอน้อยคน)
+
+   2. ให้ผู้ใช้เลือก Provider เองตอนจอง
+     •  หลังเลือกบริการ ระบบดึงรายชื่อ provider ที่ active และรองรับบริการนั้น
+     •  ปฏิทินดึง availability ตาม provider ที่เลือก
+     •  ต้องมี availability แยกตาม provider (ไม่ใช่แค่ template กลาง) แนวทางที่ได้มาน่าจะตอบโจทย์นี้ได้ โดยใช้เป็น many-to-many แทน
+
+   3. ระบบกระจายงานอัตโนมัติ (ไม่ให้ผู้ใช้เลือก)
+     •  ผู้ใช้เลือกเฉพาะบริการ → backend หาหมอว่าง (round-robin, workload)
+     •  ต้องรู้ slot ว่างของแต่ละ provider + logic เลือกคนที่เหมาะสม
+     •  ดีเมื่ออยากลดการตัดสินใจของผู้ใช้ แต่ต้องสื่อสารว่า “ระบบจัดหมอให้”
+
+   4. เปิดให้เลือกหรือสุ่มตามกรณี
+     •  ถ้าบริการนี้อยากให้เลือกหมอ → เปิด dropdown
+     •  ถ้าอยากให้ระบบสุ่ม → มี flag ควบคุมใน event type (เช่น “auto_assign_provider”)
+
+   สิ่งที่อาจต้องรู้เพิ่มเติม
+   •  slot availability ของแต่ละ provider แยกจาก template เดิมหรือใช้ template ร่วม? ใช้แบบร่วมน่าจะดีกว่า 
+   •  ผู้ใช้ต้องเห็นโปรไฟล์หมอก่อนเลือกหรือไม่? ควรเห็นก่อน 
+   •  มีเงื่อนไขพิเศษ (เช่น เพศหมอ, ภาษา) หรือไม่? ตอนนี้อาจจะยังไม่จำเป็นในเรื่องภาษา แต่เพศ น่าจะบอกได้ตรงคำนำหน้า เช่น พญ. หรือ แพทย์หญิง 
+   •  ต้องรองรับการ reschedule โดยเลือกหมอคนเดิมหรือเปลี่ยนได้? ควรปรับเปลี่ยนได้ 
+
+
+ให้วางแผนโดยละเอียดใน todo.md ก่อน และต้องตรวจสอบ template ต่าง ๆ ว่าต้องปรับ template อะไรบ้าง เพิ่ม template อะไรบ้างด้วย 
+การแก้ที่จะต้องมีใน flask app, fastapi app โครงสร้างข้อมูล เพื่อเตรียม migration ให้รองรับกรณีที่จะปรับปรุงนี้
+
+
+ทำตาม todo.md และสิ่งที่เราคุยกันมาเลยครับ ถ้าต้อง migrate ก็ทำ code ไว้ในนี้ hospital-booking/migrations
+ให้ค่อยค่อยทำไปที่ละขั้น ถ้าจำเป็นต้องทดสอบให้ทดสอบหรือให้ผมทดสอบก่อน แล้วทำต่อไปจนเสร็จ ให้ทำ task log การทำงานครั้งนี้ไว้เพื่อตรวจสอบด้วยว่าอะไรทำไปแล้วบ้าง
+
+
+ผม run hospital-booking/migrations/add_provider_availability_structures.py ได้เลยใช่ไหม
+
+งั้นทำต่อในส่วนของ template ต่าง ๆ เลยไหม ตามที่คุณบอกมา
+Next Actions
+   1. Flask Admin UI enhancements – surface the new template settings, provider assignment management, schedules, leaves,
+       and capacity controls.
+   2. Public booking flow updates – show provider options (where applicable), surface remaining-capacity indicators, and
+      consume the new slot metadata.
+   3. Holiday/date‑override alignment – teach the override endpoints to reflect provider-level rules and finish the open
+      item in the TODO.
+   4. Testing & rollout prep – add targeted unit/integration tests around the new capacity logic, then plan the
+      migration/backfill execution path before release.
+ช่วยตรวจสอบให้ละเอียดด้วยนะ ว่าแก้ไขได้ครอบคลุมหมดทุกจุด
+
+ทำตาม Implementation Plan เลย ให้สอดคล้องกับรูปแบบ ux/ui style ที่ใช้เดิมด้วยนะ 
+
+
+การกำหนด ตารางทำงานของผู้ให้บริการ
+กำหนดช่วงเวลาที่ผู้ให้บริการแต่ละคนพร้อมรับจอง
+เพิ่มตารางใหม่ เมื่อเลือก ผู้ให้บริการไปแล้ว ยังสามารถเลือกคนนั้นได้อีกทั้งที่ไม่ควรเลือกได้
+
+กำหนดใน template ว่า ต้องกำหนด / เลือกผู้ให้บริการ แต่ในการจอง http://localhost:5001/book/confirm?subdomain=humnoi  ไม่ปรากฎผู้บริการให้เลือก (ขอให้เพิ่มในกรณี ที่ไม่รู้จะเลือกใคร อยากให้ผู้ใช้ระบุได้ด้วยว่า ไม่ต้องการเลือก ซึ่งก็หมายความว่าให้ระบบเลือกให้ก็ได้เช่นกัน) 
+
+
+การกำหนด ตารางทำงานของผู้ให้บริการ
+กำหนดช่วงเวลาที่ผู้ให้บริการแต่ละคนพร้อมรับจอง
+เพิ่มตารางใหม่
+เป็นไปได้หรือไม่ ว่าให้กำหนดวัน default ให้เป็นไปตาม template ที่เลือกมา เช่น template ที่เลือกมา เปิด เสาร์, อาทิตย์ ก็ให้ วันของการทำงานของผู้ให้บริการ default เป็นวันดังกล่าวเลย 
+แต่ถ้าอยากปรับเปลี่ยนก็ปรับได้ และตอนนี้เมื่อเพิ่มตารางทำงานของผู้ให้บริการไปแล้ว ไม่สามารถแก้ไขได้ ต้องลบแล้วสร้างใหม่เท่านั้น ซึ่งไม่สะดวกกับการใช้งาน (ปัจจุบันมีปุ่ม ปิดการใช้งาน, ลบ) ควรมีปุ่มการแก้ไขด้วย 
+
+กดเพิ่มตารางใหม่ แต่ หน้าต่างที่แสดงขึ้นมา ยังไม่เลือกวันตาม template ไว้ให้ ต้องมาเลือกเอง ได้บอกให้แก้ไขไปแล้ว ช่วยตรวจสอบอีกครั้งว่าได้ทำหรือยัง ในส่วนของการเพิ่มตารางทำงานของผู้ให้บริการ
+
+ตรวจสอบใน todo.md ด้วยว่าอันไหนทำแล้วบ้าง ให้ใส่เครื่องหมายทำแล้วเข้าไป โดยตรวจสอบกับ source code หรือประวัติการคุยที่ผ่านมา ถ้าอันไหนยังไม่ได้ทำ ให้ list รายการและข้อแนะนำมาให้ตรวจสอบก่อน
+
+   Remaining Items & Suggestions
+   1. FastAPI Holiday Alignment – Integrate holiday/override logic with provider schedules so API responses respect
+      per-provider exceptions.
+   2. Public Booking Flow Enhancements – Feed capacity metadata into the calendar, expand provider-selection UX beyond
+      the confirm step, and ensure slot-fetch APIs include room/provider limits.
+
+คือการทำอะไรบ้าง ช่วยอธิบายเพิ่มเติมได้ไหม 
+ 
+
+ข้อแรก นี่เป็นเรื่องจำเป็นต้องทำนี่ ทำเลยได้ไหม 1. FastAPI Holiday Alignment – Integrate holiday/override logic with provider schedules so API responses respect
+      per-provider exceptions. ปรับ logic ฝั่ง FastAPI ให้คำนึงถึงวันหยุด/วันปิดพิเศษเมื่อคำนวณตารางทำงานของแต่ละผู้ให้บริการ (เช่น ถ้ามี leave หรือ override เฉพาะคน ให้ตอบ
+    availability เป็นปิด) เพื่อให้ข้อมูลว่าง/ไม่ว่างตรงกับเหตุการณ์จริงทุกกรณี
+
+
+
+ไม่สามารถอัปเดตสถานะตารางได้: [{'type': 'missing', 'loc': ['body', 'effective_date'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'end_date'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'days_of_week'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'recurrence_pattern'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'custom_start_time'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'custom_end_time'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'schedule_type'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'notes'], 'msg': 'Field required', 'input': {'is_active': False}}]
+
+กด ปิดใช้งาน ของตารางทำงานของผู้ให้บริการแล้วขึ้น error ตามที่แจ้ง
+
+
+ไม่สามารถเพิ่มข้อจำกัดความจุได้: [{'type': 'value_error', 'loc': ['body', 'specific_date'], 'msg': 'Value error, Either specific_date or day_of_week must be provided', 'input': None, 'ctx': {'error': {}}}]
+ดูเหมือนจะไม่มีการตรวจสอบ เมื่อผู้ใช้เพิ่มข้อจำกัด resource capacity แต่ ไม่มีการตรวจสอบก่อนเพิ่ม เมื่อผู้ใช้ไม่ระบุวัน และโปรแกรมก็ไม่มีการตรวจสอบก่อนเช่นกันหรือไม่ 
+
+
+
+เลือกเป็นวันในสัปดาห์ แต่ยังขึ้น error 
+
+ไม่สามารถเพิ่มข้อจำกัดความจุได้: [{'type': 'value_error', 'loc': ['body', 'specific_date'], 'msg': 'Value error, Either specific_date or day_of_week must be provided', 'input': None, 'ctx': {'error': {}}}]
+
+INFO:     127.0.0.1:52353 - "GET /api/v1/tenants/humnoi/providers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52374 - "POST /api/v1/tenants/humnoi/availability/templates/58/capacities HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:52377 - "GET /api/v1/tenants/humnoi/availability/templates HTTP/1.1" 200 OK
+
+
+ไม่สามารถอัปเดตข้อจำกัดความจุได้: [{'type': 'missing', 'loc': ['body', 'available_rooms'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'max_concurrent_appointments'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'specific_date'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'day_of_week'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'time_slot_start'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'time_slot_end'], 'msg': 'Field required', 'input': {'is_active': False}}, {'type': 'missing', 'loc': ['body', 'notes'], 'msg': 'Field required', 'input': {'is_active': False}}]
+
+ไม่สามารถปิดการใช้งาน ที่ปุ่มปิดใช้งาน ได้ ในส่วนของ ข้อจำกัดความจุ (Resource Capacity) และไม่มีปุ่มแก้ไขด้วย ซึ่งควรมี 
+
+
+หน้าแก้ไข template http://localhost:5001/settings/availability/template/64/edit?subdomain=humnoi เมื่อเพิ่มวันหยุดพิเศษไปแล้ว เมื่อกดบันทึก มีการแจ้ง  เพิ่มวันพิเศษเรียบร้อยแล้ว! แต่หน้า ในส่วนของ template นี้ ไม่แสดงวันหยุดที่เพิ่มขึ้นไปมาให้ (น่าจะเพราะบันทึกการแก้ไข) แต่ user อาจจะงงได้ เพราะ กดปุ่มเพิ่มวันพิเศษไปแล้ว จะทำอย่างไร แต่แม้ไม่แสดง ถ้าผู้ใช้ กดบันทึกการแก้ไข วันหยุดพิเศษ ก็เพิ่มเข้าไปจริง พอกลับออกมาที่หน้า http://localhost:5001/settings/availability?selected_template=24&subdomain=humnoi ถึงจะเห็น แต่ตอนแก้ไข และเพิ่มวันหยุดพิเศษ มันไม่เห็น อย่างที่บอก ผู้ใช้งานอาจสับสนได้ 
+
+
+เหมือนว่าการกดเพิ่มวันหยุดพิเศษ จะเพิ่มทันที โดยไม่ได้กดบันทึกการแก้ไข ซึ่งน่าจะไม่ถูก http://localhost:5001/settings/availability/template/24/edit?subdomain=humnoi
+มันควรแค่แสดงผล รอไว้ ถ้าผู้ใช้บันทึกการแก้ไข จึงค่อย เพิ่มวันหยุด หรือว่าให้มันบันทึกไปเลยก็ได้ แบบไหนดีกว่ากัน ง่ายกว่ากัน และ ตอนนี้มีปัญหาอีกอย่างคือ สามารถวันบันทึกวันหยุดพิเศษ ซ้ำได้ ซึ่งไม่ควรเป็น เพราะบันทึกซ้ำในวันเดียวกัน หรือเวลาเดียวกัน การเพิ่มวันพิเศษ แบบประเภท เวลาพิเศษ คืออะไร และเมื่อระบุประเภท เวลาพิเศษ แต่ไม่ได้ ระบุเวลา ควรทำได้หรือไม่ พอไม่ระบุ โปรแกรมไม่ได้แจ้งข้อผิดพลาด แต่เพิ่มได้ และ การใช้งานในการจองก็ไม่มีผลอะไร เวลาพิเศษมีความจำเป็นหรือไม่ ถ้ามีก็ดี ต้องตรวจสอบให้ถูกต้องด้วยว่าจะใช้อย่างไร 
+
+
+http://localhost:5001/settings/availability/template/64/edit?subdomain=humnoi
+เมื่อกดลบ วันพิเศษของเทมเพลตนี้ แล้ว แต่มันไม่ลบ แต่แจ้งว่าแก้ไข แก้ไขเทมเพลตเรียบร้อยแล้ว! แล้วออกมาหน้านี้ http://localhost:5001/settings/availability?selected_template=64&subdomain=humnoi
+
+แต่หน้านี้ กดลบวันหยุดพิเศษได้ http://localhost:5001/settings/availability?selected_template=64&subdomain=humnoi 
+
+
+พอตั้ง template เป็น  แบบไม่ระบุ provider ระบบไม่มีการตรวจสอบว่า การจองเข้ามานั้นเกิดจำนวน provider ที่จะมีให้ในเวลานั้น (การไม่ระบุ ให้ผู้ใช้เลือก provider ก็คือระบบจะต้องเลือกให้เอง แต่ระบบไม่ตรวจสอบว่า มี provider เหลืออยู่หรือไม่ ช่วยตรวจสอบให้ด้วย)
+
+
+ไม่สามารถยกเลิกนัดได้ ในหน้า dashboard http://localhost:5001/dashboard?subdomain=humnoi 
+
+127.0.0.1 - - [11/Oct/2025 22:35:02] "GET /appointments/19/admin-cancel?subdomain=humnoi HTTP/1.1" 200 -
+[2025-10-11 22:35:12,298] ERROR in routes: Error in admin cancel: type object 'datetime.datetime' has no attribute 'datetime'
+127.0.0.1 - - [11/Oct/2025 22:35:12] "POST /appointments/19/admin-cancel?subdomain=humnoi HTTP/1.1" 302 -
+[2025-10-11 22:35:12,312] INFO in logger: Route accessed: main.dashboard - GET /dashboard
+127.0.0.1 - - [11/Oct/2025 22:35:12] "GET /dashboard?subdomain=humnoi HTTP/1.1" 200 -
+
+
+
+เกิดข้อผิดพลาดในการเพิ่มวันพิเศษ: (psycopg2.errors.UndefinedTable) relation "date_overrides" does not exist LINE 2: FROM date_overrides ^ [SQL: SELECT date_overrides.id, date_overrides.date, date_overrides.template_id, date_overrides.template_scope, date_overrides.is_unavailable, date_overrides.custom_start_time, date_overrides.custom_end_time, date_overrides.reason, date_overrides.created_at FROM date_overrides WHERE date_overrides.id = %(pk_1)s] [parameters: {'pk_1': 24}] (Background on this error at: https://sqlalche.me/e/20/f405)
+
+INFO:     127.0.0.1:51454 - "GET /api/v1/tenants/humnoi/availability/template/24/details HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51455 - "GET /api/v1/tenants/humnoi/date-overrides?template_id=24 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51479 - "POST /api/v1/tenants/humnoi/date-overrides HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51481 - "GET /api/v1/tenants/humnoi/availability/template/24/details HTTP/1.1" 200 OK
+
+ผมเพิ่มวันหยุดพิเศษในนี้ http://humnoi.localhost:5001/settings/availability/template/24/edit 
+มันเพิ่มได้นะ แต่ขึ้น error ตามที่แจ้ง 
+
+App ผมสามารถเรียกใช้ได้สองรูปแบบคือ humnoi.localhost หรืออีกแบบคือ http://localhost:5001/settings/availability?subdomain=humnoi
+ที่แปลกคือมันขึ้นครั้งเดียว พอลองอีกมันไม่เป็นอีก 
+
+ช่วยตรวจสอบ error ให้ด้วย ว่าต้องแก้ไขอะไร
+
+
+ไม่สามารถเพิ่มผู้ให้บริการได้: Provider already has a schedule for this template
+INFO:     127.0.0.1:54704 - "GET /api/v1/tenants/humnoi/providers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54724 - "POST /api/v1/tenants/humnoi/availability/templates/24/providers HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:54726 - "GET /api/v1/tenants/humnoi/availability/templates HTTP/1.1" 200 OK
+เดิมมีอยู่และได้สั่งลบออกไปแล้ว แต่พอจะเพิ่มใหม่คนเดิมที่เคยลบ กลับขึ้น error 
+เป็นเพราะมีข้อมูลของ provider ที่เลือก ใน ตารางทำงานของ provider หรือไม่ เพราะคนอื่นที่ไม่มีสามารถเพิ่ม ลบ และ เพิ่มใหม่ได้
+
+
+ทำการเลื่อนนัดไม่ได้ 
+127.0.0.1 - - [12/Oct/2025 01:16:15] "GET /dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [12/Oct/2025 01:26:13] "GET /appointments/23 HTTP/1.1" 200 -
+[2025-10-12 01:26:16,563] ERROR in routes: Error in admin reschedule: (psycopg2.errors.UndefinedTable) relation "appointments" does not exist
+LINE 2: FROM appointments 
+             ^
+
+[SQL: SELECT appointments.id AS appointments_id, appointments.patient_id AS appointments_patient_id, appointments.provider_id AS appointments_provider_id, appointments.event_type_id AS appointments_event_type_id, appointments.service_type_id AS appointments_service_type_id, appointments.start_time AS appointments_start_time, appointments.end_time AS appointments_end_time, appointments.booking_reference AS appointments_booking_reference, appointments.status AS appointments_status, appointments.guest_name AS appointments_guest_name, appointments.guest_email AS appointments_guest_email, appointments.guest_phone AS appointments_guest_phone, appointments.notes AS appointments_notes, appointments.internal_notes AS appointments_internal_notes, appointments.reminder_sent AS appointments_reminder_sent, appointments.reminder_sent_at AS appointments_reminder_sent_at, appointments.cancelled_at AS appointments_cancelled_at, appointments.cancelled_by AS appointments_cancelled_by, appointments.cancellation_reason AS appointments_cancellation_reason, appointments.rescheduled_from_id AS appointments_rescheduled_from_id, appointments.reschedule_count AS appointments_reschedule_count, appointments.created_at AS appointments_created_at, appointments.updated_at AS appointments_updated_at 
+FROM appointments 
+WHERE appointments.id = %(id_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'id_1': 23, 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+[2025-10-12 01:26:16,565] ERROR in __init__: Error during session teardown: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SET search_path TO public]
+(Background on this error at: https://sqlalche.me/e/20/2j85)
+127.0.0.1 - - [12/Oct/2025 01:26:16] "GET /appointments/23/admin-reschedule HTTP/1.1" 302 -
+
+
+
+http://humnoi.localhost:5001/appointments/23/admin-reschedule จากหน้าเลื่อนนัด มีการให้กำหนดวันใหม่ เวลาใหม่ เหตุผล ซึ่งก็ดี แต่ ปัญหาคือ การนัดนั้นนั้น ถ้าเห็นแค่นี้ ก็จะไม่รู้ว่าวันที่จะนัดใหม่ นั้น เป็นวันว่างหรือไม่ ถ้าไม่ว่าง มันก็ไม่เตือน หรือ เตือนแต่ไม่แสดง เพราะไปแสดงในหน้าอื่น เช่น dashboard
+และการเลื่อนเป็นไปตาม template, provider หรือเงื่อนไขอื่น ๆ หรือไม่ ตรงนี้จะทำอย่างไร หรือเราควรจะแสดงหน้าการเลื่อนให้มี ux/ui คล้ายกับ การจองในครั้งแรก เพื่อที่จะเลือกได้เฉพาะวัน เวลา ตามเงื่อนไขของ template โดยที่ต้องไม่ให้เลือกเวลาเดิม (เพราะเราจะเลื่อนไปเวลาวันอื่น) แต่การแสดงวันเวลาที่สามารถเลื่อนได้ น่าจะดีกว่าการให้กรอกเอง ต้องปรับ โปรแกรม และ html template ไหนบ้าง ลองดูหน่อย 
+
+
+ทำการเลื่อนนัดได้  มีการจองวันใหม่ แต่ มันกลายเป็นสร้างเพิ่ม หมายถึงของเก่ามันไม่ถูกยกเลิก หรือ ลบออกไป 
+OCT
+14
+2025
+09:15
+ฉีดวัคซีน
+จะเลิกตอแหลวันไหน
+📱 026762601
+🔖 VN-V9V2A6
+OCT
+27
+2025
+09:00
+ฉีดวัคซีน
+จะเลิกตอแหลวันไหน
+📱 026762601
+🔖 VN-N2X9D5
+OCT
+27
+2025
+09:15
+ฉีดวัคซีน
+จะเลิกตอแหลวันไหน
+📱 026762601
+🔖 VN-M5Q3P7
+
+
+นัดที่ถูกยกเลิกไปแล้ว สามารถกู้คืนนัดหมายได้ แต่ จะมีปัญหาคือ การกู้คืนนั้นอาจจะไปชนกับนัดหมายที่มีอยู่แล้ว (เมื่อยกเลิก time slot จะว่าง ทำให้มีการจองเข้ามาใหม่ใน time slot นั้นได้) 
+การกู้คืนกรณีที่ไปซ้ำกับ time slot ที่ถูกจองมาใหม่ ไม่ควรกู้คืนได้ แต่ควรไปทำ reschedule แทน แล้วจึงกู้คืนการยกเลิก กลับไปเป็นการนัดหมายปกติ ตรงนี้จะแก้ไขอย่างไร
+
+การลบนัดหมายที่ถูกยกเลิกไปแล้ว http://humnoi.localhost:5001/appointments/9/delete ขึ้นข้อความนี้มา 
+{
+  "message": "\u0e25\u0e1a\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22\u0e40\u0e23\u0e35\u0e22\u0e1a\u0e23\u0e49\u0e2d\u0e22\u0e41\u0e25\u0e49\u0e27",
+  "success": true
+}
+
+แทนที่จะกลับมาหน้า dashboard พร้อมแสดงข้อความว่าลบสำเร็จ จะแก้ไขอย่างไร 
+
+การกู้คืนคืน เมื่อขึ้น "ไม่สามารถกู้คืนนัดหมายได้ เนื่องจากช่วงเวลานี้ถูกจองแล้ว กรุณาเลื่อนนัดไปเวลาอื่น" 
+แล้วควรส่งต่อไปหน้า reschedule เช่น 
+http://humnoi.localhost:5001/appointments/17/admin-reschedule
+เพื่อทำการนัดหมายใหม่ ตอนนี้แจ้งเตือนแล้วกลับมาหน้า dashboard แทนที่จะไปต่อที่หน้า admin-reschedule 
+
+ไม่สามารถ reschedule http://humnoi.localhost:5001/appointments/21/admin-reschedule
+กรณีที่เป็นผู้นัดที่มีการยกเลิกไปแล้วได้ ลำดับที่ทำคือ ยกเลิก, กู้คืน, การกู้คืนซ้ำกับเวลาคนอื่น, ทำ reschedule แต่กดบันทึกการเลื่อนไม่ได้ วนกลับมาหน้า reschedule เหมือนเดิม
+INFO:     127.0.0.1:50342 - "POST /api/v1/tenants/humnoi/booking/restore HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:50345 - "GET /api/v1/tenants/humnoi/booking/availability/19?date=2025-10-14 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50355 - "POST /api/v1/tenants/humnoi/booking/reschedule HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50359 - "GET /api/v1/tenants/humnoi/booking/availability/19?date=2025-10-14 HTTP/1.1" 200 OK
+
+น่าจะเพราะรายการนั้นถูกยกเลิกจึงทำให้ reschedule ไม่ได้ (แต่เรากำลังจะกู้คืน) ตรงนี้จะแก้ไขลำดับการทำงานอย่างไรดี
+
+ข้อความ "ไม่สามารถกู้คืนนัดหมายได้ เนื่องจากช่วงเวลานี้ถูกจองแล้ว กรุณาเลื่อนนัดไปเวลาอื่น" ควรจะถูกส่งไปแสดงหน้า reschedule
+ไม่ใช่มาแสดง เมื่อ reschedule เสร็จแล้ว จากการกู้คืน
+
+อีกอย่างผมมีแก้ไข html dashboard ไป มึงมาลบของกูออกไปทำไม ก่อนทำอะไรในการเขียนไฟล์ช่วยตรวจสอบ ก่อนด้วย
+
+มันยังขึ้นมาแบบนี้
+ไม่สามารถกู้คืนนัดหมายได้ เนื่องจากช่วงเวลานี้ถูกจองแล้ว กรุณาเลื่อนนัดไปเวลาอื่น 
+เลื่อนนัดหมายเรียบร้อยแล้ว - รหัส: VN-U1R2V5
+เกิดขึ้นเมื่อกด กู้คืน และทำการ reschedule แล้ว
+แทนที่เมื่อกดกู้คืน แล้วไปที่หน้า reschedule ควรจะขึ้น ไม่สามารถกู้คืนนัดหมายได้ เนื่องจากช่วงเวลานี้ถูกจองแล้ว กรุณาเลื่อนนัดไปเวลาอื่น แจ้งในหน้า reschedule 
+เมื่อเลื่อนนัดเสร็จก็ขึ้น เลื่อนนัดหมายเรียบร้อยแล้ว - รหัส: VN-U1R2V5 ตามปกติ
+
+ขึ้นข้อความ เกิดข้อผิดพลาด ตอนกดยืนยันการยกเลิก
+127.0.0.1 - - [13/Oct/2025 12:40:21] "GET /appointments/17/admin-cancel HTTP/1.1" 200 -
+[2025-10-13 12:40:35,925] ERROR in routes: Error in admin cancel: (psycopg2.errors.UndefinedTable) relation "appointments" does not exist
+LINE 2: FROM appointments 
+             ^
+
+[SQL: SELECT appointments.id AS appointments_id, appointments.patient_id AS appointments_patient_id, appointments.provider_id AS appointments_provider_id, appointments.event_type_id AS appointments_event_type_id, appointments.service_type_id AS appointments_service_type_id, appointments.start_time AS appointments_start_time, appointments.end_time AS appointments_end_time, appointments.booking_reference AS appointments_booking_reference, appointments.status AS appointments_status, appointments.guest_name AS appointments_guest_name, appointments.guest_email AS appointments_guest_email, appointments.guest_phone AS appointments_guest_phone, appointments.notes AS appointments_notes, appointments.internal_notes AS appointments_internal_notes, appointments.reminder_sent AS appointments_reminder_sent, appointments.reminder_sent_at AS appointments_reminder_sent_at, appointments.cancelled_at AS appointments_cancelled_at, appointments.cancelled_by AS appointments_cancelled_by, appointments.cancellation_reason AS appointments_cancellation_reason, appointments.rescheduled_from_id AS appointments_rescheduled_from_id, appointments.reschedule_count AS appointments_reschedule_count, appointments.created_at AS appointments_created_at, appointments.updated_at AS appointments_updated_at 
+FROM appointments 
+WHERE appointments.id = %(pk_1)s]
+[parameters: {'pk_1': 17}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+127.0.0.1 - - [13/Oct/2025 12:40:35] "POST /appointments/17/admin-cancel HTTP/1.1" 302 -
+[2025-10-13 12:40:35,943] INFO in logger: Route accessed: main.dashboard - GET /dashboard
+127.0.0.1 - - [13/Oct/2025 12:40:36] "GET /dashboard HTTP/1.1" 200 -
+แต่รายการก็ถูกยกเลิกไปได้นะ
+
+
+ใน dashboard.html และ route.py 
+มีการจัดเรียง ตารางนัด ตามวันที่และเวลา ผมอยากให้มีการจัดเรียงโดยแบ่งเป็นกลุ่มตาม ประเภทการนัดหมายด้วย (น่าจะ appointment.event_type.name) 
+โดยแสดงบนหน้าจอให้ดูง่ายและเป็นระเบียบ สะดวกในการดูและการจัดการ
+
+
+การทำงานของโปรแกรมตอนนี้เป็นไปตามแนวทางนี้ไหม ในการคำนวณหา time slot
+ให้ตอบคำถามอย่างเดียว ไม่ต้องแก้ไขโปรแกรม
+def get_available_slots(template_id, target_date, target_time):
+    template = db.get(AvailabilityTemplate, template_id)
+    
+    # เช็ค override/holiday (ถ้ามี table)
+    if is_unavailable_due_to_override_or_holiday(template_id, target_date):
+        return {'is_available': False}
+    
+    # หา providers ที่ active วันนี้ (จาก many-to-many + schedule ถ้ามี)
+    active_providers = get_active_providers(template_id, target_date)  # จาก relationship + filter schedule/leave
+    
+    max_capacity = template.max_capacity or len(active_providers)  # หรือจาก ResourceCapacity ถ้ามี
+    
+    booked_count = count_booked_appointments(template_id, target_date, target_time)
+    
+    available = max_capacity - booked_count
+    return {'is_available': available > 0, 'available_count': available}

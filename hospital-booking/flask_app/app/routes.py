@@ -51,7 +51,7 @@ def index():
             return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         else:
             current_app.logger.warning(f"Access denied for user {current_user.email} to {subdomain}")
-            flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
+            flash('คุณไม่มีสิทธิ์เข้าถึงผู้ให้บริการนี้', 'error')
             return redirect(url_for('auth.logout'))
     
     # ถ้ามี tenant แต่ไม่ได้ login
@@ -61,7 +61,7 @@ def index():
     
     # ถ้าผู้ใช้ login แล้วแต่ไม่ได้ระบุ tenant
     elif current_user and not tenant_schema:
-        # Redirect ไปยัง dashboard ของโรงพยาบาลตัวเอง
+        # Redirect ไปยัง dashboard ของผู้ให้บริการตัวเอง
         return redirect(get_dashboard_url(current_user.hospital.subdomain))
     
     # แสดง landing page สำหรับผู้ใช้ที่ยังไม่ login
@@ -87,7 +87,7 @@ def dashboard():
     current_app.logger.debug(f"Dashboard - Tenant: {tenant_schema}, Subdomain: {subdomain}")
 
     if not tenant_schema:
-        flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
+        flash('ไม่พบข้อมูลผู้ให้บริการ', 'error')
         return redirect(url_for('main.index'))
     
     if not current_user:
@@ -95,7 +95,7 @@ def dashboard():
         return redirect(url_for('auth.login'))
     
     if not check_tenant_access(subdomain):
-        flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
+        flash('คุณไม่มีสิทธิ์เข้าถึงผู้ให้บริการนี้', 'error')
         return redirect(url_for('auth.logout'))
     
     db = None
@@ -1051,7 +1051,7 @@ def event_types_settings():
     
     hospital = current_user.hospital
     if not hospital:
-        flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
+        flash('ไม่พบข้อมูลผู้ให้บริการ', 'error')
         return redirect(url_for('main.index'))
     
     return render_template('settings/event-types.html', 
@@ -1065,7 +1065,7 @@ def public_booking(provider_url, event_slug=None):
     tenant_schema, subdomain = TenantManager.get_tenant_context()
     
     if not tenant_schema:
-        flash('ไม่พบข้อมูลโรงพยาบาล', 'error')
+        flash('ไม่พบข้อมูลผู้ให้บริการ', 'error')
         return redirect(url_for('main.index'))
     
     try:

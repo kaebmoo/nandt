@@ -153,7 +153,7 @@ def with_tenant(require_access=True, redirect_on_missing=True):
             if require_access and subdomain:
                 if not TenantManager.validate_tenant_access(subdomain):
                     from flask import flash
-                    flash('คุณไม่มีสิทธิ์เข้าถึงโรงพยาบาลนี้', 'error')
+                    flash('คุณไม่มีสิทธิ์เข้าถึงผู้ให้บริการนี้', 'error')
                     return redirect(url_for('main.index'))
             
             # Set context for use in views

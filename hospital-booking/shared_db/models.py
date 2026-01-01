@@ -27,6 +27,17 @@ class DayOfWeek(enum.Enum):
     FRIDAY = 5
     SATURDAY = 6
 
+class UserRole(str, enum.Enum):
+    """User role for access control"""
+    SUPER_ADMIN = "super_admin"
+    HOSPITAL_ADMIN = "hospital_admin"
+
+class HospitalStatus(str, enum.Enum):
+    """Hospital status for tenant management"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    DELETED = "deleted"
+
 # --- Public Schema Models ---
 class Hospital(PublicBase):
     __tablename__ = 'hospitals'
@@ -36,8 +47,26 @@ class Hospital(PublicBase):
     name = Column(String(100), nullable=False)
     subdomain = Column(String(50), unique=True, nullable=False, index=True)
     schema_name = Column(String(50), unique=True, nullable=False)
+
+    # Status and control fields
+    status = Column(SQLEnum(HospitalStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=HospitalStatus.ACTIVE)
+    is_public_booking_enabled = Column(Boolean, default=True)
+
+    # Stripe integration
     stripe_customer_id = Column(String(100))
     stripe_subscription_id = Column(String(100))
+
+    # Additional info
+    address = Column(Text)
+    phone = Column(String(20))
+    email = Column(String(120))
+    description = Column(Text)
+
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    deleted_at = Column(DateTime, nullable=True)
+
     users = relationship("User", back_populates="hospital", cascade="all, delete-orphan")
 
 class User(PublicBase):
@@ -49,8 +78,17 @@ class User(PublicBase):
     password_hash = Column(String(200))
     name = Column(String(100))
     phone_number = Column(String(20))
-    hospital_id = Column(Integer, ForeignKey('public.hospitals.id'), nullable=False)
+
+    # Role-based access control
+    role = Column(SQLEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=UserRole.HOSPITAL_ADMIN)
+
+    # hospital_id is nullable for super admins
+    hospital_id = Column(Integer, ForeignKey('public.hospitals.id'), nullable=True)
     hospital = relationship("Hospital", back_populates="users")
+
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hospital.name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="fas fa-building"></i> {{ hospital.name }}</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('tenants.list_tenants') }}">Tenants</a></li>
+                <li class="breadcrumb-item active">{{ hospital.name }}</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('tenants.edit_tenant', tenant_id=hospital.id) }}" class="btn btn-warning">
+            <i class="fas fa-edit"></i> แก้ไข
+        </a>
+    </div>
+</div>
+
+<!-- Tenant Information -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> ข้อมูล Tenant</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width: 200px">ID:</th>
+                        <td>{{ hospital.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>ชื่อผู้ให้บริการ:</th>
+                        <td>{{ hospital.name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Subdomain:</th>
+                        <td><code>{{ hospital.subdomain }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Schema Name:</th>
+                        <td><code>{{ hospital.schema_name }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td>
+                            <span class="badge bg-{{ 'success' if hospital.status.value == 'active' else 'secondary' }}">
+                                {{ hospital.status.value }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Public Booking:</th>
+                        <td>
+                            <span class="badge bg-{{ 'info' if hospital.is_public_booking_enabled else 'warning' }}">
+                                {{ 'เปิดใช้งาน' if hospital.is_public_booking_enabled else 'ปิดใช้งาน' }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% if hospital.address %}
+                    <tr>
+                        <th>ที่อยู่:</th>
+                        <td>{{ hospital.address }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if hospital.phone %}
+                    <tr>
+                        <th>เบอร์โทรศัพท์:</th>
+                        <td>{{ hospital.phone }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if hospital.email %}
+                    <tr>
+                        <th>อีเมล:</th>
+                        <td>{{ hospital.email }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if hospital.description %}
+                    <tr>
+                        <th>รายละเอียด:</th>
+                        <td>{{ hospital.description }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if hospital.created_at %}
+                    <tr>
+                        <th>สร้างเมื่อ:</th>
+                        <td>{{ hospital.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if hospital.updated_at %}
+                    <tr>
+                        <th>อัพเดทล่าสุด:</th>
+                        <td>{{ hospital.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Statistics Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> สถิติ</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="fas fa-user-injured text-primary"></i>
+                        <strong>Patients:</strong> {{ stats.patients }}
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-user-md text-success"></i>
+                        <strong>Providers:</strong> {{ stats.providers }}
+                    </li>
+                    <li class="mb-0">
+                        <i class="fas fa-calendar-check text-info"></i>
+                        <strong>Appointments:</strong> {{ stats.appointments }}
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Actions Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cog"></i> จัดการ</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-{{ 'secondary' if hospital.status.value == 'active' else 'success' }}"
+                            onclick="toggleStatus()">
+                        <i class="fas fa-{{ 'pause' if hospital.status.value == 'active' else 'play' }}"></i>
+                        {{ 'ปิดการใช้งาน' if hospital.status.value == 'active' else 'เปิดการใช้งาน' }}
+                    </button>
+
+                    <button class="btn btn-{{ 'warning' if hospital.is_public_booking_enabled else 'info' }}"
+                            onclick="togglePublicBooking()">
+                        <i class="fas fa-calendar"></i>
+                        {{ 'ปิด Public Booking' if hospital.is_public_booking_enabled else 'เปิด Public Booking' }}
+                    </button>
+
+                    <hr>
+
+                    <button class="btn btn-danger" onclick="deleteTenant()">
+                        <i class="fas fa-trash"></i> ลบ Tenant (Soft Delete)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Admin Users List -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-users-cog"></i> Admin Users ({{ users|length }})</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAdminModal">
+                    <i class="fas fa-user-plus"></i> สร้าง Admin User
+                </button>
+            </div>
+            <div class="card-body">
+                {% if users %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>ชื่อ</th>
+                                <th>Email</th>
+                                <th>เบอร์โทร</th>
+                                <th>สร้างเมื่อ</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.id }}</td>
+                                <td>{{ user.name }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.phone_number or '-' }}</td>
+                                <td>
+                                    {% if user.created_at %}
+                                        {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning"
+                                            onclick="showResetPasswordModal({{ user.id }}, '{{ user.name }}')">
+                                        <i class="fas fa-key"></i> Reset Password
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-user-slash fa-2x mb-2"></i>
+                    <p>ยังไม่มี admin users ในระบบ</p>
+                    <p class="text-danger"><small>⚠️ สร้าง admin user เพื่อให้ผู้ให้บริการสามารถเข้าใช้งานระบบได้</small></p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Admin User Modal -->
+<div class="modal fade" id="createAdminModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">สร้าง Admin User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createAdminForm">
+                    <div class="mb-3">
+                        <label class="form-label">ชื่อ <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" name="email" required>
+                        <small class="text-muted">ใช้สำหรับ login</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" name="password" required minlength="6">
+                        <small class="text-muted">อย่างน้อย 6 ตัวอักษร</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">เบอร์โทร</label>
+                        <input type="tel" class="form-control" name="phone_number">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-primary" onclick="createAdminUser()">สร้าง Admin User</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Reset password สำหรับ: <strong id="resetUserName"></strong></p>
+                <form id="resetPasswordForm">
+                    <input type="hidden" id="resetUserId" name="user_id">
+                    <div class="mb-3">
+                        <label class="form-label">Password ใหม่ <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" name="new_password" required minlength="6">
+                        <small class="text-muted">อย่างน้อย 6 ตัวอักษร</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-warning" onclick="resetPassword()">Reset Password</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const tenantId = {{ hospital.id }};
+const tenantName = "{{ hospital.name }}";
+
+// Get CSRF token from meta tag
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+function toggleStatus() {
+    if (!confirm(`ต้องการเปลี่ยนสถานะ tenant "${tenantName}" หรือไม่?`)) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csrf_token', getCsrfToken());
+
+    fetch(`/tenants/${tenantId}/toggle-status`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => alert('เกิดข้อผิดพลาด: ' + error));
+}
+
+function togglePublicBooking() {
+    if (!confirm(`ต้องการเปลี่ยนสถานะ public booking สำหรับ "${tenantName}" หรือไม่?`)) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csrf_token', getCsrfToken());
+
+    fetch(`/tenants/${tenantId}/toggle-public-booking`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => alert('เกิดข้อผิดพลาด: ' + error));
+}
+
+function deleteTenant() {
+    if (!confirm(`ต้องการลบ tenant "${tenantName}" หรือไม่?\n\n(นี่เป็น soft delete สามารถ restore ได้)`)) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csrf_token', getCsrfToken());
+
+    fetch(`/tenants/${tenantId}/delete`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '/tenants';
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => alert('เกิดข้อผิดพลาด: ' + error));
+}
+
+function createAdminUser() {
+    const form = document.getElementById('createAdminForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const formData = new FormData(form);
+    formData.append('csrf_token', getCsrfToken());
+
+    fetch(`/tenants/${tenantId}/create-admin`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => alert('เกิดข้อผิดพลาด: ' + error));
+}
+
+function showResetPasswordModal(userId, userName) {
+    document.getElementById('resetUserId').value = userId;
+    document.getElementById('resetUserName').textContent = userName;
+
+    // Clear the form
+    document.getElementById('resetPasswordForm').reset();
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+    modal.show();
+}
+
+function resetPassword() {
+    const form = document.getElementById('resetPasswordForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const userId = document.getElementById('resetUserId').value;
+    const formData = new FormData(form);
+    formData.append('csrf_token', getCsrfToken());
+
+    fetch(`/tenants/${tenantId}/reset-password/${userId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('resetPasswordModal'));
+            modal.hide();
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + data.message);
+        }
+    })
+    .catch(error => alert('เกิดข้อผิดพลาด: ' + error));
+}
+</script>
+{% endblock %}

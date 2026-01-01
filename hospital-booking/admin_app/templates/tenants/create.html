@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}สร้าง Tenant ใหม่{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="fas fa-plus-circle"></i> สร้าง Tenant ใหม่</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('tenants.list_tenants') }}">Tenants</a></li>
+                <li class="breadcrumb-item active">สร้างใหม่</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('tenants.create_tenant') }}">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        <span class="text-danger">*</span>
+                        {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback">
+                                {{ form.name.errors[0] }}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.subdomain.label(class="form-label") }}
+                        <span class="text-danger">*</span>
+                        {{ form.subdomain(class="form-control" + (" is-invalid" if form.subdomain.errors else "")) }}
+                        {% if form.subdomain.errors %}
+                            <div class="invalid-feedback">
+                                {{ form.subdomain.errors[0] }}
+                            </div>
+                        {% endif %}
+                        <small class="form-text text-muted">
+                            ใช้ตัวอักษรภาษาอังกฤษพิมพ์เล็ก ตัวเลข และ - เท่านั้น (เช่น humnoi)
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.address.label(class="form-label") }}
+                        {{ form.address(class="form-control") }}
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.phone.label(class="form-label") }}
+                            {{ form.phone(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.email.label(class="form-label") }}
+                            {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else "")) }}
+                            {% if form.email.errors %}
+                                <div class="invalid-feedback">
+                                    {{ form.email.errors[0] }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control") }}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('tenants.list_tenants') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> ยกเลิก
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> สร้าง Tenant
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-info-circle"></i> คำแนะนำ</h5>
+                <ul class="small">
+                    <li>Subdomain จะถูกใช้สร้าง database schema อัตโนมัติ</li>
+                    <li>ระบบจะสร้าง schema ชื่อ <code>tenant_{subdomain}</code></li>
+                    <li>Subdomain ต้องไม่ซ้ำกับที่มีอยู่แล้วในระบบ</li>
+                    <li>Tenant ใหม่จะมีสถานะ Active โดยอัตโนมัติ</li>
+                    <li>Public booking จะเปิดใช้งานโดยอัตโนมัติ</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
