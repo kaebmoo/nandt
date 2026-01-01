@@ -10,7 +10,7 @@ import logging
 from shared_db.models import (Appointment, User, Hospital, 
                               Provider, EventType, Patient, 
                               ServiceType, AvailabilityTemplate,
-                              TemplateProvider)
+                              TemplateProvider, AuditLog)
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access 
 from .utils.url_helper import get_dashboard_url, build_url_with_context
@@ -1167,3 +1167,91 @@ def favicon():
     # Return a simple 204 No Content response to avoid 404 errors
     from flask import Response
     return Response(status=204)
+
+@bp.route('/api/reveal-data', methods=['POST'])
+@login_required
+@with_tenant(require_access=True)
+def reveal_data():
+    """
+    API สำหรับเปิดดูข้อมูล Sensitive (Log Audit Trail)
+    Request: { "resource_type": "Patient", "resource_id": 1, "field": "phone_number" }
+    """
+    try:
+        current_app.logger.info(f"Reveal Data Request: {request.json}") # Debug Input
+        
+        db = get_db_session()
+        tenant_schema = g.tenant_schema
+        current_user = get_current_user()
+        
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        data = request.json
+        resource_type = data.get('resource_type')
+        resource_id = data.get('resource_id')
+        field = data.get('field') # e.g., 'phone_number', 'email', 'id_card'
+        
+        # Convert to int if possible (safe cast)
+        try:
+            resource_id_int = int(resource_id)
+        except (ValueError, TypeError):
+            resource_id_int = resource_id
+            
+        current_app.logger.info(f"Reveal: Type={resource_type}, ID={resource_id} (Int: {resource_id_int}), Field={field}")
+        
+        # 1. บันทึก Audit Log
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action='VIEW_SENSITIVE_DATA',
+            resource_type=resource_type,
+            resource_id=str(resource_id),
+            details={'field': field, 'reason': 'User requested view'},
+            ip_address=request.remote_addr,
+            user_agent=str(request.user_agent)
+        )
+        db.add(audit_log)
+        db.commit() # Commit log first
+        
+        # Re-set search path after commit to ensure it persists for the next query
+        # (Depending on pool/session configuration, commit might reset connection state)
+        current_app.logger.debug(f"Re-setting search path to {tenant_schema} after commit")
+        db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+
+        # 2. ดึงข้อมูลจริง
+        result_value = None
+        
+        if resource_type == 'Patient':
+            patient = db.query(Patient).filter_by(id=resource_id_int).first()
+            if patient:
+                if field == 'phone_number':
+                    result_value = patient.phone_number
+                elif field == 'email':
+                    result_value = patient.email
+                elif field == 'national_id':
+                    result_value = patient.national_id
+            else:
+                current_app.logger.warning(f"Patient not found: ID {resource_id_int}")
+                
+        elif resource_type == 'Appointment':
+            apt = db.query(Appointment).filter_by(id=resource_id_int).first()
+            if apt:
+                if field == 'guest_phone':
+                    result_value = apt.guest_phone
+                elif field == 'guest_email':
+                    result_value = apt.guest_email
+            else:
+                current_app.logger.warning(f"Appointment not found: ID {resource_id}")
+                
+        current_app.logger.info(f"Reveal Result for {resource_type} {resource_id} field {field}: {result_value}")
+        
+        if result_value is None:
+            return jsonify({'error': 'Data not found', 'debug': f'{resource_type} {resource_id}'}), 404
+            
+        return jsonify({'success': True, 'value': result_value})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error revealing data: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        if db:
+            db.rollback()
+        return jsonify({'error': str(e)}), 500

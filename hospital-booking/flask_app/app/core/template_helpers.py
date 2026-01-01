@@ -95,6 +95,21 @@ def register_template_filters(app):
             return time.strftime('%H:%M')
         except:
             return str(time)
+            
+    # --- Masking Filters ---
+    from ..utils.masking import mask_phone, mask_email, mask_id_card
+    
+    @app.template_filter('mask_phone')
+    def mask_phone_filter(phone):
+        return mask_phone(phone)
+        
+    @app.template_filter('mask_email')
+    def mask_email_filter(email):
+        return mask_email(email)
+        
+    @app.template_filter('mask_id_card')
+    def mask_id_card_filter(id_card):
+        return mask_id_card(id_card)
 
 
 def register_template_context(app):

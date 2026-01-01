@@ -420,6 +420,22 @@ class Appointment(TenantBase):
     service_type = relationship("ServiceType", back_populates="appointments")
     rescheduled_from = relationship("Appointment", remote_side=[id])
 
+class AuditLog(TenantBase):
+    """Log sensitive data access and actions"""
+    __tablename__ = 'audit_logs'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)  # ID ของ User ที่ทำรายการ (อาจจะเป็น NULL ถ้าเป็น system action)
+    action = Column(String(50), nullable=False) # e.g., 'VIEW_MASKED_DATA', 'EXPORT_REPORT'
+    resource_type = Column(String(50)) # e.g., 'Patient', 'Appointment'
+    resource_id = Column(String(50)) # ID ของสิ่งที่ถูกกระทำ
+    
+    details = Column(JSON) # เก็บรายละเอียดเพิ่มเติม เช่น field ที่ดู
+    
+    ip_address = Column(String(45))
+    user_agent = Column(String(255))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
 # สำหรับ backward compatibility
 Base = PublicBase
 
