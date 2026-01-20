@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2>
+            <i class="fas fa-history text-muted me-2"></i>Audit Logs for {{ tenant.name }}
+        </h2>
+        <p class="text-muted mb-0">Subdomain: <code>{{ tenant.subdomain }}</code></p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('tenants.list_tenants') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Tenants
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 15%">Time</th>
+                        <th style="width: 15%">User</th>
+                        <th style="width: 15%">Action</th>
+                        <th style="width: 15%">Resource</th>
+                        <th style="width: 25%">Details</th>
+                        <th style="width: 15%">IP Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="text-nowrap small">
+                            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </td>
+                        <td>
+                            {% if log.user %}
+                            <div class="fw-bold text-dark">{{ log.user.name }}</div>
+                            <div class="small text-muted">{{ log.user.email }}</div>
+                            {% else %}
+                            <span class="text-muted">ID: {{ log.user_id }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span
+                                class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                {{ log.action }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if log.resource_type %}
+                            <div class="small">
+                                <span class="fw-bold">{{ log.resource_type }}</span>
+                                <span class="text-muted">#{{ log.resource_id }}</span>
+                            </div>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.details %}
+                            <div class="small text-wrap font-monospace bg-light p-1 rounded border">
+                                {{ log.details|tojson(indent=2) if log.details is mapping else log.details }}
+                            </div>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="small font-monospace text-muted">
+                            {{ log.ip_address or '-' }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="fas fa-info-circle fa-2x mb-3 d-block"></i>
+                            No audit logs found for this tenant.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Simple Pagination (if implemented in backend later) -->
+        {% if pagination %}
+        <nav class="mt-4">
+            <!-- Pagination controls could go here -->
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

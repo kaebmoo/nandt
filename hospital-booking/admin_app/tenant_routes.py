@@ -7,7 +7,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from sqlalchemy import text
 from datetime import datetime
 
-from shared_db.models import Hospital, User, HospitalStatus, UserRole
+from shared_db.models import Hospital, User, HospitalStatus, UserRole, AuditLog
 from shared_db.database import engine
 from admin_app.auth import super_admin_required
 from admin_app.forms import HospitalForm
@@ -397,3 +397,30 @@ def get_tenant_stats(schema_name):
             'providers': 0,
             'appointments': 0
         }
+
+@tenant_bp.route('/<int:tenant_id>/audit-logs')
+@super_admin_required
+def view_tenant_audit_logs(tenant_id):
+    """View audit logs for a specific tenant"""
+    tenant = g.db.query(Hospital).get(tenant_id)
+    if not tenant:
+        flash('Tenant not found', 'error')
+        return redirect(url_for('tenants.list_tenants'))
+    
+    tenant_schema = tenant.schema_name
+    
+    # 1. Switch search path to Tenant Schema (+ public for User join)
+    # Using text() for safety, though schema_name comes from our DB.
+    try:
+        g.db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
+        
+        # 2. Query Audit Logs (ordered by newest first)
+        # Limit to 100 for now to avoid overload, can add pagination later
+        logs = g.db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
+        
+    except Exception as e:
+        g.db.rollback()
+        flash(f'Error accessing tenant logs: {str(e)}', 'error')
+        logs = []
+    
+    return render_template('tenants/audit_logs.html', tenant=tenant, logs=logs)

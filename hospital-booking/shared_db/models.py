@@ -4,7 +4,7 @@ from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
                         create_engine, event, Boolean,
                         Time, Text, Enum as SQLEnum, JSON, Date, UniqueConstraint, ARRAY)
 # from sqlalchemy.orm import relationship, declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 from sqlalchemy.schema import CreateSchema
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
@@ -435,6 +435,10 @@ class AuditLog(TenantBase):
     ip_address = Column(String(45))
     user_agent = Column(String(255))
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    # Relationship to User (in public schema)
+    # Passed User class directly because they are in different declarative bases (Registries)
+    user = relationship(User, primaryjoin=lambda: foreign(AuditLog.user_id) == User.id, uselist=False)
 
 # สำหรับ backward compatibility
 Base = PublicBase
