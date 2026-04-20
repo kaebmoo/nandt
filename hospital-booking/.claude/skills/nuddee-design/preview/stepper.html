@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Progress stepper</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 26px 24px; font-family: 'Sarabun', sans-serif; background: #fff; }
+  .steps { display: flex; align-items: center; }
+  .step { display: flex; align-items: center; flex-shrink: 0; }
+  .dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #fff; font-size: 14px; }
+  .label { margin-left: 8px; font-size: 14px; font-weight: 500; }
+  .bar { flex: 1; height: 4px; margin: 0 14px; border-radius: 2px; }
+  .done .dot { background: #16a34a; }
+  .done .label { color: #16a34a; }
+  .active .dot { background: #9333ea; }
+  .active .label { color: #9333ea; }
+  .future .dot { background: #d1d5db; }
+  .future .label { color: #9ca3af; }
+  svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+  <div class="steps">
+    <div class="step done"><div class="dot"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg></div><span class="label">เลือกวันเวลา</span></div>
+    <div class="bar" style="background:#9333ea;"></div>
+    <div class="step active"><div class="dot">2</div><span class="label">กรอกข้อมูล</span></div>
+    <div class="bar" style="background:#e5e7eb;"></div>
+    <div class="step future"><div class="dot">3</div><span class="label">ยืนยันการจอง</span></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Form inputs</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 16px 24px; font-family: 'Sarabun', sans-serif; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
+  label.l { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 4px; }
+  label .req { color: #ef4444; }
+  label .opt { color: #9ca3af; font-weight: 400; }
+  input, select, textarea { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit; font-size: 14px; color: #111827; outline: none; box-sizing: border-box; }
+  input:focus, select:focus { border-color: transparent; box-shadow: 0 0 0 3px rgba(147,51,234,0.3); }
+  .help { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .cb { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: #9333ea; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div>
+      <label class="l">อีเมล <span class="req">*</span></label>
+      <input type="email" placeholder="example@email.com" value="somchai@nuddee.com" style="border-color:transparent; box-shadow: 0 0 0 3px rgba(147,51,234,0.3);">
+      <div class="help">ใช้สำหรับส่งการยืนยัน</div>
+    </div>
+    <div>
+      <label class="l">เบอร์โทรศัพท์ <span class="opt">(ถ้ามี)</span></label>
+      <input type="tel" placeholder="08x-xxx-xxxx">
+      <div class="help">ขึ้นต้นด้วย 0 · 9–10 หลัก</div>
+    </div>
+    <div>
+      <label class="l">ประเภทผู้ให้บริการ</label>
+      <select><option>โรงพยาบาล</option><option>คลินิก</option><option>ทันตกรรม</option></select>
+    </div>
+    <div style="display:flex;align-items:flex-end;">
+      <div class="cb"><input type="checkbox" checked><span>ยอมรับเงื่อนไขการใช้งาน</span></div>
+    </div>
+  </div>
+</body>
+</html>

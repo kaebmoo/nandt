@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Calendar day states</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 16px 24px; font-family: 'Sarabun', sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 480px; margin-bottom: 10px; }
+  .d { min-height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; }
+  .avail { background: #f3f4f6; color: #1f2937; }
+  .sel { background: #6366f1; color: #fff; }
+  .today { border: 2px solid #6366f1; color: #1f2937; }
+  .hol { background: #fee2e2; color: #be123c; font-size: 12px; padding: 4px; }
+  .past { color: #9ca3af; }
+  .blk { background: #fef2f2; color: #b91c1c; }
+  .hd { text-align: center; font-size: 12px; font-weight: 500; padding: 4px 0; color: #4b5563; }
+  .hd.sun { color: #ef4444; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: #6b7280; flex-wrap: wrap; margin-top: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="hd sun">อา</div><div class="hd">จ</div><div class="hd">อ</div><div class="hd">พ</div><div class="hd">พฤ</div><div class="hd">ศ</div><div class="hd">ส</div>
+    <div class="d past">9</div><div class="d today">10</div><div class="d avail">11</div><div class="d avail">12</div><div class="d sel">13</div><div class="d avail">14</div><div class="d hol">15<div style="font-size:10px">ปิด</div></div>
+  </div>
+  <div class="legend">
+    <span><div class="sw" style="background:#f3f4f6;"></div>ว่าง</span>
+    <span><div class="sw" style="background:#6366f1;"></div>เลือก</span>
+    <span><div class="sw" style="border:2px solid #6366f1;background:#fff;"></div>วันนี้</span>
+    <span><div class="sw" style="background:#fee2e2;"></div>วันหยุด</span>
+    <span><div class="sw" style="background:#fef2f2;"></div>เกินช่วง</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Time slots</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 18px 24px; font-family: 'Sarabun', sans-serif; }
+  .banner { background: #faf5ff; color: #7e22ce; padding: 10px 14px; border-radius: 8px; font-weight: 500; font-size: 13px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .slot { padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; text-align: center; font-size: 14px; font-weight: 500; color: #1f2937; cursor: pointer; background: #fff; }
+  .slot:hover { border-color: #c084fc; }
+  .sel { background: #6366f1; color: #fff; border-color: #6366f1; }
+  .dis { background: #f3f4f6; color: #9ca3af; border-color: #f3f4f6; text-decoration: line-through; }
+</style>
+</head>
+<body>
+  <div class="banner">พุธ 15 ม.ค. 2568 · ช่วงเวลาที่ว่าง</div>
+  <div class="grid">
+    <div class="slot">09:00</div><div class="slot">09:30</div><div class="slot sel">10:00</div><div class="slot">10:30</div>
+    <div class="slot">11:00</div><div class="slot dis">11:30</div><div class="slot">13:00</div><div class="slot">13:30</div>
+    <div class="slot">14:00</div><div class="slot">14:30</div><div class="slot dis">15:00</div><div class="slot">15:30</div>
+  </div>
+</body>
+</html>

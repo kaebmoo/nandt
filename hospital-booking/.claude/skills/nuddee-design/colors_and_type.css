@@ -1,0 +1,300 @@
+/* ============================================================
+   NudDee Design System — colors + type
+   Drop this into any HTML file and use the CSS custom properties.
+   Values pulled directly from the tailwind classes in the repo.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
+
+:root {
+  /* -------- Primary: Purple -------- */
+  --nd-purple-50:  #faf5ff;
+  --nd-purple-100: #f3e8ff;
+  --nd-purple-400: #c084fc;
+  --nd-purple-500: #a855f7;
+  --nd-purple-600: #9333ea;  /* primary action */
+  --nd-purple-700: #7e22ce;  /* primary hover */
+
+  /* -------- Accent: Blue -------- */
+  --nd-blue-50:  #eff6ff;
+  --nd-blue-100: #dbeafe;
+  --nd-blue-500: #3b82f6;
+  --nd-blue-600: #2563eb;
+  --nd-blue-700: #1d4ed8;
+
+  /* -------- Hero gradient (custom) -------- */
+  --nd-hero-from: #667eea;
+  --nd-hero-to:   #764ba2;
+  --nd-hero-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --nd-primary-gradient: linear-gradient(to right, #9333ea, #2563eb);
+  --nd-primary-gradient-hover: linear-gradient(to right, #7e22ce, #1d4ed8);
+
+  /* -------- Neutrals: Gray -------- */
+  --nd-gray-50:  #f9fafb;
+  --nd-gray-100: #f3f4f6;
+  --nd-gray-200: #e5e7eb;
+  --nd-gray-300: #d1d5db;
+  --nd-gray-400: #9ca3af;
+  --nd-gray-500: #6b7280;
+  --nd-gray-600: #4b5563;
+  --nd-gray-700: #374151;
+  --nd-gray-800: #1f2937;
+  --nd-gray-900: #111827;
+
+  /* -------- Semantic -------- */
+  --nd-green-50:  #f0fdf4;
+  --nd-green-100: #dcfce7;
+  --nd-green-500: #22c55e;
+  --nd-green-600: #16a34a;
+
+  --nd-red-50:  #fef2f2;
+  --nd-red-100: #fee2e2;
+  --nd-red-400: #f87171;
+  --nd-red-500: #ef4444;
+  --nd-red-700: #b91c1c;
+  --nd-rose-700: #be123c;
+
+  --nd-yellow-50:  #fefce8;
+  --nd-yellow-400: #facc15;
+  --nd-yellow-500: #eab308;
+  --nd-yellow-800: #854d0e;
+
+  /* -------- Semantic roles -------- */
+  --nd-bg:            var(--nd-gray-50);
+  --nd-bg-card:       #ffffff;
+  --nd-bg-subtle:     var(--nd-gray-100);
+  --nd-bg-booking:    linear-gradient(135deg, var(--nd-purple-50), var(--nd-blue-50));
+  --nd-bg-success:    linear-gradient(135deg, var(--nd-green-50), var(--nd-blue-50));
+
+  --nd-fg:            var(--nd-gray-900);
+  --nd-fg-strong:     var(--nd-gray-900);
+  --nd-fg-body:       var(--nd-gray-700);
+  --nd-fg-muted:      var(--nd-gray-500);
+  --nd-fg-faint:      var(--nd-gray-400);
+  --nd-fg-on-primary: #ffffff;
+
+  --nd-border:        var(--nd-gray-200);
+  --nd-border-input:  var(--nd-gray-300);
+  --nd-border-strong: var(--nd-gray-400);
+
+  --nd-accent:        var(--nd-purple-600);
+  --nd-accent-hover:  var(--nd-purple-700);
+  --nd-accent-soft:   var(--nd-purple-100);
+  --nd-accent-faint:  var(--nd-purple-50);
+
+  --nd-success:       var(--nd-green-600);
+  --nd-error:         var(--nd-red-500);
+  --nd-warning:       var(--nd-yellow-500);
+  --nd-info:          var(--nd-blue-500);
+
+  /* -------- Shadows -------- */
+  --nd-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+  --nd-shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+  --nd-shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  --nd-shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+  --nd-shadow-hover-card: 0 20px 40px rgba(0,0,0,0.1);
+  --nd-ring-focus: 0 0 0 3px rgba(147, 51, 234, 0.3); /* purple-600 @ 30% */
+
+  /* -------- Radius -------- */
+  --nd-radius-sm:  4px;
+  --nd-radius:     8px;    /* rounded-lg — buttons, inputs */
+  --nd-radius-md: 12px;    /* rounded-xl — cards */
+  --nd-radius-full: 9999px;
+
+  /* -------- Spacing scale -------- */
+  --nd-space-1: 4px;
+  --nd-space-2: 8px;
+  --nd-space-3: 12px;
+  --nd-space-4: 16px;
+  --nd-space-6: 24px;
+  --nd-space-8: 32px;
+  --nd-space-12: 48px;
+  --nd-space-16: 64px;
+  --nd-space-20: 80px;
+
+  /* -------- Type -------- */
+  --nd-font-sans: 'Sarabun', 'Helvetica Neue', Arial, sans-serif;
+  --nd-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Scale (px). Tailwind defaults used in the repo */
+  --nd-text-xs:   12px;
+  --nd-text-sm:   14px;
+  --nd-text-base: 16px;
+  --nd-text-lg:   18px;
+  --nd-text-xl:   20px;
+  --nd-text-2xl:  24px;
+  --nd-text-3xl:  30px;
+  --nd-text-4xl:  36px;
+  --nd-text-5xl:  48px;
+
+  /* Weights */
+  --nd-weight-light:    300;
+  --nd-weight-regular:  400;
+  --nd-weight-semibold: 600;
+  --nd-weight-bold:     700;
+
+  /* Transitions */
+  --nd-ease:     cubic-bezier(0.4, 0, 0.2, 1);
+  --nd-dur-fast: 150ms;
+  --nd-dur:      200ms;
+  --nd-dur-slow: 300ms;
+}
+
+/* ============================================================
+   Semantic element styles
+   Apply directly or use as a reference. Scoped so they don't
+   stomp on tailwind when this is dropped into repo templates.
+   ============================================================ */
+
+.nd, .nd * { box-sizing: border-box; }
+
+.nd {
+  font-family: var(--nd-font-sans);
+  color: var(--nd-fg-body);
+  font-size: var(--nd-text-base);
+  line-height: 1.5;
+  background: var(--nd-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.nd h1, .nd .h1 {
+  font-size: var(--nd-text-5xl);
+  font-weight: var(--nd-weight-bold);
+  color: var(--nd-fg-strong);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.nd h2, .nd .h2 {
+  font-size: var(--nd-text-3xl);
+  font-weight: var(--nd-weight-bold);
+  color: var(--nd-fg-strong);
+  line-height: 1.25;
+}
+.nd h3, .nd .h3 {
+  font-size: var(--nd-text-xl);
+  font-weight: var(--nd-weight-semibold);
+  color: var(--nd-fg-strong);
+  line-height: 1.3;
+}
+.nd h4, .nd .h4 {
+  font-size: var(--nd-text-lg);
+  font-weight: var(--nd-weight-semibold);
+  color: var(--nd-fg-strong);
+}
+
+.nd p { margin: 0 0 var(--nd-space-3); }
+
+.nd .eyebrow {
+  font-size: var(--nd-text-xs);
+  font-weight: var(--nd-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--nd-fg-muted);
+}
+
+.nd .label {
+  display: block;
+  font-size: var(--nd-text-sm);
+  font-weight: var(--nd-weight-semibold);
+  color: var(--nd-gray-700);
+  margin-bottom: var(--nd-space-1);
+}
+
+.nd .helper {
+  font-size: var(--nd-text-xs);
+  color: var(--nd-fg-muted);
+  margin-top: var(--nd-space-1);
+}
+
+.nd .muted { color: var(--nd-fg-muted); }
+.nd .mono  { font-family: var(--nd-font-mono); }
+
+/* Link */
+.nd a {
+  color: var(--nd-accent);
+  text-decoration: none;
+  transition: color var(--nd-dur) var(--nd-ease);
+}
+.nd a:hover { color: var(--nd-accent-hover); }
+
+/* Card */
+.nd-card {
+  background: var(--nd-bg-card);
+  border-radius: var(--nd-radius-md);
+  box-shadow: var(--nd-shadow-md);
+  padding: var(--nd-space-6);
+}
+
+/* Button */
+.nd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nd-space-2);
+  font-family: inherit;
+  font-size: var(--nd-text-sm);
+  font-weight: var(--nd-weight-medium, 500);
+  padding: var(--nd-space-2) var(--nd-space-6);
+  border-radius: var(--nd-radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--nd-dur) var(--nd-ease);
+}
+.nd-btn--primary {
+  background: var(--nd-accent);
+  color: var(--nd-fg-on-primary);
+}
+.nd-btn--primary:hover { background: var(--nd-accent-hover); }
+.nd-btn--gradient {
+  background: var(--nd-primary-gradient);
+  color: var(--nd-fg-on-primary);
+}
+.nd-btn--gradient:hover { background: var(--nd-primary-gradient-hover); }
+.nd-btn--secondary {
+  background: transparent;
+  color: var(--nd-gray-700);
+  border-color: var(--nd-gray-300);
+}
+.nd-btn--secondary:hover { background: var(--nd-gray-50); }
+.nd-btn--ghost {
+  background: transparent;
+  color: var(--nd-accent);
+  padding-left: 0;
+  padding-right: 0;
+}
+.nd-btn--ghost:hover { color: var(--nd-accent-hover); }
+.nd-btn--lg { padding: var(--nd-space-3) var(--nd-space-8); font-size: var(--nd-text-base); }
+.nd-btn[disabled],
+.nd-btn--disabled { background: var(--nd-gray-300); color: #fff; cursor: not-allowed; }
+
+/* Input */
+.nd-input {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--nd-text-base);
+  padding: var(--nd-space-2) var(--nd-space-3);
+  color: var(--nd-fg);
+  background: #fff;
+  border: 1px solid var(--nd-border-input);
+  border-radius: var(--nd-radius);
+  transition: box-shadow var(--nd-dur) var(--nd-ease), border-color var(--nd-dur) var(--nd-ease);
+}
+.nd-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: var(--nd-ring-focus);
+}
+
+/* Badge / chip */
+.nd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nd-space-1);
+  padding: 2px var(--nd-space-2);
+  border-radius: var(--nd-radius-full);
+  background: var(--nd-accent-soft);
+  color: var(--nd-accent);
+  font-size: var(--nd-text-xs);
+  font-weight: var(--nd-weight-semibold);
+}

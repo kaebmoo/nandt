@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Logo marks</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 20px 24px; font-family: 'Sarabun', sans-serif; }
+  .row { display: flex; gap: 14px; align-items: stretch; }
+  .cell { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 18px; border-radius: 12px; min-height: 120px; }
+  .light { background: #fff; border: 1px solid #e5e7eb; }
+  .gray { background: #f9fafb; }
+  .dark { background: #1f2937; color: #f9fafb; }
+  .hero { background: linear-gradient(135deg,#667eea,#764ba2); color: #fff; }
+  .cap { font-size: 11px; color: inherit; opacity: 0.75; font-family: ui-monospace, Menlo, monospace; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; }
+  .mark { width: 28px; height: 28px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="cell light">
+      <div class="brand" style="color:#111827;">
+        <svg class="mark" fill="#9333ea" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+        NudDee
+      </div>
+      <span class="cap">primary · on white</span>
+    </div>
+    <div class="cell dark">
+      <div class="brand">
+        <svg class="mark" fill="#c084fc" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+        NudDee
+      </div>
+      <span class="cap">footer · on gray-800</span>
+    </div>
+    <div class="cell hero">
+      <div class="brand">
+        <svg class="mark" fill="#fff" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+        NudDee
+      </div>
+      <span class="cap">reverse · on hero gradient</span>
+    </div>
+  </div>
+</body>
+</html>

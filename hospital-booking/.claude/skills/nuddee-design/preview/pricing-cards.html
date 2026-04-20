@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Pricing card</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 22px 24px; font-family: 'Sarabun', sans-serif; background: #f9fafb; }
+  .row { display: flex; gap: 14px; align-items: stretch; }
+  .card { flex: 1; background: #fff; border: 2px solid transparent; border-radius: 12px; padding: 18px; box-shadow: 0 10px 15px -3px rgba(0,0,0,.08); position: relative; }
+  .pop { border-color: #9333ea; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+  .tag { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #9333ea; color: #fff; padding: 3px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827; }
+  .price { font-size: 24px; font-weight: 700; color: #111827; }
+  .price small { font-size: 12px; font-weight: 400; color: #6b7280; }
+  .desc { font-size: 12px; color: #6b7280; margin: 4px 0 10px; }
+  ul { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 5px; }
+  li { display: flex; gap: 6px; font-size: 12px; color: #374151; align-items: center; }
+  li svg { width: 14px; height: 14px; color: #22c55e; flex-shrink: 0; }
+  .btn { width: 100%; padding: 8px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; border: 0; }
+  .btn-p { background: #9333ea; color: #fff; }
+  .btn-s { background: #f3f4f6; color: #374151; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="card">
+      <h3>Basic</h3>
+      <div class="price">฿1,990<small>/เดือน</small></div>
+      <div class="desc">คลินิกขนาดเล็ก</div>
+      <ul>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>หมอ 20 คน</li>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>นัดหมาย 1,000/เดือน</li>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>SMS แจ้งเตือน</li>
+      </ul>
+      <button class="btn btn-p">เลือกแพ็คเกจนี้</button>
+    </div>
+    <div class="card pop">
+      <div class="tag">ยอดนิยม</div>
+      <h3>Professional</h3>
+      <div class="price">฿4,990<small>/เดือน</small></div>
+      <div class="desc">ผู้ให้บริการขนาดกลาง</div>
+      <ul>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>หมอ 100 คน</li>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>นัดหมายไม่จำกัด</li>
+        <li><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>Custom Domain + API</li>
+      </ul>
+      <button class="btn btn-p">เลือกแพ็คเกจนี้</button>
+    </div>
+  </div>
+</body>
+</html>

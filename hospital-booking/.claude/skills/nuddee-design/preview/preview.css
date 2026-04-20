@@ -1,0 +1,25 @@
+/* Shared page reset for preview cards.
+   Every card: pads the canvas, loads Sarabun, consumes colors_and_type.css. */
+@import url('../colors_and_type.css');
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Sarabun', sans-serif;
+  color: #1f2937;
+  background: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  padding: 20px 24px;
+  width: 700px;
+}
+.row { display: flex; gap: 12px; align-items: stretch; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.muted { color: #6b7280; font-size: 12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.meta { display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; }
+.chip { font-size: 11px; color: #6b7280; font-family: ui-monospace, Menlo, monospace; }
+hr.sep { border: 0; border-top: 1px solid #e5e7eb; margin: 14px 0; }

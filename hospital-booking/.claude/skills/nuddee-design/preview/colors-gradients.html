@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Accent & gradients</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 20px 24px; }
+  .row { display: flex; gap: 10px; }
+  .sw { flex: 1; min-height: 88px; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; }
+  .sw .name { font-size: 12px; font-weight: 600; }
+  .sw .hex { font-size: 11px; opacity: 0.85; font-family: ui-monospace, Menlo, monospace; }
+  .lead { font-size: 12px; color: #6b7280; margin: 0 0 10px; }
+  b { color: #111827; font-weight: 600; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+  <p class="lead"><b>Blue</b> pairs with purple in the signature gradient. The hero gradient is the one custom color outside Tailwind.</p>
+  <div class="stack">
+    <div class="row">
+      <div class="sw" style="background:#2563eb;"><span class="name">Blue 600</span><span class="hex">#2563EB</span></div>
+      <div class="sw" style="background:#1d4ed8;"><span class="name">Blue 700 · hover</span><span class="hex">#1D4ED8</span></div>
+      <div class="sw" style="background:linear-gradient(to right,#9333ea,#2563eb);"><span class="name">Primary gradient</span><span class="hex">purple→blue · CTAs</span></div>
+    </div>
+    <div class="row">
+      <div class="sw" style="background:linear-gradient(135deg,#667eea,#764ba2);min-height:72px;"><span class="name">Hero gradient</span><span class="hex">#667EEA → #764BA2 · landing hero only</span></div>
+    </div>
+    <div class="row">
+      <div class="sw" style="background:linear-gradient(135deg,#faf5ff,#eff6ff);color:#6b21a8;min-height:52px;"><span class="name">Booking wash</span><span class="hex">purple-50 → blue-50</span></div>
+      <div class="sw" style="background:linear-gradient(135deg,#f0fdf4,#eff6ff);color:#166534;min-height:52px;"><span class="name">Success wash</span><span class="hex">green-50 → blue-50</span></div>
+    </div>
+  </div>
+</body>
+</html>

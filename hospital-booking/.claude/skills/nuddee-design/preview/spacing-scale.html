@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Spacing scale</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 18px 24px; }
+  .row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center; gap: 14px; padding: 4px 0; }
+  .row .tok { font-size: 12px; font-weight: 600; color: #111827; font-family: ui-monospace, Menlo, monospace; }
+  .row .px { font-size: 12px; color: #6b7280; font-family: ui-monospace, Menlo, monospace; text-align: right; }
+  .bar { height: 14px; background: #9333ea; border-radius: 3px; }
+  h4 { margin: 0 0 8px; font-size: 13px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+  <h4>Spacing scale · Tailwind · px</h4>
+  <div class="row"><span class="tok">space-1</span><div class="bar" style="width:4px;"></div><span class="px">4px</span></div>
+  <div class="row"><span class="tok">space-2</span><div class="bar" style="width:8px;"></div><span class="px">8px</span></div>
+  <div class="row"><span class="tok">space-3</span><div class="bar" style="width:12px;"></div><span class="px">12px</span></div>
+  <div class="row"><span class="tok">space-4</span><div class="bar" style="width:16px;"></div><span class="px">16px</span></div>
+  <div class="row"><span class="tok">space-6</span><div class="bar" style="width:24px;"></div><span class="px">24px · card p</span></div>
+  <div class="row"><span class="tok">space-8</span><div class="bar" style="width:32px;"></div><span class="px">32px · grid gap</span></div>
+  <div class="row"><span class="tok">space-12</span><div class="bar" style="width:48px;"></div><span class="px">48px · empty</span></div>
+  <div class="row"><span class="tok">space-16</span><div class="bar" style="width:64px;"></div><span class="px">64px · section</span></div>
+  <div class="row"><span class="tok">space-20</span><div class="bar" style="width:80px;"></div><span class="px">80px · hero</span></div>
+</body>
+</html>

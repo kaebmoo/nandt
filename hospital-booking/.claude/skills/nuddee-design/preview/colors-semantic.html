@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Semantic colors</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 16px 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { border-radius: 10px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; font-family: 'Sarabun', sans-serif; font-size: 13px; line-height: 1.35; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .card b { display: block; font-weight: 600; margin-bottom: 2px; font-size: 14px; }
+  .card .hex { font-size: 11px; opacity: 0.7; font-family: ui-monospace, Menlo, monospace; margin-top: 2px; }
+  svg { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="card" style="background:#f0fdf4;color:#166534;">
+      <div class="dot" style="background:#16a34a;color:#fff;"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg></div>
+      <div><b>Success</b>green-600 #16A34A<div class="hex">จองสำเร็จ · completed steps</div></div>
+    </div>
+    <div class="card" style="background:#fef2f2;color:#b91c1c;">
+      <div class="dot" style="background:#ef4444;color:#fff;">!</div>
+      <div><b>Error / Required</b>red-500 #EF4444<div class="hex">* required marker · validation</div></div>
+    </div>
+    <div class="card" style="background:#fefce8;color:#854d0e;">
+      <div class="dot" style="background:#eab308;color:#fff;">!</div>
+      <div><b>Warning</b>yellow-500 #EAB308<div class="hex">caution banners · provider notice</div></div>
+    </div>
+    <div class="card" style="background:#eff6ff;color:#1e40af;">
+      <div class="dot" style="background:#3b82f6;color:#fff;">i</div>
+      <div><b>Info</b>blue-500 #3B82F6<div class="hex">next-steps panels · hints</div></div>
+    </div>
+  </div>
+</body>
+</html>

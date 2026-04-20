@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Radius</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 18px 24px; }
+  .row { display: flex; gap: 16px; align-items: flex-end; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .box { width: 100px; height: 72px; background: #faf5ff; border: 1.5px solid #9333ea; }
+  .tok { font-size: 12px; font-weight: 600; color: #111827; font-family: ui-monospace, Menlo, monospace; }
+  .use { font-size: 11px; color: #6b7280; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="item"><div class="box" style="border-radius:4px;"></div><span class="tok">rounded-sm</span><span class="use">4px · rare</span></div>
+    <div class="item"><div class="box" style="border-radius:8px;"></div><span class="tok">rounded-lg</span><span class="use">8px · buttons, inputs</span></div>
+    <div class="item"><div class="box" style="border-radius:12px;"></div><span class="tok">rounded-xl</span><span class="use">12px · cards</span></div>
+    <div class="item"><div class="box" style="border-radius:9999px; width:72px;"></div><span class="tok">rounded-full</span><span class="use">avatars · chips</span></div>
+  </div>
+</body>
+</html>

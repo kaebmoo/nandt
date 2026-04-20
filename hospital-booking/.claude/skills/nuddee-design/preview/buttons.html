@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Buttons</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 18px 24px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  button, .btn {
+    font-family: 'Sarabun', sans-serif; font-size: 14px; font-weight: 500;
+    padding: 10px 24px; border-radius: 8px; border: 1px solid transparent;
+    cursor: pointer; transition: all .2s ease;
+  }
+  .primary { background: #9333ea; color: #fff; }
+  .gradient { background: linear-gradient(to right, #9333ea, #2563eb); color: #fff; padding: 12px 32px; font-weight: 500; }
+  .secondary { background: transparent; color: #374151; border-color: #d1d5db; }
+  .ghost { background: transparent; color: #9333ea; padding-left: 6px; padding-right: 6px; }
+  .disabled { background: #d1d5db; color: #fff; cursor: not-allowed; }
+  .label { font-size: 11px; color: #6b7280; font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+  <div class="row"><button class="primary">เริ่มต้นใช้งาน</button><span class="label">primary · purple-600</span></div>
+  <div class="row"><button class="gradient">ทดลองใช้ฟรี 14 วัน</button><span class="label">gradient · conversion CTA</span></div>
+  <div class="row"><button class="secondary">ย้อนกลับ</button><button class="ghost">ลืมรหัสผ่าน?</button><button class="disabled">ดำเนินการต่อ</button><span class="label">secondary · ghost · disabled</span></div>
+</body>
+</html>

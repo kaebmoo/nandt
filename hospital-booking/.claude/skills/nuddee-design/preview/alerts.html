@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Alerts</title>
+<link rel="stylesheet" href="preview.css">
+<style>
+  body { padding: 14px 24px; font-family: 'Sarabun', sans-serif; }
+  .alert { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 8px; border: 1px solid; display: flex; justify-content: space-between; align-items: center; }
+  .err { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+  .ok  { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .info { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+  .warn { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+  .close { color: currentColor; opacity: 0.7; font-weight: 700; cursor: pointer; font-size: 16px; }
+</style>
+</head>
+<body>
+  <div class="alert err"><span><b>เกิดข้อผิดพลาด!</b> รูปแบบอีเมลไม่ถูกต้อง</span><span class="close">×</span></div>
+  <div class="alert ok"><span>🎉 สร้างบัญชีทดลองใช้สำเร็จ! ระบบจะนำคุณไปยัง Dashboard</span><span class="close">×</span></div>
+  <div class="alert info"><span>📞 ทีมงานจะติดต่อกลับภายใน 24 ชั่วโมง กรุณาโทร 02-123-4567</span><span class="close">×</span></div>
+  <div class="alert warn"><span>ระบบจะกำหนดผู้ให้บริการที่เหมาะสมให้อัตโนมัติในช่วงเวลานี้</span></div>
+</body>
+</html>
