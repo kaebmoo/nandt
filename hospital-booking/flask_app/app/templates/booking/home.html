@@ -5,13 +5,11 @@
 
 {% block extra_css %}
 <style>
-    body { font-family: 'Sarabun', sans-serif; }
-    .event-type-card {
+    .event-card {
         transition: all 0.2s ease;
     }
-    .event-type-card:hover {
+    .event-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
 </style>
 {% endblock %}
@@ -21,7 +19,7 @@
     <!-- Header -->
     <div class="">
         <div class="max-w-6xl mx-auto px-4 py-6">
-            <h1 class="text-3xl font-bold text-gray-800">จองนัดหมายออนไลน์</h1>
+            <h1 class="text-3xl font-bold text-gray-900">จองนัดหมายออนไลน์</h1>
             <p class="text-gray-600 mt-1">เลือกประเภทการนัดหมายที่ต้องการ</p>
         </div>
     </div>
@@ -40,7 +38,7 @@
                          style="background-color: {{ event_type.color or '#6366f1' }}"></div>
                     
                     <!-- Title -->
-                    <h3 class="text-xl font-semibold text-gray-800 mb-2">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">
                         {{ event_type.name }}
                     </h3>
                     
