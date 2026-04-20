@@ -5,13 +5,12 @@
 
 {% block extra_css %}
 <style>
-    body { font-family: 'Sarabun', sans-serif; }
     .event-type-card {
         transition: all 0.2s ease;
     }
     .event-type-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
 </style>
 {% endblock %}
@@ -45,7 +44,7 @@
 
     <!-- Empty State (จะถูกแสดงโดย JavaScript) -->
     <div id="emptyState" class="hidden">
-        <div class="bg-white rounded-xl shadow-sm border p-12 text-center">
+        <div class="bg-white rounded-xl shadow-md p-12 text-center">
             <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
             </svg>
