@@ -2,12 +2,6 @@
 
 {% block title %}นัดหมายของฉัน - NudDee{% endblock %}
 
-{% block extra_css %}
-<style>
-    body { font-family: 'Sarabun', sans-serif; }
-</style>
-{% endblock %}
-
 {% block content %}
     <div class="bg-white shadow-sm">
         <div class="max-w-6xl mx-auto px-4 py-6">
@@ -20,7 +14,7 @@
                         </svg>
                     </a>
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-800">นัดหมายของฉัน</h1>
+                        <h1 class="text-2xl font-bold text-gray-900">นัดหมายของฉัน</h1>
                         <p class="text-gray-600">
                             พบ {{ appointments|length }} รายการ
                             {% if search_type == 'email' %}
@@ -124,7 +118,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
                       d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
             </svg>
-            <h3 class="text-xl font-semibold text-gray-800 mb-2">ไม่พบนัดหมาย</h3>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">ไม่พบนัดหมาย</h3>
             <p class="text-gray-600">ไม่พบนัดหมายสำหรับข้อมูลที่ค้นหา</p>
         </div>
         {% endif %}
