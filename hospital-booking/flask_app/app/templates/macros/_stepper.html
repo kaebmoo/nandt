@@ -1,0 +1,35 @@
+{# Reusable booking-flow progress stepper.
+   Usage:
+     {% from 'macros/_stepper.html' import stepper %}
+     {{ stepper(current=1) }}
+     {{ stepper(current=2, labels=['เลือกวันเวลา', 'กรอกข้อมูล', 'ยืนยันการจอง']) }}
+#}
+{% macro stepper(current, labels=['เลือกวันเวลา', 'กรอกข้อมูล', 'ยืนยันการจอง']) %}
+<div class="flex items-center max-w-2xl mx-auto mb-8">
+    {% for label in labels %}
+        {% set n = loop.index %}
+        {% set done = current > n %}
+        {% set active = current == n %}
+        <div class="flex items-center">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+                        {% if done %}bg-green-600 text-white
+                        {% elif active %}bg-purple-600 text-white
+                        {% else %}bg-gray-300 text-white{% endif %}">
+                {% if done %}
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                {% else %}{{ n }}{% endif %}
+            </div>
+            <span class="ml-2 text-sm font-medium hidden sm:inline
+                         {% if done %}text-green-700{% elif active %}text-purple-600{% else %}text-gray-400{% endif %}">
+                {{ label }}
+            </span>
+        </div>
+        {% if not loop.last %}
+            <div class="flex-1 h-1 mx-3 rounded-full"
+                 style="background: {% if done %}#16a34a{% elif active %}#9333ea{% else %}#e5e7eb{% endif %};"></div>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endmacro %}
