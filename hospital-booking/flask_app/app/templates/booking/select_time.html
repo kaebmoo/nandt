@@ -1,4 +1,5 @@
 <!-- templates/booking/select_time.html -->
+{% from 'macros/_stepper.html' import stepper %}
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -21,7 +22,7 @@
             background-color: #e0e7ff;
         }
         .calendar-day.selected {
-            background-color: #6366f1 !important;
+            background-color: #4f46e5 !important;
             color: white !important;
         }
         .calendar-day.disabled {
@@ -42,16 +43,17 @@
             cursor: not-allowed;
         }
         .calendar-day.today {
-            border: 2px solid #6366f1;
+            border: 2px solid #4f46e5;
         }
         .time-slot {
             transition: all 0.2s ease;
         }
         .time-slot:hover {
-            transform: scale(1.05);
+            border-color: #c084fc;
         }
         .time-slot.selected {
-            background-color: #6366f1;
+            background-color: #4f46e5;
+            border-color: #4f46e5;
             color: white;
         }
     </style>
@@ -69,7 +71,7 @@
                         </svg>
                     </a>
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-800">เลือกวันและเวลา</h1>
+                        <h1 class="text-2xl font-bold text-gray-900">เลือกวันและเวลา</h1>
                         <p class="text-gray-600">{{ event_type.name }} ( {{ event_type.duration_minutes }} นาที)</p>
                     </div>
                 </div>
@@ -79,23 +81,8 @@
 
     <!-- Progress Bar -->
     <div class="bg-white border-b">
-        <div class="max-w-6xl mx-auto px-4">
-            <div class="flex items-center py-4">
-                <div class="flex items-center">
-                    <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center font-semibold">1</div>
-                    <span class="ml-2 text-purple-600 font-medium">เลือกวันเวลา</span>
-                </div>
-                <div class="flex-1 mx-4 h-1 bg-gray-200"></div>
-                <div class="flex items-center">
-                    <div class="w-8 h-8 bg-gray-300 text-white rounded-full flex items-center justify-center font-semibold">2</div>
-                    <span class="ml-2 text-gray-400">กรอกข้อมูล</span>
-                </div>
-                <div class="flex-1 mx-4 h-1 bg-gray-200"></div>
-                <div class="flex items-center">
-                    <div class="w-8 h-8 bg-gray-300 text-white rounded-full flex items-center justify-center font-semibold">3</div>
-                    <span class="ml-2 text-gray-400">ยืนยันการจอง</span>
-                </div>
-            </div>
+        <div class="max-w-6xl mx-auto px-4 py-4">
+            {{ stepper(current=1) }}
         </div>
     </div>
 
@@ -106,7 +93,7 @@
             <!-- Calendar Section (3 columns) -->
             <div class="lg:col-span-3 bg-white rounded-xl shadow-md p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-semibold text-gray-800">เลือกวันที่</h2>
+                    <h2 class="text-lg font-semibold text-gray-900">เลือกวันที่</h2>
                     <div class="flex items-center gap-4">
                         <button type="button" onclick="changeMonth(-1)" 
                                 id="prev-month-btn"
@@ -164,7 +151,7 @@
             
             <!-- Time Slots Section (2 columns) -->
             <div class="lg:col-span-2 bg-white rounded-xl shadow-md p-6">
-                <h2 class="text-lg font-semibold text-gray-800 mb-4">เลือกเวลา</h2>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">เลือกเวลา</h2>
                 
                 <div id="selected-date-display" class="mb-4 p-3 bg-purple-50 rounded-lg hidden">
                     <span class="text-purple-700 font-medium"></span>
