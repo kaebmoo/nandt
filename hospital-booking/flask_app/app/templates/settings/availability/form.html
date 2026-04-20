@@ -57,7 +57,7 @@
 
     <!-- Quick Setup (เฉพาะการสร้างใหม่) -->
     {% if action == 'create' and quick_form %}
-    <div class="bg-white rounded-xl shadow-sm border p-6 mb-8">
+    <div class="bg-white rounded-xl shadow-md p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">ตั้งค่าด่วน</h2>
         <p class="text-sm text-gray-600 mb-6">เลือกรูปแบบเวลาทำการที่ใช้บ่อย หรือกำหนดเองในส่วนด้านล่าง</p>
         
@@ -97,7 +97,7 @@
     {% endif %}
 
     <!-- Manual Form -->
-    <div class="bg-white rounded-xl shadow-sm border p-6">
+    <div class="bg-white rounded-xl shadow-md p-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-6">{{ 'กำหนดเอง' if action == 'create' else 'แก้ไขเทมเพลต' }}</h2>
         
         {{ render_form_errors(form) }}
