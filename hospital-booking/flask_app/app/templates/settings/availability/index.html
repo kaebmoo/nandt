@@ -53,7 +53,7 @@
         
         <!-- Templates List -->
         <div class="lg:col-span-1">
-            <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="bg-white rounded-xl shadow-md p-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-6">เทมเพลตเวลาทำการ</h2>
                 
                 {% if templates %}
@@ -155,7 +155,7 @@
                 {% set provider_count = selected_template.provider_count if selected_template.provider_count is not none else provider_assignments|length %}
             {% endif %}
 
-            <div id="template-details" class="bg-white rounded-xl shadow-sm border p-6">
+            <div id="template-details" class="bg-white rounded-xl shadow-md p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-semibold text-gray-900">รายละเอียดเทมเพลต</h3>
                     {% if selected_template %}
@@ -241,7 +241,7 @@
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border p-6" id="template-providers-card">
+            <div class="bg-white rounded-xl shadow-md p-6" id="template-providers-card">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900">ผู้ให้บริการในเทมเพลต</h2>
@@ -343,7 +343,7 @@
                 {% endif %}
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border p-6" id="provider-schedules-card">
+            <div class="bg-white rounded-xl shadow-md p-6" id="provider-schedules-card">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900">ตารางทำงานของผู้ให้บริการ</h2>
@@ -449,7 +449,7 @@
                 {% endif %}
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border p-6" id="resource-capacity-card">
+            <div class="bg-white rounded-xl shadow-md p-6" id="resource-capacity-card">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900">ข้อจำกัดความจุ (Resource Capacity)</h2>
@@ -551,7 +551,7 @@
                 {% endif %}
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border p-6" id="provider-leaves-card">
+            <div class="bg-white rounded-xl shadow-md p-6" id="provider-leaves-card">
                 <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900">การลาของผู้ให้บริการ</h2>
@@ -592,7 +592,7 @@
             </div>
 
             {% if selected_template %}
-            <div id="template-date-overrides" class="bg-white rounded-xl shadow-sm border p-6">
+            <div id="template-date-overrides" class="bg-white rounded-xl shadow-md p-6">
                 <div class="flex justify-between items-center mb-6">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900">วันพิเศษ</h2>
@@ -658,7 +658,7 @@
                 {% endif %}
             </div>
             {% else %}
-            <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="bg-white rounded-xl shadow-md p-6">
                 <div class="text-center py-8 text-gray-500">
                     <p class="text-sm">เลือกเทมเพลตเพื่อดูวันพิเศษ</p>
                 </div>
