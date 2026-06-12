@@ -47,7 +47,9 @@ def ensure_date_override_table(subdomain: str, db: Session):
         try:
             exists = db.execute(text("SELECT to_regclass('date_overrides')")).scalar()
             if not exists:
-                models.DateOverride.__table__.create(bind=db.get_bind(), checkfirst=True)
+                # db.connection() ไม่ใช่ get_bind() — ให้ CREATE TABLE ใช้ connection
+                # เดียวกับที่ SET search_path ไว้ ไม่งั้นตารางไปโผล่ public schema
+                models.DateOverride.__table__.create(bind=db.connection(), checkfirst=True)
                 db.commit()
         except Exception:
             db.rollback()

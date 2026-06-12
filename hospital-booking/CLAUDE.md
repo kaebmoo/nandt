@@ -90,8 +90,11 @@ db.execute(text('SET search_path TO "tenant_schema", public'))
    ถ้าต้องใช้หลัง commit — หลัง commit instance จะ expire และการเข้าถึง attribute
    จะ trigger refresh query ที่อาจวิ่งไปผิด schema → ObjectDeletedError
 3. **ส่งเฉพาะค่า primitive เข้า FastAPI BackgroundTasks** — task ทำงานหลัง DB session ปิดแล้ว
-4. **public schema มีตาราง tenant หลงอยู่** (availability_templates, event_types ฯลฯ
-   ว่างเปล่า จาก migration เก่า) — ทำให้ query ที่หลุดไป public "ไม่ error แต่หาไม่เจอ" เงียบๆ
+4. **ห้ามใช้ `bind=db.get_bind()` กับ DDL (create_all / table.create)** — get_bind() คืน engine
+   ซึ่งหยิบ connection ใหม่จาก pool ที่ search_path เป็น public → ตารางถูกสร้างลง public schema
+   ต้องใช้ `bind=db.connection()` (connection เดียวกับที่ SET search_path ไว้) —
+   นี่คือต้นเหตุที่เคยมีตาราง tenant หลงใน public 14 ตาราง (ลบหมดแล้ว มิ.ย. 2026
+   ด้วย migrations/drop_stray_public_tenant_tables.py — public ต้องมีแค่ hospitals, users)
 
 ### Tenant Seeding (ข้อมูลเริ่มต้นของ tenant ใหม่)
 ```python
@@ -101,6 +104,11 @@ seed_tenant_defaults(db, schema_name)  # idempotent — ข้ามถ้าม
 # ถูกเรียกจากทั้ง /api/register (fastapi_app/app/main.py: create_tenant_setup)
 # และ Super Admin panel (admin_app/tenant_routes.py: create_tenant)
 # ถ้าเพิ่มเส้นทางสร้าง Hospital ใหม่ ต้องเรียกฟังก์ชันนี้ด้วยเสมอ
+
+# วันหยุดราชการ: tenant ใหม่ได้วันหยุดปีปัจจุบันจาก BOT API อัตโนมัติ (best-effort)
+from fastapi_app.app.holidays import sync_tenant_holidays
+sync_tenant_holidays(db, schema_name)  # idempotent ตามวันที่ — ใช้ตัวเดียวกับ
+# endpoint /holidays/sync และ Celery job ประจำปี (2 ม.ค.) ต้องมี BOT_TOKEN ใน .env
 ```
 
 ### Email Notifications (FastAPI)
@@ -205,8 +213,6 @@ Test both URL modes:
 - Error handling needs improvement in API integration points
 - N+1 query issues in dashboard data loading
 - Role-based access control มี enum แต่ยังไม่บังคับใช้ใน routes
-- public.holidays ยังเหลืออยู่ (มี backup ใน migrations/backups/ แล้ว —
-  ลบด้วย `python migrations/drop_stray_public_tenant_tables.py --execute --force`)
 - ยังไม่มี test suite
 
 แก้ไปแล้ว (มิ.ย. 2026): อีเมลยืนยันการจองส่งจริง (เดิม mock print),
@@ -217,9 +223,11 @@ password reset มีแล้ว (/auth/forgot-password + /auth/reset-password 
 OTP 6 หลักทางอีเมล อายุ 15 นาที ไม่เปิดเผยว่าอีเมลมีในระบบ มี rate limit;
 otp_service เก็บ interval ลง Redis เพื่อรองรับอายุ OTP ที่ไม่ใช่ 300 วินาที),
 หน้า /terms + /privacy (PDPA) มีแล้วและลิงก์ consent ทุกจุดชี้ถูกต้อง,
-ตาราง tenant ที่หลงใน public schema ถูกลบแล้ว 13 ตาราง (เหลือ public.holidays),
+ตาราง tenant ที่หลงใน public schema ถูกลบหมดแล้วทั้ง 14 ตาราง และปิดต้นเหตุ
+(get_bind→connection) — public เหลือแค่ hospitals, users,
 admin เลื่อน/ยกเลิก/ขอเลื่อนนัด → แจ้งผู้รับบริการอัตโนมัติแล้ว
-(อีเมล / เตือนให้โทรเมื่อมีแต่เบอร์ / SMS เป็น option ปิด default)
+(อีเมล / เตือนให้โทรเมื่อมีแต่เบอร์ / SMS เป็น option ปิด default),
+tenant ใหม่ได้วันหยุดราชการปีปัจจุบันอัตโนมัติทั้งสองเส้นทางการสร้าง
 
 ## Dependencies
 

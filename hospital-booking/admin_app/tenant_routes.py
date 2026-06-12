@@ -87,19 +87,30 @@ def create_tenant():
         # Seed ข้อมูลเริ่มต้น (เวลาทำการ, ประเภทนัด, เจ้าหน้าที่) ให้พร้อมใช้งานทันที
         try:
             seed_tenant_defaults(g.db, schema_name)
-            flash(
-                f'สร้าง tenant "{hospital.name}" สำเร็จ! '
-                'พร้อมข้อมูลเริ่มต้น (เวลาทำการ จ-ศ 08:30-16:30, ประเภทนัด 2 รายการ, เจ้าหน้าที่ 1 คน) '
-                'ซึ่งโรงพยาบาลแก้ไขได้เองในหน้าตั้งค่า',
-                'success'
-            )
         except Exception as e:
             flash(
                 f'สร้าง tenant "{hospital.name}" สำเร็จ แต่สร้างข้อมูลเริ่มต้นไม่สำเร็จ: {str(e)} '
                 '(โรงพยาบาลต้องตั้งค่าเวลาทำการเองก่อนเปิดรับจอง)',
                 'warning'
             )
+            return redirect(url_for('tenants.view_tenant', tenant_id=hospital.id))
 
+        # วันหยุดราชการปีปัจจุบัน — best-effort ดึงไม่ได้ไม่ถือว่าสร้าง tenant ล้มเหลว
+        holiday_note = ''
+        try:
+            from fastapi_app.app.holidays import sync_tenant_holidays
+            hres = sync_tenant_holidays(g.db, schema_name)
+            if hres['added']:
+                holiday_note = f' และวันหยุดราชการปีนี้ {hres["added"]} วัน'
+        except Exception:
+            holiday_note = ' (ดึงวันหยุดราชการไม่สำเร็จ — กด sync ได้ภายหลังในหน้าตั้งค่าวันหยุด)'
+
+        flash(
+            f'สร้าง tenant "{hospital.name}" สำเร็จ! '
+            f'พร้อมข้อมูลเริ่มต้น (เวลาทำการ จ-ศ 08:30-16:30, ประเภทนัด 2 รายการ, เจ้าหน้าที่ 1 คน){holiday_note} '
+            'ซึ่งโรงพยาบาลแก้ไขได้เองในหน้าตั้งค่า',
+            'success'
+        )
         return redirect(url_for('tenants.view_tenant', tenant_id=hospital.id))
 
     return render_template('tenants/create.html', form=form)

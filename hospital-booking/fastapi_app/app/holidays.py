@@ -67,13 +67,63 @@ def ensure_holiday_table(subdomain: str, db: Session):
             exists = db.execute(text("SELECT to_regclass('holidays')")).scalar()
             if not exists:
                 logger.info("Creating holidays table for tenant '%s'", subdomain)
-                models.Holiday.__table__.create(bind=db.get_bind(), checkfirst=True)
+                # db.connection() ไม่ใช่ get_bind() — ให้ CREATE TABLE ใช้ connection
+                # เดียวกับที่ SET search_path ไว้ ไม่งั้นตารางไปโผล่ public schema
+                models.Holiday.__table__.create(bind=db.connection(), checkfirst=True)
                 db.commit()
         except Exception:
             db.rollback()
             raise
         else:
             _initialized_tenants.add(schema_key)
+
+
+def sync_tenant_holidays(db: Session, schema_name: str, year: int = None, holidays: list = None) -> dict:
+    """เติมวันหยุดราชการเข้า tenant schema (idempotent — ข้ามวันที่ที่มีอยู่แล้ว)
+
+    holidays=None จะดึงจาก BOT API ของปีที่ระบุ (ต้องตั้ง BOT_TOKEN ใน .env)
+    เป็น logic กลางที่ใช้ร่วมกันโดย: endpoint /holidays/sync (รวมถึง Celery job ประจำปี)
+    และการสร้าง tenant ใหม่ทั้งจาก /api/register และ Super Admin panel
+    จัดการ search_path เองและ reset กลับ public เสมอ
+    """
+    if year is None:
+        year = date.today().year
+    if holidays is None:
+        holidays = HolidayService.fetch_from_bot_api(year)
+
+    subdomain = schema_name.replace('tenant_', '', 1)
+    added = 0
+    skipped = 0
+    try:
+        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        ensure_holiday_table(subdomain, db)
+
+        for item in holidays or []:
+            get = item.get if isinstance(item, dict) else lambda k, d=None: getattr(item, k, d)
+            holiday_date = get('date')
+            if not holiday_date:
+                continue
+            if db.query(models.Holiday).filter_by(date=holiday_date).first():
+                skipped += 1
+                continue
+            db.add(models.Holiday(
+                date=holiday_date,
+                name=get('name') or 'วันหยุด',
+                source=get('source') or 'manual',
+                description=get('description'),
+                is_active=True,
+                is_recurring=False,
+            ))
+            added += 1
+
+        db.commit()
+        return {'added': added, 'skipped': skipped}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.execute(text('SET search_path TO public'))
+        db.commit()
 
 # --- API Endpoints ---
 @router.get("/holidays", response_model=List[HolidayResponse])
@@ -119,55 +169,17 @@ async def sync_holidays(
     """Syncs holidays from an external source."""
     schema_name = f"tenant_{subdomain}"
 
-    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
-
     logger.info(f"Syncing holidays for {subdomain}, year: {payload.year}")
     logger.info(f"Received {len(payload.holidays)} holidays")
 
-    # ถ้าไม่มี holidays ในpayload ให้ fetch เอง
-    if not payload.holidays:
-        fetched = HolidayService.fetch_from_bot_api(payload.year)
-        payload.holidays = [
-            HolidayBase(
-                date=h['date'],
-                name=h['name'],
-                source=h['source']
-            ) for h in fetched
-        ]
-    
-    try:
-        ensure_holiday_table(subdomain, db)
+    holidays = [h.dict() for h in payload.holidays] if payload.holidays else None
 
-        added_count = 0
-        skipped_count = 0
-        
-        for holiday_data in payload.holidays:
-            exists = db.query(models.Holiday).filter_by(date=holiday_data.date).first()
-            if not exists:
-                new_holiday = models.Holiday(
-                    date=holiday_data.date,
-                    name=holiday_data.name,
-                    source=holiday_data.source,
-                    description=getattr(holiday_data, 'description', None),
-                    is_active=True,
-                    is_recurring=False
-                )
-                db.add(new_holiday)
-                added_count += 1
-                logger.debug(f"Added: {holiday_data.date} - {holiday_data.name}")
-            else:
-                skipped_count += 1
-                logger.debug(f"Skipped: {holiday_data.date} (exists)")
-        
-        db.commit()
-        logger.info(f"Committed: Added {added_count}, Skipped {skipped_count}")
-        
-        return {"message": f"Sync completed. Added: {added_count}, Skipped: {skipped_count}."}
-        
+    try:
+        result = sync_tenant_holidays(db, schema_name, year=payload.year, holidays=holidays)
+        logger.info(f"Committed: Added {result['added']}, Skipped {result['skipped']}")
+        return {"message": f"Sync completed. Added: {result['added']}, Skipped: {result['skipped']}."}
     except Exception as e:
         logger.error(f"Database error: {str(e)}")
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/holidays", response_model=HolidayResponse)

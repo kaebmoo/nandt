@@ -143,9 +143,12 @@ def create_tenant_setup(schema_name: str, db: Session):
     """
     try:
         # 1. สร้าง Schema และตารางทั้งหมดจาก models.py
+        # ต้องใช้ db.connection() ไม่ใช่ db.get_bind() — get_bind() คืน engine
+        # ซึ่งจะหยิบ connection ใหม่จาก pool ที่ search_path เป็น public
+        # แล้วสร้างตาราง tenant ลง public schema (ต้นเหตุตารางหลงในอดีต)
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
-        models.TenantBase.metadata.create_all(bind=db.get_bind())
+        models.TenantBase.metadata.create_all(bind=db.connection())
         db.execute(text('SET search_path TO public'))
         db.commit()
     except Exception as e:
@@ -163,6 +166,16 @@ def create_tenant_setup(schema_name: str, db: Session):
         import traceback
         traceback.print_exc()
         raise Exception(f"Failed to seed tenant defaults: {str(e)}")
+
+    # 3. วันหยุดราชการปีปัจจุบันจาก BOT API — best-effort:
+    # ดึงไม่ได้ (ไม่มี BOT_TOKEN / API ล่ม) ต้องไม่ทำให้การสร้าง tenant ล้มเหลว
+    # หน่วยงาน sync เพิ่ม/แก้เองได้ที่หน้าตั้งค่าวันหยุด
+    try:
+        from .holidays import sync_tenant_holidays
+        result = sync_tenant_holidays(db, schema_name)
+        print(f"📅 Holidays seeded for {schema_name}: {result}")
+    except Exception as e:
+        print(f"⚠️ Holiday seeding failed for {schema_name} (ไม่กระทบการสร้าง tenant): {e}")
 
 
 # --- API Endpoints ---
