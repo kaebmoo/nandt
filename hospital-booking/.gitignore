@@ -1,0 +1,26 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Runtime state
+flask_session/
+admin_session/
+dump.rdb
+logs/
+*.log
+*.pid
+
+# Database backups from migration scripts (may contain data)
+migrations/backups/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
