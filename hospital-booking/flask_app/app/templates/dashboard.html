@@ -13,7 +13,7 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
     {% for category, message in messages %}
     <div
-        class="alert alert-{{ category }} {% if category == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif category == 'info' %}bg-blue-100 border border-blue-400 text-blue-700{% else %}bg-green-100 border border-green-400 text-green-700{% endif %} px-4 py-3 rounded relative mb-4">
+        class="alert alert-{{ category }} {% if category == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif category == 'warning' %}bg-yellow-100 border border-yellow-400 text-yellow-700{% elif category == 'info' %}bg-blue-100 border border-blue-400 text-blue-700{% else %}bg-green-100 border border-green-400 text-green-700{% endif %} px-4 py-3 rounded relative mb-4">
         {{ message }}
         <button onclick="this.parentElement.style.display='none'" class="absolute top-0 bottom-0 right-0 px-4 py-3">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -38,6 +38,102 @@
         </h2>
         <p class="text-gray-600 mt-1">ยินดีต้อนรับสู่ระบบจัดการนัดหมาย {{ hospital_name }}</p>
     </div>
+
+    {% if setup_status is defined and not setup_status.is_complete %}
+    <!-- Onboarding Checklist: แสดงเมื่อยังตั้งค่าไม่ครบ -->
+    <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-2 border-purple-600">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">เริ่มต้นใช้งานระบบ</h3>
+                <p class="text-sm text-gray-500 mt-1">ตั้งค่า 3 ขั้นตอนนี้ให้ครบ เพื่อเปิดรับจองออนไลน์</p>
+            </div>
+            <span class="text-sm font-medium text-purple-600 mt-2 sm:mt-0">
+                เสร็จแล้ว {{ setup_status.done_count }} จาก 3 ขั้นตอน
+            </span>
+        </div>
+        <div class="space-y-4">
+            {% set steps = [
+                (setup_status.has_availability, 1, 'ตั้งค่าเวลาทำการ',
+                 'กำหนดวันและช่วงเวลาที่เปิดรับนัดหมาย',
+                 url('availability.availability_settings')),
+                (setup_status.has_provider, 2, 'เพิ่มเจ้าหน้าที่ผู้ให้บริการ',
+                 'เพิ่มแพทย์หรือเจ้าหน้าที่ที่รับนัด พร้อมผูกกับตารางเวลา',
+                 url('providers.provider_list')),
+                (setup_status.has_event_type, 3, 'สร้างประเภทการนัดหมาย',
+                 'กำหนดบริการที่เปิดให้จองและระยะเวลาต่อคิว',
+                 url('main.event_types_settings'))
+            ] %}
+            {% for done, num, title, desc, link in steps %}
+            <div class="flex items-center gap-4 p-4 rounded-lg {% if done %}bg-gray-50{% else %}bg-purple-50{% endif %}">
+                {% if done %}
+                <span class="flex-shrink-0 w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </span>
+                {% else %}
+                <span class="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white text-sm font-semibold flex items-center justify-center">{{ num }}</span>
+                {% endif %}
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold {% if done %}text-gray-500 line-through{% else %}text-gray-900{% endif %}">{{ title }}</p>
+                    <p class="text-sm text-gray-500">{{ desc }}</p>
+                </div>
+                {% if done %}
+                <a href="{{ link }}" class="text-sm text-purple-600 hover:text-purple-700 hover:underline flex-shrink-0">แก้ไข</a>
+                {% else %}
+                <a href="{{ link }}"
+                    class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition-colors flex-shrink-0">ตั้งค่า</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif setup_status is defined and setup_status.is_complete and appointments|length == 0 %}
+    <!-- Empty state: ตั้งค่าครบแล้วแต่ยังไม่มีนัดหมาย — ชวนแชร์ลิงก์หน้าจอง -->
+    <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-md p-6 mb-8">
+        <div class="flex items-start gap-4">
+            <span class="flex-shrink-0 w-10 h-10 rounded-full bg-green-600 flex items-center justify-center">
+                <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clip-rule="evenodd" />
+                </svg>
+            </span>
+            <div class="flex-1 min-w-0">
+                <h3 class="text-lg font-semibold text-gray-900">ระบบพร้อมเปิดรับจองแล้ว</h3>
+                <p class="text-sm text-gray-600 mt-1">
+                    ระบบตั้งค่าเริ่มต้นให้แล้ว (เวลาทำการ จ-ศ 08:30-16:30 และประเภทนัดพื้นฐาน)
+                    คุณแก้ไขได้ทุกเมื่อจากเมนูตั้งค่า — แชร์ลิงก์ด้านล่างเพื่อให้ผู้รับบริการเริ่มจองนัด
+                </p>
+                <div class="mt-4 flex flex-col sm:flex-row gap-3">
+                    <div class="flex-1 flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 min-w-0">
+                        <span class="flex-shrink-0">🔗</span>
+                        <span id="public-booking-url" class="text-sm text-gray-700 truncate">{{ url('booking.booking_home') }}</span>
+                    </div>
+                    <button type="button" onclick="copyBookingUrl(this)"
+                        class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors flex-shrink-0">
+                        คัดลอกลิงก์
+                    </button>
+                    <a href="{{ url('booking.booking_home') }}" target="_blank"
+                        class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition-colors text-center flex-shrink-0">
+                        เปิดหน้าจอง
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        function copyBookingUrl(btn) {
+            const url = new URL(document.getElementById('public-booking-url').textContent.trim(), window.location.origin).href;
+            navigator.clipboard.writeText(url).then(function () {
+                btn.textContent = 'คัดลอกแล้ว';
+                setTimeout(function () { btn.textContent = 'คัดลอกลิงก์'; }, 2000);
+            });
+        }
+    </script>
+    {% endif %}
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

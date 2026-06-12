@@ -12,8 +12,12 @@ from shared_db.models import (Appointment, User, Hospital,
                               ServiceType, AvailabilityTemplate,
                               TemplateProvider, AuditLog)
 from .auth import login_required, check_tenant_access
-from .utils.logger import log_route_access 
+from .utils.logger import log_route_access
 from .utils.url_helper import get_dashboard_url, build_url_with_context
+from .services.appointment_notifications import (
+    notify_patient_appointment_change,
+    notify_reschedule_request,
+)
 from shared_db.database import SessionLocal, get_db_session
 from .auth import get_current_user
 from .core.tenant_manager import with_tenant, TenantManager
@@ -66,9 +70,19 @@ def index():
     
     # แสดง landing page สำหรับผู้ใช้ที่ยังไม่ login
     fastapi_url = os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
-    return render_template('landing.html', 
+    return render_template('landing.html',
                          fastapi_base_url=fastapi_url,
                          current_user=current_user)
+
+@bp.route('/terms')
+def terms():
+    """เงื่อนไขการใช้งาน (Terms of Service) — หน้าสาธารณะ ไม่ต้อง login"""
+    return render_template('legal/terms.html')
+
+@bp.route('/privacy')
+def privacy():
+    """นโยบายความเป็นส่วนตัว (PDPA) — หน้าสาธารณะ ไม่ต้อง login"""
+    return render_template('legal/privacy.html')
 
 @bp.route('/dashboard')
 @log_route_access
@@ -113,7 +127,18 @@ def dashboard():
         # เพิ่มการดึงข้อมูล providers และสร้าง dictionary
         providers = db.query(Provider).all()
         providers_dict = {provider.id: provider for provider in providers}
-        
+
+        # สถานะการตั้งค่าระบบ สำหรับ onboarding checklist บน dashboard
+        setup_status = {
+            'has_availability': db.query(AvailabilityTemplate.id).first() is not None,
+            'has_provider': any(p.is_active for p in providers),
+            'has_event_type': db.query(EventType.id).filter_by(is_active=True).first() is not None,
+        }
+        setup_status['is_complete'] = all(setup_status.values())
+        setup_status['done_count'] = sum(
+            1 for k in ('has_availability', 'has_provider', 'has_event_type') if setup_status[k]
+        )
+
         hospital_display_name = current_user.hospital.name
         
         # คำนวณ statistics และแบ่งหมวดหมู่
@@ -171,10 +196,11 @@ def dashboard():
         today_count = sum(1 for apt in upcoming_appointments 
                          if apt.start_time.date() == today)
         
-        return render_template('dashboard.html', 
+        return render_template('dashboard.html',
                              hospital_name=hospital_display_name,
                              subdomain=subdomain,
                              current_user=current_user,
+                             setup_status=setup_status,
                              appointments=appointments,
                              upcoming_appointments=upcoming_appointments,
                              past_appointments=past_appointments,
@@ -322,12 +348,28 @@ def admin_reschedule_appointment(appointment_id):
                 booking_ref = result.get('booking_reference', appointment.booking_reference)
                 message = result.get('message', 'เลื่อนนัดเรียบร้อยแล้ว')
                 flash(f"{message} - รหัส: {booking_ref}", 'success')
-                
-                # ส่ง notification ถ้ามี email/phone
-                if appointment.guest_email or appointment.guest_phone:
-                    # TODO: Send notification
+
+                # แจ้งผู้รับบริการ — ถ้ามีอีเมล FastAPI ส่งให้แล้วตอน reschedule
+                # เหลือกรณีมีแต่เบอร์โทร (เตือนให้เจ้าหน้าที่โทร / SMS ถ้าเปิด option)
+                new_start = None
+                try:
+                    new_start = datetime.strptime(f"{new_date} {new_time}", "%Y-%m-%d %H:%M")
+                except (TypeError, ValueError):
                     pass
-                
+                current_user = get_current_user()
+                notice, notice_category = notify_patient_appointment_change(
+                    'rescheduled',
+                    hospital_name=current_user.hospital.name if current_user else 'สถานพยาบาล',
+                    booking_reference=booking_ref,
+                    event_name=event_type.name if event_type else None,
+                    start_time=new_start,
+                    guest_name=appointment.guest_name,
+                    guest_email=appointment.guest_email,
+                    guest_phone=appointment.guest_phone,
+                    email_already_sent=True,
+                )
+                flash(notice, notice_category)
+
                 return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
             else:
                 error = response.json()
@@ -505,31 +547,38 @@ def request_reschedule(appointment_id):
         
         reason = request.json.get('reason', '')
         suggested_dates = request.json.get('suggested_dates', [])
-        
-        # บันทึก request ใน database
-        # TODO: สร้าง table reschedule_requests ถ้ายังไม่มี
-        
-        # ส่ง notification
-        if appointment.guest_email:
-            # TODO: Send email with reschedule link
-            reschedule_link = f"{request.host_url}book/reschedule/{appointment.booking_reference}?subdomain={g.subdomain}"
-            
-            # Mock email sending
-            current_app.logger.info(f"Sending reschedule request to {appointment.guest_email}")
-            current_app.logger.info(f"Link: {reschedule_link}")
-            current_app.logger.info(f"Reason: {reason}")
-        
-        if appointment.guest_phone:
-            # TODO: Send SMS
-            pass
-        
+
+        # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน (instance จะ expire หลัง commit)
+        guest_email = appointment.guest_email
+        guest_phone = appointment.guest_phone
+        guest_name = appointment.guest_name
+        booking_reference = appointment.booking_reference
+        start_time = appointment.start_time
+        req_event = db.query(EventType).filter_by(id=appointment.event_type_id).first()
+        event_name = req_event.name if req_event else None
+        reschedule_link = f"{request.host_url.rstrip('/')}/book/reschedule/{booking_reference}?subdomain={g.subdomain}"
+
         # Update appointment status
         appointment.status = 'pending_reschedule'
         db.commit()
-        
+
+        # แจ้งผู้รับบริการ: อีเมลพร้อมลิงก์เลือกเวลาใหม่ / เตือนให้โทร / SMS ถ้าเปิด option
+        current_user = get_current_user()
+        notice, _ = notify_reschedule_request(
+            hospital_name=current_user.hospital.name if current_user else 'สถานพยาบาล',
+            booking_reference=booking_reference,
+            event_name=event_name,
+            start_time=start_time,
+            guest_name=guest_name,
+            guest_email=guest_email,
+            guest_phone=guest_phone,
+            reschedule_link=reschedule_link,
+            reason=reason,
+        )
+
         return jsonify({
             'success': True,
-            'message': 'ส่งคำขอเลื่อนนัดเรียบร้อยแล้ว'
+            'message': f'ส่งคำขอเลื่อนนัดเรียบร้อยแล้ว — {notice}'
         })
         
     except Exception as e:
@@ -554,40 +603,54 @@ def admin_cancel_appointment(appointment_id):
         except Exception:
             pass
 
+        # SET โดยไม่ commit — ให้อยู่ใน transaction เดียวกับ query (ดู CLAUDE.md กับดัก search_path)
         db.execute(text(f'SET search_path TO "{tenant_schema}", public'))
-        db.commit()
-        
+
         appointment = db.query(Appointment).filter_by(id=appointment_id).first()
-        
+
         if not appointment:
             flash('ไม่พบนัดหมาย', 'error')
             return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
-        
+
         if request.method == 'POST':
             reason = request.form.get('reason')
-            
+
             if not reason:
                 flash('กรุณาระบุเหตุผลในการยกเลิก', 'error')
                 return redirect(request.url)
-            
+
+            # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน (instance จะ expire หลัง commit)
+            guest_email = appointment.guest_email
+            guest_phone = appointment.guest_phone
+            guest_name = appointment.guest_name
+            booking_reference = appointment.booking_reference
+            start_time = appointment.start_time
+            cancelled_event = db.query(EventType).filter_by(id=appointment.event_type_id).first()
+            event_name = cancelled_event.name if cancelled_event else None
+
             # อัพเดต appointment
             appointment.status = 'cancelled'
             appointment.cancelled_at = datetime.now(timezone.utc)
             appointment.cancelled_by = 'admin'
             appointment.cancellation_reason = f"[Admin] {reason}"
-            
+
             db.commit()
-            
-            # ส่ง notification
-            if appointment.guest_email:
-                current_app.logger.info(f"Sending cancellation notice to {appointment.guest_email}")
-                current_app.logger.info(f"Reason: {reason}")
-            
-            if appointment.guest_phone:
-                pass
-            
+
+            # แจ้งผู้รับบริการ: มีอีเมลส่งอีเมล / มีแต่เบอร์เตือนให้โทร / SMS ถ้าเปิด option
+            current_user = get_current_user()
+            notice, notice_category = notify_patient_appointment_change(
+                'cancelled',
+                hospital_name=current_user.hospital.name if current_user else 'สถานพยาบาล',
+                booking_reference=booking_reference,
+                event_name=event_name,
+                start_time=start_time,
+                guest_name=guest_name,
+                guest_email=guest_email,
+                guest_phone=guest_phone,
+            )
+
             flash('ยกเลิกนัดหมายเรียบร้อยแล้ว', 'success')
-            # แก้ไขตรงนี้ - เพิ่ม subdomain parameter
+            flash(notice, notice_category)
             return redirect(build_url_with_context('main.dashboard', subdomain=subdomain))
         
         # GET - แสดง form

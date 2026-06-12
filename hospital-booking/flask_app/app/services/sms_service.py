@@ -9,9 +9,18 @@ from .redis_connection import redis_manager
 # Get a logger instance
 logger = logging.getLogger(__name__)
 
+def send_notification_sms(phone_number, message):
+    """ส่ง SMS ข้อความทั่วไป (เช่น แจ้งเลื่อน/ยกเลิกนัด) ผ่าน NT gateway"""
+    logger.info(f"Attempting to send notification SMS to {phone_number}")
+    return _send_sms(phone_number, message)
+
 def send_otp_sms(phone_number, otp):
     """Send OTP via SMS"""
     logger.info(f"Attempting to send OTP SMS to {phone_number}")
+    return _send_sms(phone_number, f"รหัส OTP ของคุณคือ {otp} (ใช้ได้ 5 นาที)")
+
+def _send_sms(phone_number, message):
+    """ส่ง SMS ผ่าน NT gateway — คืน True/False"""
     # ใช้ os.environ โดยตรง ไม่ต้องพึ่ง Flask
     user = os.environ.get("NT_SMS_USER")
     passw = os.environ.get("NT_SMS_PASS")
@@ -22,8 +31,7 @@ def send_otp_sms(phone_number, otp):
     if not all([user, passw, sender, host, api_path]):
         logger.error("SMS service is not configured. Missing one or more NT_SMS_* environment variables.")
         return False
-    
-    message = f"รหัส OTP ของคุณคือ {otp} (ใช้ได้ 5 นาที)"
+
     encoded_message = quote_plus(message)
     
     payload = f"""<?xml version="1.0" encoding="UTF-8"?>
