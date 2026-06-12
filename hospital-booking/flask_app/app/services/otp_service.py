@@ -21,8 +21,11 @@ class OTPService:
 
         # Store the base32 key and reset attempts in Redis
         # Use a pipeline for atomic operations
+        # เก็บ interval ไว้ด้วย เพื่อให้ verify_otp ใช้ interval เดียวกับตอน generate
+        # (จำเป็นเมื่อ expiration ไม่ใช่ 300 เช่น password reset ใช้ 900)
         pipe = self.redis.pipeline()
         pipe.set(f"otp:key:{identifier}", base32_key, ex=expiration)
+        pipe.set(f"otp:interval:{identifier}", expiration, ex=expiration)
         pipe.set(f"otp:attempts:{identifier}", 0, ex=expiration)
         pipe.execute()
 
@@ -45,18 +48,20 @@ class OTPService:
         # Check attempts
         if attempts >= self.MAX_ATTEMPTS:
             # Clean up immediately on too many attempts
-            self.redis.delete(f"otp:key:{identifier}", f"otp:attempts:{identifier}")
+            self.redis.delete(f"otp:key:{identifier}", f"otp:interval:{identifier}", f"otp:attempts:{identifier}")
             return False, "พยายามมากเกินไป กรุณาเริ่มใหม่"
-        
+
         # Create TOTP object from stored key
-        # The interval here is just for object creation, verification depends on `valid_window`
-        totp = pyotp.TOTP(base32_key.decode('utf-8'), digits=6, interval=300)
-        
+        # ใช้ interval เดิมที่เก็บไว้ตอน generate (fallback 300 สำหรับ key เก่าที่ไม่มี interval)
+        interval_raw = self.redis.get(f"otp:interval:{identifier}")
+        interval = int(interval_raw) if interval_raw else 300
+        totp = pyotp.TOTP(base32_key.decode('utf-8'), digits=6, interval=interval)
+
         # Verify OTP
         # valid_window=1 allows for a bit of clock skew between generation and verification
         if totp.verify(otp_input, valid_window=1):
             # Clean up on success
-            self.redis.delete(f"otp:key:{identifier}", f"otp:attempts:{identifier}")
+            self.redis.delete(f"otp:key:{identifier}", f"otp:interval:{identifier}", f"otp:attempts:{identifier}")
             return True, "สำเร็จ"
         else:
             # Increment attempts on failure

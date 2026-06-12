@@ -1,14 +1,14 @@
 # flask_app/app/auth.py - ระบบ Authentication
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, g, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, g, jsonify, current_app
 from werkzeug.security import check_password_hash
 from sqlalchemy import text
 from shared_db.models import User, Hospital
 from shared_db.database import SessionLocal, get_db_session
 from .core.tenant_manager import TenantManager
-from .utils.url_helper import get_dashboard_url
+from .utils.url_helper import get_dashboard_url, build_url_with_context
 from .services.otp_service import otp_service
-from .services.email_service import queue_otp_email
+from .services.email_service import queue_otp_email, queue_password_reset_email
 import re
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -324,6 +324,120 @@ def verify_password_otp():
         return jsonify({'success': False, 'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
     finally:
         db.close()
+
+# ---------- Password Reset (ลืมรหัสผ่าน) ----------
+
+# OTP สำหรับ reset อายุ 15 นาที (flow อื่นใช้ค่า default 5 นาที)
+PASSWORD_RESET_OTP_EXPIRATION = 900
+EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+def _pwreset_identifier(email):
+    """แยก namespace ของ OTP reset ออกจาก OTP flow อื่นที่ใช้อีเมลเดียวกัน"""
+    return f"pwreset:{email}"
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """ขอรหัสยืนยันทางอีเมลสำหรับตั้งรหัสผ่านใหม่"""
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+
+        if not email or not EMAIL_PATTERN.match(email):
+            flash('กรุณากรอกอีเมลให้ถูกต้อง', 'error')
+            return render_template('auth/forgot_password.html', email=email)
+
+        try:
+            # Rate limit ต่อ IP: 10 คำขอ / 15 นาที
+            ip = (request.remote_addr or 'unknown')
+            ip_key = f"pwreset:rl:ip:{ip}"
+            ip_count = int(otp_service.redis.incr(ip_key))
+            if ip_count == 1:
+                otp_service.redis.expire(ip_key, 900)
+            if ip_count > 10:
+                flash('คำขอมากเกินไป กรุณาลองใหม่อีกครั้งภายหลัง', 'error')
+                return render_template('auth/forgot_password.html', email=email)
+
+            # Cooldown ต่ออีเมล 60 วินาที — ถ้าเพิ่งขอไปจะไม่ส่งซ้ำ
+            # แต่ตอบเหมือนเดิมทุกกรณี เพื่อไม่เปิดเผยว่าอีเมลมีในระบบหรือไม่
+            can_send = otp_service.redis.set(f"pwreset:rl:email:{email}", 1, ex=60, nx=True)
+
+            if can_send:
+                db = get_db_session()
+                try:
+                    user = db.query(User).filter_by(email=email).first()
+                    if user:
+                        otp = otp_service.generate_otp(
+                            _pwreset_identifier(email),
+                            expiration=PASSWORD_RESET_OTP_EXPIRATION
+                        )
+                        queue_password_reset_email(email, otp)
+                finally:
+                    db.close()
+        except Exception as e:
+            current_app.logger.error(f"forgot_password failed: {e}", exc_info=True)
+            flash('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', 'error')
+            return render_template('auth/forgot_password.html', email=email)
+
+        # ตอบกลางๆ เสมอ ไม่ว่าอีเมลจะมีในระบบหรือไม่
+        session['pwreset_email'] = email
+        flash('หากอีเมลนี้มีอยู่ในระบบ ระบบได้ส่งรหัสยืนยัน 6 หลักไปให้แล้ว กรุณาตรวจสอบอีเมลของคุณ', 'success')
+        return redirect(build_url_with_context('auth.reset_password'))
+
+    return render_template('auth/forgot_password.html')
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    """ตั้งรหัสผ่านใหม่ด้วยรหัสยืนยันที่ส่งไปทางอีเมล"""
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        otp_input = request.form.get('otp', '').strip()
+        new_password = request.form.get('new_password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+
+        if not email or not otp_input or not new_password or not confirm_password:
+            flash('กรุณากรอกข้อมูลให้ครบถ้วน', 'error')
+            return render_template('auth/reset_password.html', email=email)
+
+        # ตรวจรหัสผ่านก่อน verify OTP — OTP ถูกใช้ทิ้งทันทีเมื่อ verify สำเร็จ
+        if new_password != confirm_password:
+            flash('รหัสผ่านใหม่ไม่ตรงกัน', 'error')
+            return render_template('auth/reset_password.html', email=email)
+
+        if len(new_password) < 8:
+            flash('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', 'error')
+            return render_template('auth/reset_password.html', email=email)
+
+        success, message = otp_service.verify_otp(_pwreset_identifier(email), otp_input)
+        if not success:
+            flash(message, 'error')
+            return render_template('auth/reset_password.html', email=email)
+
+        db = get_db_session()
+        try:
+            user = db.query(User).filter_by(email=email).first()
+            if not user:
+                # ไม่ควรเกิดในการใช้งานจริง เพราะ OTP ออกให้เฉพาะอีเมลที่มีบัญชี
+                flash('ไม่สามารถตั้งรหัสผ่านใหม่ได้ กรุณาลองใหม่อีกครั้ง', 'error')
+                return render_template('auth/reset_password.html', email=email)
+
+            user.set_password(new_password)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            current_app.logger.error(f"reset_password failed: {e}", exc_info=True)
+            flash('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', 'error')
+            return render_template('auth/reset_password.html', email=email)
+        finally:
+            db.close()
+
+        session.pop('pwreset_email', None)
+        flash('ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่', 'success')
+        return redirect(build_url_with_context('auth.login'))
+
+    # GET: เติมอีเมลที่ขอรหัสไว้ล่าสุดให้อัตโนมัติ (ถ้ามี)
+    email = session.get('pwreset_email', '')
+    return render_template('auth/reset_password.html', email=email)
 
 # Middleware สำหรับตรวจสอบการ login
 def login_required(f):
