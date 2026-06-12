@@ -9,6 +9,7 @@ from datetime import datetime
 
 from shared_db.models import Hospital, User, HospitalStatus, UserRole, AuditLog
 from shared_db.database import engine
+from shared_db.seed import seed_tenant_defaults
 from admin_app.auth import super_admin_required
 from admin_app.forms import HospitalForm
 
@@ -77,15 +78,29 @@ def create_tenant():
         try:
             g.db.add(hospital)
             g.db.commit()
-
             # Event listener will automatically create schema and tables
-            flash(f'สร้าง tenant "{hospital.name}" สำเร็จ!', 'success')
-            return redirect(url_for('tenants.view_tenant', tenant_id=hospital.id))
-
         except Exception as e:
             g.db.rollback()
             flash(f'เกิดข้อผิดพลาดในการสร้าง tenant: {str(e)}', 'error')
             return render_template('tenants/create.html', form=form)
+
+        # Seed ข้อมูลเริ่มต้น (เวลาทำการ, ประเภทนัด, เจ้าหน้าที่) ให้พร้อมใช้งานทันที
+        try:
+            seed_tenant_defaults(g.db, schema_name)
+            flash(
+                f'สร้าง tenant "{hospital.name}" สำเร็จ! '
+                'พร้อมข้อมูลเริ่มต้น (เวลาทำการ จ-ศ 08:30-16:30, ประเภทนัด 2 รายการ, เจ้าหน้าที่ 1 คน) '
+                'ซึ่งโรงพยาบาลแก้ไขได้เองในหน้าตั้งค่า',
+                'success'
+            )
+        except Exception as e:
+            flash(
+                f'สร้าง tenant "{hospital.name}" สำเร็จ แต่สร้างข้อมูลเริ่มต้นไม่สำเร็จ: {str(e)} '
+                '(โรงพยาบาลต้องตั้งค่าเวลาทำการเองก่อนเปิดรับจอง)',
+                'warning'
+            )
+
+        return redirect(url_for('tenants.view_tenant', tenant_id=hospital.id))
 
     return render_template('tenants/create.html', form=form)
 

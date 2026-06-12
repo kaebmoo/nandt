@@ -20,6 +20,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'flask_app', 'app'))
 from shared_db import models
 from shared_db.database import SessionLocal, engine
+from shared_db.seed import seed_tenant_defaults
 
 # Import routers
 from .event_types import router as event_types_router
@@ -135,127 +136,33 @@ def get_universal_url(subdomain: str, path: str = "/dashboard", params: dict = N
         return f"{base_url}{path}?{query_string}" if query_string else f"{base_url}{path}"
 
 def create_tenant_setup(schema_name: str, db: Session):
-    """สร้าง tenant schema, tables และข้อมูลเริ่มต้นด้วย SQLAlchemy Objects"""
-    
+    """สร้าง tenant schema, tables และข้อมูลเริ่มต้น
+
+    ข้อมูลเริ่มต้นใช้ shared_db.seed.seed_tenant_defaults ซึ่งเป็นชุดเดียวกับ
+    เส้นทางสร้าง tenant จาก Super Admin panel
+    """
     try:
-        # 1. สร้าง Schema
+        # 1. สร้าง Schema และตารางทั้งหมดจาก models.py
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
-        
-        # 2. ตั้งค่า Search Path ชั่วคราว
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
-        
-        # 3. สร้างตารางทั้งหมดจาก models.py (วิธีที่ถูกต้องและยั่งยืน)
         models.TenantBase.metadata.create_all(bind=db.get_bind())
-        
-        # 4. สร้างข้อมูลเริ่มต้นด้วย SQLAlchemy Objects (แทนที่ SQL INSERT)
-        
-        # --- สร้าง Availability Template เริ่มต้น ---
-        default_template = models.AvailabilityTemplate(
-            name="เวลาทำการเริ่มต้น",
-            description="จันทร์-ศุกร์ (08:30-16:30)",
-            timezone="Asia/Bangkok"
-        )
-        db.add(default_template)
-        db.flush() # ส่งข้อมูลไป DB เพื่อให้ได้ template ID
-
-        # --- สร้าง Availability (วันและเวลา) สำหรับ Template นั้น ---
-        working_days = [
-            models.DayOfWeek.MONDAY, models.DayOfWeek.TUESDAY, 
-            models.DayOfWeek.WEDNESDAY, models.DayOfWeek.THURSDAY, 
-            models.DayOfWeek.FRIDAY
-        ]
-        for day in working_days:
-            availability = models.Availability(
-                template_id=default_template.id,
-                day_of_week=day,
-                start_time=time(8, 30),
-                end_time=time(16, 30)
-            )
-            db.add(availability)
-
-        # --- สร้าง Event Types เริ่มต้น โดยอ้างอิงถึง Template ID ---
-        event_types_data = [
-            {'name': 'ตรวจสุขภาพทั่วไป', 'slug': 'general-checkup', 'duration_minutes': 30, 'color': '#6366f1'},
-            {'name': 'ปรึกษาแพทย์เฉพาะทาง', 'slug': 'specialist-consult', 'duration_minutes': 45, 'color': '#10b981'},
-            {'name': 'ฉีดวัคซีน', 'slug': 'vaccination', 'duration_minutes': 15, 'color': '#f59e0b'},
-            {'name': 'ตรวจประจำปี', 'slug': 'annual-checkup', 'duration_minutes': 60, 'color': '#ef4444'}
-        ]
-        for data in event_types_data:
-            event_type = models.EventType(
-                name=data['name'],
-                slug=data['slug'],
-                duration_minutes=data['duration_minutes'],
-                color=data['color'],
-                template_id=default_template.id # อ้างอิงถึง Template ที่สร้าง
-            )
-            db.add(event_type)
-
-        # --- สร้าง Provider ตัวอย่าง ---
-        provider = models.Provider(
-            name='นพ.สมชาย ใจดี',
-            title='นพ.',
-            department='แพทย์ทั่วไป',
-            public_booking_url='dr-somchai',
-            bio='แพทย์ผู้เชี่ยวชาญด้านการดูแลสุขภาพทั่วไป'
-        )
-        db.add(provider)
-
-        # --- สร้าง Patient ตัวอย่าง ---
-        patients_data = [
-            {'name': 'สมชาย ใจดี', 'phone_number': '0812345678', 'email': 'somchai@email.com'},
-            {'name': 'สมหญิง สวยงาม', 'phone_number': '0823456789', 'email': 'somying@email.com'}
-        ]
-        for data in patients_data:
-            patient = models.Patient(**data)
-            db.add(patient)
-
-        # --- [NEW] เชื่อมโยง Provider กับ Template (Assignment) ---
-        template_assignment = models.TemplateProvider(
-            template_id=default_template.id,
-            provider_id=provider.id,
-            is_primary=True,
-            can_auto_assign=True,
-            priority=0
-        )
-        db.add(template_assignment)
-        
-        # --- [NEW] สร้างตารางเวลาทำงาน (Schedule) ---
-        # ใช้วันทำงานเดียวกับ Template (Mon-Fri)
-        from datetime import date
-        provider_schedule = models.ProviderSchedule(
-            provider_id=provider.id,
-            template_id=default_template.id,
-            effective_date=date.today(),
-            end_date=None,
-            days_of_week=[
-                models.DayOfWeek.MONDAY, models.DayOfWeek.TUESDAY, 
-                models.DayOfWeek.WEDNESDAY, models.DayOfWeek.THURSDAY, 
-                models.DayOfWeek.FRIDAY
-            ], # หรือใช้ working_days ถ้าเก็บเป็น enum value
-            schedule_type='regular',
-            notes='Default schedule created during registration'
-        )
-        
-        # หมายเหตุ: days_of_week ใน ProviderSchedule เป็น ARRAY(Integer)
-        # แต่ models.DayOfWeek.MONDAY เป็น Enum
-        # ต้องแปลงเป็น integer ก่อนบันทึกลง column type ARRAY(Integer)
-        provider_schedule.days_of_week = [day.value for day in working_days]
-        
-        db.add(provider_schedule)
-
-        # 5. Commit ข้อมูลทั้งหมดในครั้งเดียว
-        db.commit()
-        
-    except Exception as e:
-        db.rollback()
-        # เพิ่มการแสดง Error ที่ละเอียดขึ้นเพื่อช่วยในการ Debug
-        import traceback
-        traceback.print_exc()
-        raise Exception(f"Failed to create tenant setup: {str(e)}")
-    finally:
-        # 6. Reset search path กลับเป็นปกติเสมอ
         db.execute(text('SET search_path TO public'))
         db.commit()
+    except Exception as e:
+        db.rollback()
+        db.execute(text('SET search_path TO public'))
+        db.commit()
+        import traceback
+        traceback.print_exc()
+        raise Exception(f"Failed to create tenant schema: {str(e)}")
+
+    # 2. ข้อมูลเริ่มต้น (จัดการ search_path และ commit/rollback ภายในตัวเอง)
+    try:
+        seed_tenant_defaults(db, schema_name)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise Exception(f"Failed to seed tenant defaults: {str(e)}")
 
 
 # --- API Endpoints ---
