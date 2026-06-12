@@ -85,11 +85,11 @@ async def get_holidays(
 ):
     """Get holidays with optional filters."""
     schema_name = f"tenant_{subdomain}"
-    
-    # Set search_path
+
+    # Set search_path (ไม่ commit — ให้ SET อยู่ใน transaction เดียวกับ query
+    # มิฉะนั้น connection อาจถูกสลับใน pool แล้ว query หลุดไป public schema)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         ensure_holiday_table(subdomain, db)
         
@@ -118,11 +118,10 @@ async def sync_holidays(
 ):
     """Syncs holidays from an external source."""
     schema_name = f"tenant_{subdomain}"
-    
-    # Set search_path
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     logger.info(f"Syncing holidays for {subdomain}, year: {payload.year}")
     logger.info(f"Received {len(payload.holidays)} holidays")
 
@@ -179,17 +178,17 @@ async def create_custom_holiday(
 ):
     """Creates a single custom holiday."""
     schema_name = f"tenant_{subdomain}"
-    
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         ensure_holiday_table(subdomain, db)
 
         exists = db.query(models.Holiday).filter_by(date=holiday.date).first()
         if exists:
             raise HTTPException(status_code=409, detail=f"Holiday on {holiday.date} already exists.")
-        
+
         db_holiday = models.Holiday(
             date=holiday.date,
             name=holiday.name,
@@ -200,8 +199,10 @@ async def create_custom_holiday(
         )
         db.add(db_holiday)
         db.commit()
+        # commit จบ transaction แล้ว — ต้อง SET ใหม่ก่อน refresh ไม่งั้นอาจอ่านผิด schema
+        db.execute(text(f'SET search_path TO "{schema_name}", public'))
         db.refresh(db_holiday)
-        
+
         return db_holiday
     except HTTPException:
         raise
@@ -217,10 +218,10 @@ async def get_holiday(
 ):
     """Get a single holiday by ID."""
     schema_name = f"tenant_{subdomain}"
-    
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     ensure_holiday_table(subdomain, db)
 
     holiday = db.query(models.Holiday).filter_by(id=holiday_id).first()
@@ -237,23 +238,25 @@ async def update_holiday(
 ):
     """Update holiday (partial update)."""
     schema_name = f"tenant_{subdomain}"
-    
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         ensure_holiday_table(subdomain, db)
 
         holiday = db.query(models.Holiday).filter_by(id=holiday_id).first()
         if not holiday:
             raise HTTPException(status_code=404, detail="Holiday not found.")
-        
+
         update_dict = update_data.dict(exclude_unset=True)
         for field, value in update_dict.items():
             if hasattr(holiday, field):
                 setattr(holiday, field, value)
-        
+
         db.commit()
+        # commit จบ transaction แล้ว — ต้อง SET ใหม่ก่อน refresh ไม่งั้นอาจอ่านผิด schema
+        db.execute(text(f'SET search_path TO "{schema_name}", public'))
         db.refresh(holiday)
         return holiday
     except Exception as e:
@@ -268,10 +271,10 @@ async def delete_holiday(
 ):
     """Deletes a holiday."""
     schema_name = f"tenant_{subdomain}"
-    
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         ensure_holiday_table(subdomain, db)
 

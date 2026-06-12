@@ -15,8 +15,20 @@ import logging
 from shared_db.database import SessionLocal
 from shared_db import models
 
+from .email_service import (
+    send_appointment_confirmation,
+    send_appointment_reschedule,
+    send_appointment_cancellation,
+)
+
 # Setup logging
 logger = logging.getLogger(__name__)
+
+
+def _hospital_display_name(db: Session, subdomain: str) -> str:
+    """ชื่อโรงพยาบาล (public schema) สำหรับใส่ในอีเมลแจ้งผู้จอง"""
+    hospital = db.query(models.Hospital).filter_by(subdomain=subdomain).first()
+    return hospital.name if hospital else subdomain
 
 class AppointmentSearch(BaseModel):
     search_type: Literal['email', 'phone', 'reference']
@@ -38,9 +50,8 @@ def get_tenant_db(subdomain: str):
         db = SessionLocal()
         try:
             schema_name = f"tenant_{subdomain}"
-            # Set search_path ทันที
+            # Set search_path ทันที (ไม่ commit — ให้อยู่ใน transaction เดียวกับ query)
             db.execute(text(f'SET search_path TO "{schema_name}", public'))
-            db.commit()  # Commit การ set search_path
             yield db
         except Exception as e:
             db.rollback()
@@ -509,7 +520,6 @@ async def get_event_type_details(
     schema_name = f"tenant_{subdomain}"
     try:
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
-        db.commit()
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
 
@@ -532,10 +542,10 @@ async def get_booking_availability(
     provider_id: Optional[int] = None,
     db: Session = Depends(get_db)  
 ):
-    # Set search_path
+    # Set search_path (ไม่ commit — ให้ SET อยู่ใน transaction เดียวกับ query
+    # เพราะ commit จะคืน connection กลับ pool และ search_path อาจหายไป)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
 
     try:
         # 1. Get event type with template
@@ -778,12 +788,10 @@ async def create_booking(
 ):
     """Create a new appointment booking"""
     
-    schema_name = f"tenant_{subdomain}"
-    # Set search_path ด้วยตัวเองในแต่ละ function
+    # Set search_path ด้วยตัวเองในแต่ละ function (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     try:
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
-        db.commit()  # ต้อง commit หลัง set search_path
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
     
@@ -894,29 +902,36 @@ async def create_booking(
             notes=booking.notes
         )
         
+        # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน — หลัง commit instance จะ expire
+        # และการเข้าถึง attribute อาจวิ่งไปคนละ connection ที่ search_path ไม่ใช่ tenant นี้
+        hospital_name = _hospital_display_name(db, subdomain)
+        event_type_name = event_type.name
+
         db.add(appointment)
         db.commit()
-        db.refresh(appointment)
-        
-        # 7. Queue email notification (mock for now)
+
+        # 7. Queue email notification (ส่งเฉพาะค่า primitive — ORM object จะ detached หลัง session ปิด)
         if booking.guest_email:
             background_tasks.add_task(
-                send_confirmation_email,
+                send_appointment_confirmation,
                 booking.guest_email,
-                appointment,
-                event_type
+                hospital_name,
+                booking_ref,
+                event_type_name,
+                appointment_datetime,
+                booking.guest_name,
             )
-        
+
         # 8. Return confirmation
         return BookingResponse(
             success=True,
             booking_reference=booking_ref,
             appointment_datetime=appointment_datetime.isoformat(),
             guest_name=booking.guest_name,
-            event_type_name=event_type.name,
+            event_type_name=event_type_name,
             provider_name=None,  # Will add when provider system is ready
-            location=getattr(event_type, 'location', 'จะแจ้งให้ทราบ'),
-            instructions=getattr(event_type, 'instructions', None),
+            location='จะแจ้งให้ทราบ',
+            instructions=None,
             message="การจองสำเร็จ! รายละเอียดถูกส่งไปยัง email ของคุณแล้ว"
         )
         
@@ -934,10 +949,9 @@ async def get_booking_details(
 ):
     """Get booking details by reference"""
     
-    # Set search_path ทุกครั้ง
+    # Set search_path ทุกครั้ง (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
 
     appointment = db.query(models.Appointment).filter_by(
         booking_reference=booking_reference
@@ -989,11 +1003,10 @@ async def reschedule_booking(
 ):
     """Reschedule an existing booking"""
 
-    # Set search_path
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         # 1. Find original appointment
         original = db.query(models.Appointment).filter(
@@ -1082,19 +1095,29 @@ async def reschedule_booking(
             else:
                 original.internal_notes = note_entry
 
+        # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน (instance จะ expire หลัง commit)
+        guest_email = original.guest_email
+        guest_name = original.guest_name
+        booking_reference = original.booking_reference
+        event_type_name = event_type.name
+        hospital_name = _hospital_display_name(db, subdomain)
+
         db.commit()
 
-        if original.guest_email:
+        if guest_email:
             background_tasks.add_task(
-                send_reschedule_email,
-                original.guest_email,
-                original,
-                event_type
+                send_appointment_reschedule,
+                guest_email,
+                hospital_name,
+                booking_reference,
+                event_type_name,
+                new_datetime,
+                guest_name,
             )
 
         return {
             "success": True,
-            "booking_reference": original.booking_reference,
+            "booking_reference": booking_reference,
             "new_appointment_datetime": new_datetime.isoformat(),
             "provider_id": assigned_provider_id,
             "message": "เลื่อนนัดหมายเรียบร้อยแล้ว"
@@ -1116,9 +1139,9 @@ async def restore_booking(
 ):
     """Restore a previously cancelled booking if the original slot is still available."""
 
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
 
     try:
         appointment = db.query(models.Appointment).filter_by(
@@ -1177,19 +1200,30 @@ async def restore_booking(
             else:
                 appointment.internal_notes = note_entry
 
+        # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน (instance จะ expire หลัง commit)
+        guest_email = appointment.guest_email
+        guest_name = appointment.guest_name
+        booking_reference = appointment.booking_reference
+        event_type_name = event_type.name
+        hospital_name = _hospital_display_name(db, subdomain)
+
         db.commit()
 
-        if appointment.guest_email:
+        if guest_email:
+            # กู้คืนนัดเดิม = ยืนยันนัดอีกครั้ง
             background_tasks.add_task(
-                send_reschedule_email,
-                appointment.guest_email,
-                appointment,
-                event_type
+                send_appointment_confirmation,
+                guest_email,
+                hospital_name,
+                booking_reference,
+                event_type_name,
+                slot_start,
+                guest_name,
             )
 
         return {
             "success": True,
-            "booking_reference": appointment.booking_reference,
+            "booking_reference": booking_reference,
             "message": "กู้คืนนัดหมายเรียบร้อยแล้ว"
         }
 
@@ -1207,10 +1241,9 @@ async def cancel_booking(
     db: Session = Depends(get_db)  
 ):
     """Cancel an existing booking"""
-    # Set search_path
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
 
     try:
         # Find appointment
@@ -1232,20 +1265,35 @@ async def cancel_booking(
         appointment.cancelled_by = 'patient'
         appointment.cancellation_reason = request.reason
         
+        # เก็บค่าที่ต้องใช้หลัง commit ไว้ก่อน (instance จะ expire หลัง commit)
+        guest_email = appointment.guest_email
+        guest_name = appointment.guest_name
+        start_time = appointment.start_time
+        cancelled_at = appointment.cancelled_at
+        cancelled_event = db.query(models.EventType).filter_by(
+            id=appointment.event_type_id
+        ).first()
+        event_type_name = cancelled_event.name if cancelled_event else None
+        hospital_name = _hospital_display_name(db, subdomain)
+
         db.commit()
-        
+
         # Send notification
-        if appointment.guest_email:
+        if guest_email:
             background_tasks.add_task(
-                send_cancellation_email,
-                appointment.guest_email,
-                appointment
+                send_appointment_cancellation,
+                guest_email,
+                hospital_name,
+                request.booking_reference,
+                event_type_name,
+                start_time,
+                guest_name,
             )
-        
+
         return {
             "success": True,
             "booking_reference": request.booking_reference,
-            "cancelled_at": appointment.cancelled_at.isoformat(),
+            "cancelled_at": cancelled_at.isoformat(),
             "message": "การยกเลิกนัดสำเร็จ"
         }
         
@@ -1262,12 +1310,11 @@ async def search_appointments(
     db: Session = Depends(get_db)
 ):
     """Search appointments by email, phone, or reference"""
-    
-    # Set search_path
+
+    # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
     schema_name = f"tenant_{subdomain}"
     db.execute(text(f'SET search_path TO "{schema_name}", public'))
-    db.commit()
-    
+
     try:
         # Build query based on search type
         query = db.query(models.Appointment)
@@ -1341,22 +1388,4 @@ async def search_appointments(
     except Exception as e:
         raise HTTPException(500, f"Error searching appointments: {str(e)}")
 
-# --- Email Functions (Mock) ---
-async def send_confirmation_email(email: str, appointment, event_type):
-    """Send booking confirmation email"""
-    print(f"📧 Sending confirmation to {email}")
-    print(f"   Reference: {appointment.booking_reference}")
-    print(f"   DateTime: {appointment.start_time}")
-    print(f"   Event: {event_type.name}")
-    # TODO: Integrate with real email service
-
-async def send_reschedule_email(email: str, appointment, event_type):
-    """Send reschedule confirmation email"""
-    print(f"📧 Sending reschedule confirmation to {email}")
-    print(f"   New Reference: {appointment.booking_reference}")
-    print(f"   New DateTime: {appointment.start_time}")
-
-async def send_cancellation_email(email: str, appointment):
-    """Send cancellation confirmation email"""
-    print(f"📧 Sending cancellation confirmation to {email}")
-    print(f"   Reference: {appointment.booking_reference}")
+# การส่งอีเมลแจ้งเตือนทั้งหมดอยู่ใน email_service.py (ส่งจริงผ่าน SMTP)
