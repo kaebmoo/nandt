@@ -1,6 +1,33 @@
-# Hospital Booking System
+# Hospital Booking System (NudDee — นัดดี)
 
 ระบบจองคิวโรงพยาบาลแบบ Multi-Tenant SaaS Platform
+
+## เอกสาร
+
+| เอกสาร | สำหรับ |
+|---|---|
+| README.md (ไฟล์นี้) | นักพัฒนา — ติดตั้งและรันระบบ |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | ผู้ดูแลโรงพยาบาล — คู่มือการใช้งานระบบ |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | แผนการ deploy ขึ้น production |
+| [CLAUDE.md](CLAUDE.md) | สถาปัตยกรรมและแนวทางแก้โค้ด (สำหรับ AI/นักพัฒนา) |
+
+## Quick Start (วิธีที่แนะนำ)
+
+```bash
+./start_all.sh            # start ทุก service: FastAPI + Flask + Admin + RQ worker
+./start_all.sh --celery   # เพิ่ม Celery worker + beat (sync วันหยุดอัตโนมัติ)
+# กด Ctrl+C ครั้งเดียวเพื่อหยุดทุก service
+```
+
+Script จะตรวจ PostgreSQL/Redis ให้, เลือก Python ที่ dependency ครบให้อัตโนมัติ,
+เขียน log แยกไฟล์ที่ `logs/<service>.log` และแจ้งเตือนถ้า service ใดหยุดทำงานเอง
+
+| Service | URL |
+|---|---|
+| Flask (เว็บหลัก) | http://localhost:5001/?subdomain=ชื่อโรงพยาบาล |
+| หน้าจองสาธารณะ | http://localhost:5001/book/?subdomain=ชื่อโรงพยาบาล |
+| FastAPI (API docs) | http://localhost:8000/docs |
+| Super Admin | http://localhost:5002 |
 
 ## โครงสร้างโปรเจค
 
@@ -57,13 +84,23 @@ REDIS_DB=1
 FLASK_SECRET_KEY=your-secret-key
 SECRET_KEY=your-secret-key
 
-# Email (Gmail)
+# Email (ใช้ส่งอีเมลยืนยันการจอง/เลื่อน/ยกเลิกนัด และ OTP)
 MAIL_SERVER=smtp.gmail.com
 MAIL_PORT=587
 MAIL_USE_TLS=True
 MAIL_USERNAME=your-email@gmail.com
 MAIL_PASSWORD=your-app-password
 EMAIL_SENDER=your-email@gmail.com
+MAIL_DEFAULT_SENDER=noreply@nuddee.com
+
+# SMS ผ่าน NT Digital (สำหรับ OTP — ไม่ตั้งค่าก็รันได้ แค่ส่ง SMS ไม่ได้)
+NT_SMS_HOST=smsgw.example.com
+NT_SMS_API=/service/SMSWebServiceEngine.php
+NT_SMS_USER=xxx
+NT_SMS_PASS=xxx
+NT_SMS_SENDER=xxx
+# ส่ง SMS แจ้งเลื่อน/ยกเลิกนัดให้ผู้จองที่ไม่มีอีเมล (default ปิด — ระบบเตือนให้เจ้าหน้าที่โทรแทน)
+ENABLE_SMS_NOTIFICATIONS=false
 
 # Stripe Payment
 STRIPE_SECRET_KEY=sk_xxx
@@ -72,6 +109,14 @@ STRIPE_WEBHOOK_SECRET=whsec_xxx
 
 # FastAPI
 FASTAPI_BASE_URL=http://127.0.0.1:8000
+
+# URL/Domain (production เท่านั้น)
+# DOMAIN=nuddee.com
+# USE_HTTPS=true
+
+# Super Admin Panel
+ADMIN_HOST=127.0.0.1
+ADMIN_PORT=5002
 
 # Environment
 ENVIRONMENT=development
@@ -152,35 +197,27 @@ celery -A flask_app.celery_worker beat --loglevel=info
 
 ---
 
-## Quick Start - รันทุก Services พร้อมกัน
+## รันทุก Services พร้อมกัน
 
-เปิด Terminal 6 หน้าต่าง:
+ใช้ `./start_all.sh` (ดู Quick Start ด้านบน) — คำสั่งข้างบนทั้งหมดมีไว้กรณีต้องการรันแยกทีละตัวเพื่อ debug
 
-```bash
-# Terminal 1: FastAPI
-cd hospital-booking/fastapi_app
-uvicorn app.main:app --reload --port 8000
+> หมายเหตุ: ถ้ารัน FastAPI เองโดยตรง ต้องตั้ง `PYTHONPATH` ชี้ root ของ repo ก่อน
+> (`export PYTHONPATH=$(pwd)` จาก root) ไม่เช่นนั้นจะ import `shared_db` ไม่เจอ —
+> start_all.sh จัดการให้อัตโนมัติ
 
-# Terminal 2: Flask App
-cd hospital-booking/flask_app
-python run.py
+---
 
-# Terminal 3: Admin Panel
-cd hospital-booking
-python run_admin.py
+## ข้อมูลเริ่มต้นของ Tenant ใหม่ (Auto Seed)
 
-# Terminal 4: RQ Worker
-cd hospital-booking
-python worker.py
+ทุกครั้งที่สร้างโรงพยาบาลใหม่ (ทั้งสมัครผ่าน `/api/register` และสร้างจาก Super Admin Panel)
+ระบบเรียก `shared_db/seed.py → seed_tenant_defaults()` สร้างให้อัตโนมัติ:
 
-# Terminal 5: Celery Worker (optional)
-cd hospital-booking
-celery -A flask_app.celery_worker worker --loglevel=info
+- ตารางเวลาทำการ จันทร์-ศุกร์ 08:30-16:30
+- ประเภทนัด 2 รายการ (นัดหมายทั่วไป 30 นาที, ปรึกษา/ติดตามอาการ 15 นาที)
+- เจ้าหน้าที่ 1 คน ผูกกับตารางเวลาพร้อมตารางทำงาน
 
-# Terminal 6: Celery Beat (optional)
-cd hospital-booking
-celery -A flask_app.celery_worker beat --loglevel=info
-```
+ทำให้หน้าจองสาธารณะใช้ได้ทันทีโดยไม่ต้องตั้งค่าใดๆ ก่อน (ผู้ใช้แก้ไขทีหลังได้จากหน้าตั้งค่า)
+ฟังก์ชันเป็น idempotent — เรียกซ้ำกับ tenant ที่มีข้อมูลแล้วจะไม่สร้างซ้ำ
 
 ---
 

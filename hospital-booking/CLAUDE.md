@@ -28,14 +28,15 @@ This is a multi-tenanted hospital booking system with a **hybrid architecture**:
 ### Running the Applications
 
 ```bash
-# Start Flask app (port 5001)
-cd flask_app && python run.py
+# วิธีที่แนะนำ: start ทุก service ในคำสั่งเดียว (ตรวจ Postgres/Redis ให้ด้วย)
+./start_all.sh            # FastAPI(8000) + Flask(5001) + Admin(5002) + RQ worker
+./start_all.sh --celery   # เพิ่ม Celery worker + beat
 
-# Start FastAPI app (port 8000) 
-cd fastapi_app && uvicorn app.main:app --reload --port 8000
-
-# Start background worker (Redis/RQ)
-python worker.py
+# หรือรันแยกทีละตัว:
+cd flask_app && python run.py                                 # Flask (port 5001)
+cd fastapi_app && uvicorn app.main:app --reload --port 8000   # FastAPI — ต้อง export PYTHONPATH=<repo root> ก่อน
+python run_admin.py                                           # Super Admin (port 5002)
+python worker.py                                              # RQ background worker
 ```
 
 ### Database Operations
@@ -77,6 +78,50 @@ db = SessionLocal()
 # Use text() wrapper for all SQL commands:
 from sqlalchemy import text
 db.execute(text('SET search_path TO "tenant_schema", public'))
+```
+
+**กับดัก search_path ที่ต้องระวัง (บทเรียนจากการ debug จริง มิ.ย. 2026):**
+1. **ห้าม `db.commit()` ทันทีหลัง SET search_path** — commit คืน connection กลับ pool
+   แล้ว query ถัดไปอาจได้ connection อื่นที่ search_path ไม่ใช่ tenant เดิม
+   ให้ SET โดยไม่ commit เพื่อให้ SET อยู่ใน transaction เดียวกับ query
+   (ดู pattern ที่ถูกต้องใน `fastapi_app/app/event_types.py` get_tenant_session
+   และทุก route ใน `fastapi_app/app/booking.py`)
+2. **เก็บค่า attribute ของ ORM instance เป็นตัวแปร local ก่อน `db.commit()`**
+   ถ้าต้องใช้หลัง commit — หลัง commit instance จะ expire และการเข้าถึง attribute
+   จะ trigger refresh query ที่อาจวิ่งไปผิด schema → ObjectDeletedError
+3. **ส่งเฉพาะค่า primitive เข้า FastAPI BackgroundTasks** — task ทำงานหลัง DB session ปิดแล้ว
+4. **public schema มีตาราง tenant หลงอยู่** (availability_templates, event_types ฯลฯ
+   ว่างเปล่า จาก migration เก่า) — ทำให้ query ที่หลุดไป public "ไม่ error แต่หาไม่เจอ" เงียบๆ
+
+### Tenant Seeding (ข้อมูลเริ่มต้นของ tenant ใหม่)
+```python
+# Logic อยู่ที่เดียว: shared_db/seed.py
+from shared_db.seed import seed_tenant_defaults
+seed_tenant_defaults(db, schema_name)  # idempotent — ข้ามถ้ามี template อยู่แล้ว
+# ถูกเรียกจากทั้ง /api/register (fastapi_app/app/main.py: create_tenant_setup)
+# และ Super Admin panel (admin_app/tenant_routes.py: create_tenant)
+# ถ้าเพิ่มเส้นทางสร้าง Hospital ใหม่ ต้องเรียกฟังก์ชันนี้ด้วยเสมอ
+```
+
+### Email Notifications (FastAPI)
+```python
+# อีเมลยืนยัน/เลื่อน/ยกเลิก/ขอเลื่อนนัดส่งจริงผ่าน SMTP: fastapi_app/app/email_service.py
+# เรียกผ่าน BackgroundTasks ด้วยค่า primitive เท่านั้น
+# การส่งล้มเหลวจะ log (📧/❌ ใน stdout) ไม่ throw — อีเมลต้องไม่ทำให้การจองล้มเหลว
+# กับดัก: flask_mail แก้ charset registry ระดับ global (utf-8 body → 8bit)
+# email_service จึงต้องใช้ Charset ที่บังคับ BASE64 เอง (_utf8_base64_charset)
+# มิฉะนั้นอีเมลภาษาไทยที่ส่งจาก RQ worker (ซึ่ง import app.* → flask_mail) จะพัง
+```
+
+### การแจ้งผู้รับบริการเมื่อ admin เปลี่ยนนัด (Flask)
+```python
+# flask_app/app/services/appointment_notifications.py
+from .services.appointment_notifications import notify_patient_appointment_change
+notice, category = notify_patient_appointment_change('cancelled' หรือ 'rescheduled', ...)
+flash(notice, category)
+# ลำดับช่องทาง: มีอีเมล → ส่งอีเมลผ่าน RQ / มีแต่เบอร์ → คืนข้อความเตือนให้เจ้าหน้าที่โทร
+# / SMS เป็น option: ENABLE_SMS_NOTIFICATIONS=true (default ปิด) + ต้องมี NT_SMS_* ครบ
+# ใช้แล้วใน admin_cancel_appointment, admin_reschedule_appointment, request_reschedule
 ```
 
 ### URL Generation
@@ -159,6 +204,22 @@ Test both URL modes:
 - Some template filters are duplicated across files
 - Error handling needs improvement in API integration points
 - N+1 query issues in dashboard data loading
+- Role-based access control มี enum แต่ยังไม่บังคับใช้ใน routes
+- public.holidays ยังเหลืออยู่ (มี backup ใน migrations/backups/ แล้ว —
+  ลบด้วย `python migrations/drop_stray_public_tenant_tables.py --execute --force`)
+- ยังไม่มี test suite
+
+แก้ไปแล้ว (มิ.ย. 2026): อีเมลยืนยันการจองส่งจริง (เดิม mock print),
+tenant จาก Super Admin ได้ seed ข้อมูลเริ่มต้นเหมือนเส้นทางสมัครเอง,
+แก้ SET search_path + commit pattern ใน booking.py และ holidays.py ที่ทำให้ query หลุด schema,
+dashboard มี onboarding checklist / empty state แล้ว,
+password reset มีแล้ว (/auth/forgot-password + /auth/reset-password —
+OTP 6 หลักทางอีเมล อายุ 15 นาที ไม่เปิดเผยว่าอีเมลมีในระบบ มี rate limit;
+otp_service เก็บ interval ลง Redis เพื่อรองรับอายุ OTP ที่ไม่ใช่ 300 วินาที),
+หน้า /terms + /privacy (PDPA) มีแล้วและลิงก์ consent ทุกจุดชี้ถูกต้อง,
+ตาราง tenant ที่หลงใน public schema ถูกลบแล้ว 13 ตาราง (เหลือ public.holidays),
+admin เลื่อน/ยกเลิก/ขอเลื่อนนัด → แจ้งผู้รับบริการอัตโนมัติแล้ว
+(อีเมล / เตือนให้โทรเมื่อมีแต่เบอร์ / SMS เป็น option ปิด default)
 
 ## Dependencies
 
