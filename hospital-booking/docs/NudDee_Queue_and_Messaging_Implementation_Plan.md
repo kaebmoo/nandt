@@ -852,17 +852,28 @@ SET search_path TO tenant_humnoi;
 
 ## 12. Decisions Log (พบตอน implement Phase 0–1B, ตัดสินกับเจ้าของ 13 มิ.ย. 2026)
 
-> เกิดจาก audit แผนเทียบ codebase จริง — เคยเป็น "open decisions" ตอนนี้**ตัดสินแล้ว** บันทึกไว้กันลืม
+> เกิดจาก audit แผนเทียบ codebase จริง — A2 ตัดสินแล้ว; A1 ตัดสินหลักแล้วเหลือ **sub-decision** (granularity
+> ของ "นัดนี้ต้องเข้าคิวไหม") ที่ต้องเลือกก่อน window booking / Phase 2
 
-### A1 — แหล่งของ "slot window" สำหรับ grace/priority — ✅ ตัดสินแล้ว
+### A1 — slot window ของ grace/priority + "นัด 1:1 ไม่ต้องจับคิว" — ✅ ตัดสิน (บางส่วน) + ⏳ sub-decision
 **ปัญหา:** §5.3/§5.4 อ้าง `appointment.slot_start` / `slot_end` ที่ **ไม่มีในตาราง** `appointments`
 (มีจริง: `start_time`, `end_time` แบบ DateTime, `slot_type`, `session_id`)
-**บริบท:** ระบบจองเป็น **exact** อยู่แล้วโดยธรรมชาติ — slot generate จาก availability × `event_type.duration_minutes`
-(booking.py `generate_time_slots`); ทุกนัดมีเวลาเป๊ะ (เช่น 09:00–09:30). DB default `slot_type='exact'` อยู่แล้ว
-**ตัดสิน: ใช้ `start_time`/`end_time` ของ appointment โดยตรง** (ทุกนัดเป็น exact) — queue/check-in ทำงานบน
-นัด exact ได้เลย (มาถึง→check-in→ได้เลขคิว→grace เทียบเวลานัดตัวเอง). ไม่สร้าง "window" เป็นระบบแยก —
-`slot_type` เป็นแค่ flag ต่อ event_type เผื่ออนาคต. session = "ช่องคิวของจุดบริการต่อวัน" (ไม่ใช่เวลานัด) —
-นัด exact ผูก `session_id` ของวันนั้นเพื่อขึ้นจอ/เรียกคิว
+**บริบท:** ระบบจองเป็น **exact** โดยธรรมชาติ — slot generate จาก availability × `event_type.duration_minutes`
+(booking.py `generate_time_slots`); ทุกนัดมีเวลาเป๊ะ. DB default `slot_type='exact'`; **ยังไม่มีโค้ดเซ็ต
+`'window'`** (window booking ยังไม่ถูกสร้าง). `check_in()` เป็น **opt-in** — สร้าง queue_entry เฉพาะตอนมี
+คน check-in จริง; `session_id` nullable
+
+**ตัดสิน — คิวเป็น opt-in, มี 3 กรณีอยู่ร่วมกัน:**
+- **นัด 1:1 ตามเวลา (exact, ไม่เข้าคิว):** มาตามเวลา → พบเลย, ไม่ check-in, `session_id` null, ไม่มีเลขคิว/grace
+  — รองรับอยู่แล้ว (ไม่มีอะไรบังคับให้จับบัตร) ← การจองเฉพาะ 1:1
+- **นัดแบบจับคิว (window / exact ที่เลือกเข้าคิว) + walk-in:** check-in → queue_number → grace/priority
+**grace/priority (Phase 2) ใช้กับ "ผู้เข้าคิว" เท่านั้น** (นัดที่ check-in + walk-in) — slot window สำหรับ
+grace = เวลาของ **session ที่ผูก** (window) หรือ `start_time`/`end_time` (ถ้านัด exact เลือกเข้าคิว).
+session = "ช่องคิวของจุดบริการต่อวัน" (ไม่ใช่เวลานัด) — generator สร้างไว้เป็น container ของคิว ไม่บังคับนัดให้ผูก
+
+**⏳ sub-decision (ตัดสินก่อน window booking / Phase 2):** "นัดนี้ต้องเข้าคิวหรือไม่" ตัดสินที่ระดับไหน —
+ต่อ **event_type** (เช่น พบแพทย์เฉพาะทาง=1:1, ทำใบขับขี่=คิว), ต่อ **service_point**, หรือต่อ **appointment**
+(`slot_type`)? กำหนดว่า check-in/จอง จะออกเลขคิวหรือแค่บันทึกการมาถึง — ยังไม่ตัดสิน
 
 ### A2 — date_override "วันทำงานพิเศษ" เปิด/ปิดได้จริงไหม — ✅ ตัดสินแล้ว (replace)
 **สถานะจริง (แก้ความเข้าใจผิดเดิม):** booking engine **REPLACE** ไม่ใช่ clamp — [booking.py:628-633](../fastapi_app/app/booking.py)
