@@ -370,7 +370,8 @@ def check_in(appointment_id: int | None, service_point_id: int,
 ```python
 # แก้ 13 มิ.ย. 2026 (C): pseudocode นี้ใช้ชื่อย่อ — คอลัมน์จริงใน grace_policy คือ
 #   grace_before_min / grace_after_min (ดู §4.10); และ service จริงรับ `db` เป็น arg ตัวแรก
-#   (เช่น classify_on_checkin(db, appointment, now, policy)). slot_start/slot_end: ดู Open Decision A1 (§12)
+#   (เช่น classify_on_checkin(db, appointment, now, policy)). slot_start/slot_end ไม่มีในตาราง —
+#   ใช้ appointment.start_time/end_time (A1 §12 ตัดสินแล้ว: ทุกนัดเป็น exact)
 def classify_on_checkin(appointment, now: datetime, policy: GracePolicy) -> str:
     """
     คืนค่า entry_class:
@@ -541,14 +542,14 @@ def decrypt(ciphertext: str | None) -> str | None:
 #   - session.name จริง = "HH:MM-HH:MM" ของบล็อก (stable/unique → idempotent + รองรับ multi-block)
 #     ไม่ใช่ 'เช้า'/'บ่าย' (บล็อกเต็มวัน/หลายบล็อกจะชน UNIQUE + พัง idempotency)
 #   - guard ใช้ queue_entries **และ** appointments (ดู _has_references) ไม่ใช่แค่ queue_entries
-#   - step 3 "เพิ่ม/ลด/ปิด": ของจริงทำได้แค่ "ลด (clamp)/ปิด" ตาม booking engine — "เพิ่มวัน" ยังทำไม่ได้
-#     (ดู Open Decision A2 §12)
+#   - step 3 override: booking.py:628-633 ทำ REPLACE (custom hours แทนตารางปกติทั้งวัน) →
+#     เปิด "วันทำงานพิเศษ" ที่ปกติปิดได้ generator ทำตามนี้แล้ว (ดู A2 §12 — ตัดสินแล้ว)
 def generate_sessions(service_point_id: int, date_from: date, date_to: date) -> list["Session"]:
     """
     resolve availability ที่ effective ของแต่ละวันในช่วง [date_from, date_to]:
       1. ดึง availability template ของ service_point (ผ่าน availability_template_id)
       2. apply weekly pattern -> ได้ session block (name, start_time, end_time, capacity) ต่อวัน
-      3. apply date_overrides (template-specific) ทับ -> ลด/ปิดวันนั้น (clamp; "เพิ่ม" → A2 §12)
+      3. apply date_overrides (template-specific) ทับ -> REPLACE/ปิดวันนั้น (custom hours แทนทั้งวัน, เปิดวันพิเศษได้)
     UPSERT เข้า sessions (UNIQUE service_point_id, session_date, name) -> idempotent
     ห้ามลบ/แก้ session ที่มี queue_entries/appointment อยู่แล้ว (รักษา history)
     """
@@ -849,32 +850,29 @@ SET search_path TO tenant_humnoi;
 
 ---
 
-## 12. Open Decisions (ค้างตัดสินใจ — พบตอน implement Phase 0–1B, 13 มิ.ย. 2026)
+## 12. Decisions Log (พบตอน implement Phase 0–1B, ตัดสินกับเจ้าของ 13 มิ.ย. 2026)
 
-> เพิ่มจาก audit แผนเทียบ codebase จริง — **ยังไม่ตัดสินให้** เพราะเป็นทางเลือก design (ไม่ใช่ typo)
-> ต้องเลือกก่อนเริ่ม phase ที่เกี่ยว มิฉะนั้นโค้ดจะอ้าง field ที่ไม่มี หรือ lock พฤติกรรมที่อาจไม่ตรงเป้า
+> เกิดจาก audit แผนเทียบ codebase จริง — เคยเป็น "open decisions" ตอนนี้**ตัดสินแล้ว** บันทึกไว้กันลืม
 
-### A1 — แหล่งของ "slot window" สำหรับ grace/priority (ต้องเลือกก่อน Phase 2)
+### A1 — แหล่งของ "slot window" สำหรับ grace/priority — ✅ ตัดสินแล้ว
 **ปัญหา:** §5.3/§5.4 อ้าง `appointment.slot_start` / `slot_end` ที่ **ไม่มีในตาราง** `appointments`
 (มีจริง: `start_time`, `end_time` แบบ DateTime, `slot_type`, `session_id`)
-**ทางเลือก:**
-- **(a) แยกตาม slot_type (แนะนำ):** `exact` → ใช้ `start_time`/`end_time`; `window` → ใช้เวลาเริ่ม/จบของ
-  **session ที่ผูก** (`sessions.start_time`/`end_time` ณ `session_date`) — ตรงเจตนา slot_type
-- **(b) ใช้ `start_time`/`end_time` เสมอ** ละเลย session window — ง่ายกว่าแต่ window appointment จะได้ grace
-  ผิดช่วง
-**ผลกระทบ:** กำหนดวิธีคำนวณ `grace_before_min`/`grace_after_min` (§5.3) + `window_proximity` (§5.4) —
-ต้องนิยามให้ตรงก่อนเขียน `grace_service` / `priority_service`
+**บริบท:** ระบบจองเป็น **exact** อยู่แล้วโดยธรรมชาติ — slot generate จาก availability × `event_type.duration_minutes`
+(booking.py `generate_time_slots`); ทุกนัดมีเวลาเป๊ะ (เช่น 09:00–09:30). DB default `slot_type='exact'` อยู่แล้ว
+**ตัดสิน: ใช้ `start_time`/`end_time` ของ appointment โดยตรง** (ทุกนัดเป็น exact) — queue/check-in ทำงานบน
+นัด exact ได้เลย (มาถึง→check-in→ได้เลขคิว→grace เทียบเวลานัดตัวเอง). ไม่สร้าง "window" เป็นระบบแยก —
+`slot_type` เป็นแค่ flag ต่อ event_type เผื่ออนาคต. session = "ช่องคิวของจุดบริการต่อวัน" (ไม่ใช่เวลานัด) —
+นัด exact ผูก `session_id` ของวันนั้นเพื่อขึ้นจอ/เรียกคิว
 
-### A2 — date_override "เพิ่มวันทำการพิเศษ" ได้ไหม (ต้องเลือกก่อนพึ่ง override เปิดวันพิเศษ)
-**สถานะจริง:** booking engine (`booking.py: is_slot_blocked_by_override`) **clamp อย่างเดียว** — override
-custom hours ในวันที่ weekly pattern **ไม่มีบล็อก** = no-op (ยืนยัน: humnoi override id 13/14 บน template
-58 วันพุธ/พฤหัส ไม่สร้าง slot จริง). `session_service` ทำตาม (clamp-only) เพื่อ parity กับ booking
-แต่ §5.8 step 3 เขียน "เพิ่ม/ลด/ปิด" → สื่อว่า "เพิ่ม" ได้ ซึ่งของจริงยังทำไม่ได้
-**ทางเลือก:**
-- **(a) คง clamp-only (สถานะปัจจุบัน):** ไม่รองรับ "เปิดวันพิเศษ" ผ่าน date_override — งานน้อย, สอดคล้อง booking
-- **(b) ขยายทั้ง booking engine + generator** ให้ override custom-window ในวันไม่มีบล็อก = **เพิ่ม** availability/
-  session — งานมากกว่า, **เปลี่ยนพฤติกรรม booking** (นอกขอบเขตคิว), ต้องเทสต์ทั้งจอง+คิว
-**ผลกระทบ:** ถ้าเลือก (b) เป็นการแก้ booking engine ไม่ใช่แค่ generator — กระทบทั้งหน้าจองและ Phase 1B
+### A2 — date_override "วันทำงานพิเศษ" เปิด/ปิดได้จริงไหม — ✅ ตัดสินแล้ว (replace)
+**สถานะจริง (แก้ความเข้าใจผิดเดิม):** booking engine **REPLACE** ไม่ใช่ clamp — [booking.py:628-633](../fastapi_app/app/booking.py)
+ทำ `base_slots = generate_time_slots(custom_start, custom_end, duration)` แทนตารางปกติของวันนั้นทั้งหมด
+(และ `if not base_slots` เช็คหลัง replace) → **เปิดวันที่ปกติปิดได้จริง** สร้างผ่านหน้า settings/availability
+(ฟอร์มวันพิเศษ: override_type='custom' = เปิดเวลาพิเศษ / 'unavailable' = ปิด)
+**ตัดสิน: generator ทำ REPLACE ตรงกับ booking** (แก้แล้ว `session_service._desired_blocks_for_date`):
+override.is_unavailable → ไม่มี session; override custom hours → session = ช่วง custom (แทนทั้งวัน, เปิดวันพิเศษได้);
+ไม่มี override → weekly. trigger ผ่าน RQ (1B.3) ตอน save → generator สร้าง session ของวันพิเศษอัตโนมัติ
+**(แก้ bug)** generator เดิมทำ clamp/intersect → ไม่ตรง booking (วันพิเศษจะไม่มี session) — แก้เป็น replace แล้ว
 
 ---
 
