@@ -14,6 +14,7 @@ from .utils.url_helper import build_url_with_context
 from .services import grace_service as gs
 from .services import identity_service as ids
 from .services import priority_service as ps
+from .services import queue_notifications as qn
 from .services import queue_service as qs
 from .services.estimation import get_estimator
 from shared_db import models
@@ -113,6 +114,7 @@ def checkin(service_point_id):
                 service_point_id=sp.id,
                 appointment_id=result.appointment_id,
             ))
+        qn.enqueue_checkin_confirm(g.tenant, result)
         return redirect(build_url_with_context('queue.ticket', entry_id=result.id))
 
     return render_template('queue/checkin.html', service_point=sp)
@@ -180,6 +182,7 @@ def call_next(service_point_id):
     if entry is None:
         flash('ไม่มีคิวที่รออยู่', 'info')
     else:
+        qn.enqueue_queue_turn(g.tenant, entry)
         flash(f'เรียกคิวหมายเลข {entry.queue_number} แล้ว', 'success')
     return redirect(build_url_with_context('queue.console', service_point_id=sp.id))
 

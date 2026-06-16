@@ -81,8 +81,16 @@
                     <span class="font-semibold text-gray-900">{{ messaging.total_notifications }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
-                    <span class="text-gray-600">Paid cost units</span>
+                    <span class="text-gray-600">Paid cost units (sent)</span>
                     <span class="font-semibold text-gray-900">{{ messaging.total_cost_units }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Attempted cost units</span>
+                    <span class="font-semibold text-gray-900">{{ messaging.attempted_cost_units }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Failed cost units</span>
+                    <span class="font-semibold text-gray-900">{{ messaging.failed_cost_units }}</span>
                 </div>
                 {% for status, count in messaging.status_counts.items() %}
                     <div class="flex justify-between text-sm">
@@ -120,7 +128,7 @@
         data: {
             labels: Object.keys(messageByChannel),
             datasets: [{
-                label: 'Cost units',
+                label: 'Paid cost units (sent)',
                 data: Object.values(messageByChannel).map(row => row.cost_units),
                 backgroundColor: '#dc2626'
             }]

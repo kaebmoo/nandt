@@ -81,24 +81,50 @@ def message_cost_summary(db, date_from, date_to):
                     models.NotificationLog.sent_at < end_dt)
             .all())
 
-    by_channel = defaultdict(lambda: {'count': 0, 'cost_units': 0})
-    by_event = defaultdict(lambda: {'count': 0, 'cost_units': 0})
+    def bucket():
+        return {
+            'count': 0,
+            'sent_count': 0,
+            'failed_count': 0,
+            'cost_units': 0,              # real paid/sent cost (backward-compatible key)
+            'sent_cost_units': 0,
+            'attempted_cost_units': 0,
+            'failed_cost_units': 0,
+        }
+
+    by_channel = defaultdict(bucket)
+    by_event = defaultdict(bucket)
     status_counts = Counter()
-    total_cost = 0
+    sent_cost = 0
+    attempted_cost = 0
+    failed_cost = 0
     for log in logs:
         cost = int(log.cost_units or 0)
-        total_cost += cost
+        attempted_cost += cost
         status_counts[log.status] += 1
-        by_channel[log.channel]['count'] += 1
-        by_channel[log.channel]['cost_units'] += cost
-        by_event[log.event_type]['count'] += 1
-        by_event[log.event_type]['cost_units'] += cost
+        for grouped in (by_channel[log.channel], by_event[log.event_type]):
+            grouped['count'] += 1
+            grouped['attempted_cost_units'] += cost
+            if log.status == 'sent':
+                grouped['sent_count'] += 1
+                grouped['sent_cost_units'] += cost
+                grouped['cost_units'] += cost
+            elif log.status == 'failed':
+                grouped['failed_count'] += 1
+                grouped['failed_cost_units'] += cost
+        if log.status == 'sent':
+            sent_cost += cost
+        elif log.status == 'failed':
+            failed_cost += cost
 
     return {
         'date_from': date_from,
         'date_to': date_to,
         'total_notifications': len(logs),
-        'total_cost_units': total_cost,
+        'total_cost_units': sent_cost,
+        'sent_cost_units': sent_cost,
+        'attempted_cost_units': attempted_cost,
+        'failed_cost_units': failed_cost,
         'status_counts': dict(status_counts),
         'by_channel': dict(by_channel),
         'by_event': dict(by_event),

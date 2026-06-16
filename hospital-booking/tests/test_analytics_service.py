@@ -83,13 +83,44 @@ def test_message_cost_summary_groups_by_channel_event_and_status(db):
     result = analytics.message_cost_summary(db, day, day)
 
     assert result['total_notifications'] == 3
-    assert result['total_cost_units'] == 2
+    assert result['total_cost_units'] == 1
+    assert result['sent_cost_units'] == 1
+    assert result['attempted_cost_units'] == 2
+    assert result['failed_cost_units'] == 1
     assert result['status_counts'] == {'sent': 2, 'failed': 1}
-    assert result['by_channel'] == {
-        'telegram': {'count': 1, 'cost_units': 0},
-        'line_push': {'count': 2, 'cost_units': 2},
+    assert result['by_channel']['telegram'] == {
+        'count': 1,
+        'sent_count': 1,
+        'failed_count': 0,
+        'cost_units': 0,
+        'sent_cost_units': 0,
+        'attempted_cost_units': 0,
+        'failed_cost_units': 0,
     }
-    assert result['by_event'] == {
-        'queue_turn': {'count': 2, 'cost_units': 1},
-        'reminder': {'count': 1, 'cost_units': 1},
+    assert result['by_channel']['line_push'] == {
+        'count': 2,
+        'sent_count': 1,
+        'failed_count': 1,
+        'cost_units': 1,
+        'sent_cost_units': 1,
+        'attempted_cost_units': 2,
+        'failed_cost_units': 1,
+    }
+    assert result['by_event']['queue_turn'] == {
+        'count': 2,
+        'sent_count': 2,
+        'failed_count': 0,
+        'cost_units': 1,
+        'sent_cost_units': 1,
+        'attempted_cost_units': 1,
+        'failed_cost_units': 0,
+    }
+    assert result['by_event']['reminder'] == {
+        'count': 1,
+        'sent_count': 0,
+        'failed_count': 1,
+        'cost_units': 0,
+        'sent_cost_units': 0,
+        'attempted_cost_units': 1,
+        'failed_cost_units': 1,
     }
