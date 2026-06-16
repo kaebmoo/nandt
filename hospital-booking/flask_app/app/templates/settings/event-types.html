@@ -157,6 +157,11 @@
                                class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
                         <span class="text-sm text-gray-700">เปิดใช้งาน</span>
                     </label>
+                    <label class="flex items-center space-x-2">
+                        <input type="checkbox" id="requiresQueue" name="requires_queue"
+                               class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                        <span class="text-sm text-gray-700">ใช้ระบบคิวเมื่อเช็คอิน</span>
+                    </label>
                 </div>
             </div>
 
@@ -276,6 +281,9 @@
                                 <span class="${et.is_active ? 'text-green-600' : 'text-gray-500'}">
                                     ${et.is_active ? '● เปิดใช้งาน' : '○ ปิดใช้งาน'}
                                 </span>
+                                <span class="ml-3 ${et.requires_queue ? 'text-purple-600' : 'text-gray-500'}">
+                                    ${et.requires_queue ? '● ใช้ระบบคิว' : '○ นัดตามเวลา'}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -306,6 +314,7 @@
         document.getElementById('eventTypeForm').reset();
         document.getElementById('eventTypeId').value = '';
         document.getElementById('isActive').checked = true;
+        document.getElementById('requiresQueue').checked = false;
         renderAvailabilityOptions();
         document.getElementById('eventTypeModal').classList.remove('hidden');
     }
@@ -321,6 +330,7 @@
         document.getElementById('bufferTime').value = eventType.buffer_before_minutes || 0;
         document.getElementById('advanceBooking').value = eventType.max_advance_days || 30;
         document.getElementById('isActive').checked = eventType.is_active;
+        document.getElementById('requiresQueue').checked = Boolean(eventType.requires_queue);
         renderAvailabilityOptions(eventType.template_id);
         document.getElementById('eventTypeModal').classList.remove('hidden');
     }
@@ -361,6 +371,7 @@
             buffer_after_minutes: bufferTime,
             max_advance_days: parseInt(formData.get('advance_booking_days')),
             is_active: formData.has('is_active'),
+            requires_queue: formData.has('requires_queue'),
             template_id: formData.get('template_id') ? parseInt(formData.get('template_id')) : null
         };
 

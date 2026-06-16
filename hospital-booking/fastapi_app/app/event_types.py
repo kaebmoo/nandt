@@ -10,11 +10,12 @@ import re
 import datetime
 
 # Import database and models
-from shared_db.database import SessionLocal
+from shared_db.database import SessionLocal, bind_tenant
 from shared_db import models
 
 # Import the new default template creator from availability.py
 from .availability import get_or_create_default_template
+from .tenant import resolve_schema
 
 router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["event-types"])
 
@@ -24,18 +25,27 @@ def get_db():
     try:
         yield db
     finally:
+        # คืน connection สะอาด (rollback + unbind + reset public ให้ติด connection)
+        db.rollback()
+        bind_tenant(db, None)
+        db.execute(text("SET search_path TO public"))
+        db.commit()
         db.close()
 
 def get_tenant_session(subdomain: str, db: Session = Depends(get_db)):
     """
     A dependency that provides a DB session with the correct search_path.
+    ผูก session กับ tenant -> after_begin คุม search_path ทุก transaction (รวมหลัง commit/refresh)
     """
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
     try:
+        bind_tenant(db, schema_name)
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
         yield db
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant '{subdomain}' not found or database error.")
+    finally:
+        bind_tenant(db, None)
 
 
 # --- Pydantic Models ---
@@ -48,6 +58,7 @@ class EventTypeCreate(BaseModel):
     buffer_after_minutes: int
     max_advance_days: int
     is_active: bool
+    requires_queue: bool = False
     template_id: Optional[int] = None
 
 class EventTypeUpdate(BaseModel):
@@ -58,6 +69,7 @@ class EventTypeUpdate(BaseModel):
     buffer_after_minutes: Optional[int] = None
     max_advance_days: Optional[int] = None
     is_active: Optional[bool] = None
+    requires_queue: Optional[bool] = None
     template_id: Optional[int] = None
 
 class EventTypeResponse(BaseModel):
@@ -68,6 +80,7 @@ class EventTypeResponse(BaseModel):
     duration_minutes: int
     color: str
     is_active: bool
+    requires_queue: bool
     template_id: Optional[int]
     availability_name: Optional[str] = None
     buffer_before_minutes: int

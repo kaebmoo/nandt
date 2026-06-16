@@ -73,19 +73,27 @@ db = SessionLocal()
 ```
 
 ### Multi-tenant Database Access
-```python
-# Tenant schema is automatically set by middleware
-# Use text() wrapper for all SQL commands:
-from sqlalchemy import text
-db.execute(text('SET search_path TO "tenant_schema", public'))
-```
 
-**กับดัก search_path ที่ต้องระวัง (บทเรียนจากการ debug จริง มิ.ย. 2026):**
-1. **ห้าม `db.commit()` ทันทีหลัง SET search_path** — commit คืน connection กลับ pool
-   แล้ว query ถัดไปอาจได้ connection อื่นที่ search_path ไม่ใช่ tenant เดิม
-   ให้ SET โดยไม่ commit เพื่อให้ SET อยู่ใน transaction เดียวกับ query
-   (ดู pattern ที่ถูกต้องใน `fastapi_app/app/event_types.py` get_tenant_session
-   และทุก route ใน `fastapi_app/app/booking.py`)
+**กลไกใหม่ (13 มิ.ย. 2026 — root fix): ผูก session ด้วย `bind_tenant()` ไม่ใช่ SET search_path manual ลอย ๆ**
+```python
+from shared_db.database import bind_tenant
+# Flask: middleware ผูก g.db ให้อัตโนมัติแล้ว (ใช้ g.db ได้เลย)
+# FastAPI: resolve schema จาก public.hospitals (กัน subdomain มี hyphen) แล้ว bind
+from .tenant import resolve_schema          # fastapi_app/app/tenant.py
+schema_name = resolve_schema(db, subdomain) # query public.hospitals.schema_name + validate status
+bind_tenant(db, schema_name)
+db.execute(text(f'SET search_path TO "{schema_name}", public'))  # SET ซ้ำเฉพาะ transaction ปัจจุบัน
+```
+- `shared_db.database` มี event `after_begin` ที่ SET search_path ให้ **ทุก transaction** ของ session ที่ผูก
+  (รวม transaction ใหม่หลัง commit/rollback) → service commit/rollback ได้ตรง ๆ ไม่ต้อง re-SET เอง
+- session ที่ **ไม่ผูก** → after_begin บังคับ `public` ทุก transaction (กัน connection ค้าง tenant path ปนข้าม tenant)
+- **ห้าม reconstruct `f"tenant_{subdomain}"`** — registration sanitize ชื่อ schema (`my-clinic` → `tenant_myclinic`);
+  ใช้ `resolve_schema` (FastAPI) / `TenantManager.resolve_schema` (Flask) เสมอ
+- get_db/teardown ทุกตัว: `rollback → bind_tenant(db, None) → SET public → commit → close` (คืน connection สะอาด)
+
+**กับดัก search_path ที่ยังต้องระวัง (บทเรียน debug จริง):**
+1. **ห้าม `db.commit()` ทันทีหลัง SET search_path** (ยังจริง) — commit ที่ท้ายงานเท่านั้นถ้าเป็น write
+   (เมื่อ bind_tenant แล้ว after_begin จะดูแล transaction หลัง commit ให้เอง)
 2. **เก็บค่า attribute ของ ORM instance เป็นตัวแปร local ก่อน `db.commit()`**
    ถ้าต้องใช้หลัง commit — หลัง commit instance จะ expire และการเข้าถึง attribute
    จะ trigger refresh query ที่อาจวิ่งไปผิด schema → ObjectDeletedError

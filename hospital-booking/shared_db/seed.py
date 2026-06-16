@@ -107,6 +107,21 @@ def seed_tenant_defaults(db: Session, schema_name: str):
             notes='Default schedule created automatically',
         ))
 
+        # --- Queue/check-in defaults (Phase 0 + 1B.0) ---
+        # ให้ tenant ใหม่มี service_point + นโยบายคิว/grace เริ่มต้น (แก้ได้ในหน้าตั้งค่า)
+        # parity กับ migrations/add_queue_messaging_structures.py (tenant เดิม seed ผ่าน migration)
+        # ไม่ seed session ที่นี่ — session ผูกกับวันที่ ถูก generate ใน Phase 1B
+        # 1B.0: ผูก service_point เข้ากับ template default ที่เพิ่งสร้าง เพื่อให้ session generator
+        # (§5.8) มี source ของเวลาทำการทันที — มิฉะนั้น availability_template_id=NULL → ไม่มี session
+        db.add(models.ServicePoint(
+            name="จุดบริการหลัก",
+            sp_type="counter",
+            parallel_servers=1,
+            availability_template_id=template.id,
+        ))
+        db.add(models.QueuePolicy(service_point_id=None))   # NULL = default ของ tenant
+        db.add(models.GracePolicy(service_point_id=None))   # NULL = default ของ tenant
+
         # เก็บค่าก่อน commit — หลัง commit attribute จะ expire และ refresh
         # อาจวิ่งไปคนละ connection ที่ search_path ไม่ใช่ tenant schema นี้แล้ว
         summary = {
@@ -114,6 +129,9 @@ def seed_tenant_defaults(db: Session, schema_name: str):
             'availabilities': len(WORKING_DAYS),
             'event_types': event_type_count,
             'providers': 1,
+            'service_points': 1,
+            'queue_policy': 1,
+            'grace_policy': 1,
         }
         db.commit()
         return summary

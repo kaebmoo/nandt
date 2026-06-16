@@ -8,11 +8,14 @@ from typing import List, Optional, Dict, Tuple, Any, Set
 import sys
 import datetime
 from datetime import time
+from zoneinfo import ZoneInfo
 import uuid
 from threading import Lock
 
 # Import database and models
-from shared_db.database import SessionLocal
+from shared_db.database import SessionLocal, bind_tenant
+from .tenant import resolve_schema
+from .session_resync import trigger_session_resync, trigger_tenant_session_resync
 from shared_db import models
 
 router = APIRouter(prefix="/api/v1/tenants/{subdomain}", tags=["availability"])
@@ -26,14 +29,23 @@ def get_db():
     try:
         yield db
     finally:
+        # คืน connection สะอาด: rollback ทิ้งงานที่ยังไม่ commit + unbind + reset public ให้ "ติด" connection
+        # (กัน connection ค้าง tenant path ไปให้ raw engine.connect() ของ path อื่น)
+        db.rollback()
+        bind_tenant(db, None)
+        db.execute(text("SET search_path TO public"))
+        db.commit()
         db.close()
 
 def get_tenant_db(subdomain: str, db: Session):
     """Set database search path to tenant schema"""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
     try:
+        # ผูก session กับ tenant -> after_begin (database.py) คุม search_path ทุก transaction
+        # รวม transaction ใหม่หลัง commit()/refresh() (ไม่งั้น else->public จะทำ query หลัง commit พัง)
+        bind_tenant(db, schema_name)
         db.execute(text(f'SET search_path TO "{schema_name}", public'))
-        return db
+        return schema_name   # คืนชื่อ schema เผื่อ endpoint ต้อง enqueue งาน background (เช่น session resync)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
 
@@ -326,15 +338,25 @@ def to_day_enum(day_value: int) -> models.DayOfWeek:
     except Exception:
         raise ValueError(f"Invalid day of week: {day_value}")
 
-def get_or_create_default_template(db: Session) -> int:
-    """สร้างหรือหา default availability template"""
-    
-    # หา default template ที่มีอยู่แล้ว
-    default_template = db.query(models.AvailabilityTemplate).filter(
+def get_or_create_default_template(db: Session, commit: bool = True,
+                                   exclude_template_id: int = None) -> int:
+    """สร้างหรือหา default availability template
+
+    commit=False: flush เพื่อเอา id แต่ไม่ commit — ให้ caller commit ทีเดียว (ใช้ใน
+    delete_availability_template ที่ต้องการให้ ย้าย event_types + cleanup + delete เป็น atomic commit เดียว)
+    exclude_template_id: กันคืน id ของ template ที่กำลังจะถูกลบ (ไม่งั้นย้าย event ไปตัวที่จะลบ →
+    ลบแล้ว ON DELETE SET NULL จะ null ทับ) — ถ้า exclude แล้วไม่เหลือ default จริง จะสร้างใหม่ใน txn เดียวกัน
+    """
+
+    # หา default template ที่มีอยู่แล้ว (ไม่นับตัวที่กำลังจะลบ)
+    q = db.query(models.AvailabilityTemplate).filter(
         models.AvailabilityTemplate.name == "เวลาทำการเริ่มต้น",
         models.AvailabilityTemplate.is_active == True
-    ).first()
-    
+    )
+    if exclude_template_id is not None:
+        q = q.filter(models.AvailabilityTemplate.id != exclude_template_id)
+    default_template = q.first()
+
     if default_template:
         return default_template.id
     
@@ -366,8 +388,10 @@ def get_or_create_default_template(db: Session) -> int:
             is_active=True
         )
         db.add(availability)
-    
-    db.commit()
+
+    db.flush()        # ให้ availabilities ได้ id; commit ปล่อยให้ caller ตัดสิน (ดู commit param)
+    if commit:
+        db.commit()
     return template.id
 
 # --- API Endpoints ---
@@ -456,8 +480,8 @@ async def create_single_availability(subdomain: str, availability_data: Availabi
 async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db: Session = Depends(get_db)):
     """Create availability template with weekly schedule"""
     try:
-        get_tenant_db(subdomain, db)
-        
+        schema_name = get_tenant_db(subdomain, db)
+
         # ตรวจสอบว่ามี template ชื่อเดียวกันแล้วหรือไม่ (optional warning)
         existing_template = db.query(models.AvailabilityTemplate).filter(
             models.AvailabilityTemplate.name == schedule_data.name,
@@ -519,12 +543,16 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
                 db.flush()
                 created_ids.append(availability.id)
         
+        new_template_id = template.id   # เก็บก่อน commit (instance expire หลัง commit)
         db.commit()
-        
+
+        # 1B.3: availability ของ template เปลี่ยน → re-sync session อนาคต (background, best-effort)
+        trigger_session_resync(schema_name, new_template_id)
+
         # Return response with information about any name changes
         response = {
             "message": "Availability template created successfully",
-            "template_id": template.id,
+            "template_id": new_template_id,
             "template_name": template_name,
             "ids": created_ids
         }
@@ -533,6 +561,9 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
             response["warning"] = f"Template name was changed from '{schedule_data.name}' to '{template_name}' to avoid duplication"
         
         return response
+    except HTTPException:
+        db.rollback()
+        raise   # P3: ปล่อย 400 (invalid day/time) ไปตรง ๆ ไม่ให้กลายเป็น 500
     except Exception as e:
         db.rollback()
         # Better error handling for common database issues
@@ -554,8 +585,8 @@ async def create_availability(subdomain: str, schedule_data: WeeklySchedule, db:
 async def update_availability_template(subdomain: str, template_id: int, schedule_data: WeeklySchedule, db: Session = Depends(get_db)):
     """Update an entire availability template"""
     try:
-        get_tenant_db(subdomain, db)
-        
+        schema_name = get_tenant_db(subdomain, db)
+
         # หา template
         template = db.query(models.AvailabilityTemplate).filter(
             models.AvailabilityTemplate.id == template_id
@@ -597,8 +628,15 @@ async def update_availability_template(subdomain: str, template_id: int, schedul
                 db.add(availability)
         
         db.commit()
+
+        # 1B.3: weekly schedule ของ template ถูกเขียนใหม่ → re-sync session อนาคต (background)
+        trigger_session_resync(schema_name, template_id)
+
         return {"message": f"Template '{schedule_data.name}' updated successfully"}
-        
+
+    except HTTPException:
+        db.rollback()
+        raise   # P3: ปล่อย 404 (template not found) ไปตรง ๆ
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -607,49 +645,74 @@ async def update_availability_template(subdomain: str, template_id: int, schedul
 async def delete_availability_template(subdomain: str, template_id: int, db: Session = Depends(get_db)):
     """Delete an entire availability template"""
     try:
-        get_tenant_db(subdomain, db)
-        
+        schema_name = get_tenant_db(subdomain, db)
+
         # หา template
         template = db.query(models.AvailabilityTemplate).filter(
             models.AvailabilityTemplate.id == template_id
         ).first()
-        
+
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         template_name = template.name
-        
-        # หา event types ที่ใช้ template นี้
+
+        # service_points ที่ map template นี้ — เก็บ id ก่อนลบ (หลังลบ FK ON DELETE SET NULL จะ unmap ให้)
+        # ใช้ trigger cleanup future sessions ที่จะค้าง active หลัง sp ถูก unmap (P2)
+        affected_sp_ids = [
+            sp.id for sp in db.query(models.ServicePoint).filter(
+                models.ServicePoint.availability_template_id == template_id
+            ).all()
+        ]
+
+        # ย้าย event types ที่ใช้ template นี้ไป default ก่อน (ไม่ให้ค้างไม่มี template)
+        # commit=False + ไม่ commit กลางทาง → ย้าย event_types + cleanup + delete เป็น atomic commit เดียว
         events_using = db.query(models.EventType).filter(
             models.EventType.template_id == template_id
         ).all()
-        
+        moved_events = []
         if events_using:
-            # สร้างหรือหา default template
-            default_template_id = get_or_create_default_template(db)
-            
-            # ย้าย event types ไปใช้ default template
-            event_names = []
+            # exclude_template_id=template_id: ถ้า template ที่ลบคือ default เอง อย่าคืน id ตัวนี้
+            # (ไม่งั้นย้าย event ไปตัวที่จะลบ → ON DELETE SET NULL null ทับ) — สร้าง default ใหม่แทน
+            default_template_id = get_or_create_default_template(
+                db, commit=False, exclude_template_id=template_id)
+            default_tpl = db.query(models.AvailabilityTemplate).filter_by(id=default_template_id).one()
             for event in events_using:
-                event.template_id = default_template_id
-                event_names.append(event.name)
-            
-            db.commit()
-            
-            # ลบ template (cascade จะลบ availabilities และ date_overrides)
-            db.delete(template)
-            db.commit()
-            
-            return {
-                "message": f"Template '{template_name}' deleted successfully",
-                "moved_events": event_names
-            }
-        else:
-            # ลบ template ได้เลย
-            db.delete(template)
-            db.commit()
-            return {"message": f"Template '{template_name}' deleted successfully"}
-        
+                # ต้อง assign relationship object (ไม่ใช่ event.template_id = id เฉย ๆ) เพื่อ sync
+                # ความสัมพันธ์ + ดึง event ออกจาก template.event_types collection — ไม่งั้นตอน delete template
+                # ใน flush เดียวกัน SQLAlchemy/ON DELETE SET NULL จะ null template_id ทับค่าที่เพิ่ง set
+                event.availability_template = default_tpl
+                moved_events.append(event.name)
+
+        # P2: ปิด future sessions ของ sp ที่กำลังจะถูก unmap ที่ยังไม่มีคิว/นัด — **synchronous + atomic**
+        # กับการลบ template (commit เดียว) ไม่ผ่าน RQ: generator/rolling-sync ข้าม sp ที่ไม่มี template
+        # จึงไม่มี daily reconciler มาเก็บทีหลัง — ถ้าพึ่ง RQ แล้ว worker/Redis ล่ม session จะค้าง active ถาวร
+        # logic นี้ mirror session_service.deactivate_future_sessions (import ตรงไม่ได้—จะโหลด Flask app factory)
+        if affected_sp_ids:
+            bkk_today = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).date()
+            stale_sessions = db.query(models.ServiceSession).filter(
+                models.ServiceSession.service_point_id.in_(affected_sp_ids),
+                models.ServiceSession.session_date >= bkk_today,
+                models.ServiceSession.is_active == True,   # noqa: E712
+            ).all()
+            for s in stale_sessions:
+                has_queue = db.query(models.QueueEntry.id).filter_by(session_id=s.id).first()
+                has_appt = db.query(models.Appointment.id).filter_by(session_id=s.id).first()
+                if has_queue is None and has_appt is None:
+                    s.is_active = False   # history guard: เก็บ session ที่มีคิว/นัดไว้
+
+        # ลบ template (cascade ลบ availabilities/date_overrides; FK SET NULL unmap service_points)
+        db.delete(template)
+        db.commit()   # atomic: ปิด stale sessions + ลบ template + unmap sp พร้อมกัน (พังก็ rollback ทั้งหมด)
+
+        resp = {"message": f"Template '{template_name}' deleted successfully"}
+        if moved_events:
+            resp["moved_events"] = moved_events
+        return resp
+
+    except HTTPException:
+        db.rollback()
+        raise   # P3: ปล่อย 404 ไปตรง ๆ
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1302,18 +1365,22 @@ async def delete_provider_leave(subdomain: str, provider_id: int, leave_id: int,
 async def delete_availability(subdomain: str, availability_id: int, db: Session = Depends(get_db)):
     """Delete availability slot"""
     try:
-        get_tenant_db(subdomain, db)
-        
+        schema_name = get_tenant_db(subdomain, db)
+
         availability = db.query(models.Availability).filter(
             models.Availability.id == availability_id
         ).first()
-        
+
         if not availability:
             raise HTTPException(status_code=404, detail="Availability not found")
-        
+
+        affected_template_id = availability.template_id   # เก็บก่อนลบ
         db.delete(availability)
         db.commit()
-        
+
+        # 1B.3: บล็อก weekly หายไป → re-sync session อนาคต (background)
+        trigger_session_resync(schema_name, affected_template_id)
+
         return {"message": "Availability deleted successfully"}
         
     except HTTPException:
@@ -1365,7 +1432,7 @@ async def get_date_overrides(
 async def create_date_override(subdomain: str, override_data: DateOverrideCreate, db: Session = Depends(get_db)):
     """Create date override with template support"""
     try:
-        get_tenant_db(subdomain, db)
+        schema_name = get_tenant_db(subdomain, db)
 
         ensure_date_override_table(subdomain, db)
         
@@ -1418,7 +1485,13 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
         db.add(override)
         db.commit()
         db.refresh(override)
-        
+
+        # 1B.3: re-sync session อนาคต (background) — global → ทุก sp ของ tenant, template → เฉพาะ template นั้น
+        if override.template_scope == 'global':
+            trigger_tenant_session_resync(schema_name)
+        else:
+            trigger_session_resync(schema_name, override.template_id)
+
         return {
             "message": "Date override created successfully",
             "date_override": {
@@ -1433,7 +1506,10 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
                 "created_at": override.created_at
             }
         }
-        
+
+    except HTTPException:
+        db.rollback()
+        raise   # P3: ปล่อย 400/409 ไปตรง ๆ ไม่ให้ broad except กลืนเป็น 500
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1442,22 +1518,33 @@ async def create_date_override(subdomain: str, override_data: DateOverrideCreate
 async def delete_date_override(subdomain: str, override_id: int, db: Session = Depends(get_db)):
     """Delete date override"""
     try:
-        get_tenant_db(subdomain, db)
+        schema_name = get_tenant_db(subdomain, db)
 
         ensure_date_override_table(subdomain, db)
-        
+
         override = db.query(models.DateOverride).filter(
             models.DateOverride.id == override_id
         ).first()
-        
+
         if not override:
             raise HTTPException(status_code=404, detail="Date override not found")
-        
+
+        affected_template_id = override.template_id    # เก็บก่อนลบ
+        affected_scope = override.template_scope
         db.delete(override)
         db.commit()
-        
+
+        # 1B.3: override ถูกลบ → re-sync session อนาคต — global → ทุก sp, template → เฉพาะ template นั้น
+        if affected_scope == 'global':
+            trigger_tenant_session_resync(schema_name)
+        else:
+            trigger_session_resync(schema_name, affected_template_id)
+
         return {"message": "Date override deleted successfully"}
-        
+
+    except HTTPException:
+        db.rollback()
+        raise   # P3: ปล่อย 404 ไปตรง ๆ
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

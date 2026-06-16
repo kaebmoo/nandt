@@ -1,0 +1,40 @@
+{# fragment: เนื้อหาจอแสดงคิว — render server-side, ถูก poll มาสลับ innerHTML (display ล้วน) #}
+<div class="grid lg:grid-cols-3 gap-6">
+
+    <!-- กำลังเรียก (เด่นสุด) -->
+    <div class="lg:col-span-2">
+        <h2 class="text-2xl font-semibold text-gray-500 mb-4">กำลังเรียก</h2>
+        {% if now_serving %}
+            <div class="space-y-4">
+                {% for e in now_serving %}
+                {# แสดงเฉพาะหมายเลขคิว (PDPA: ไม่โชว์ชื่อผู้ป่วยบนจอสาธารณะ — ชื่ออยู่ที่ console เจ้าหน้าที่) #}
+                <div class="bg-white rounded-2xl shadow-lg p-8 flex items-center justify-between
+                            {{ 'ring-4 ring-purple-400' if loop.first else '' }}">
+                    <div class="text-xl text-gray-500">{{ status_labels.get(e.status, e.status) }}</div>
+                    <div class="text-8xl font-bold text-purple-600 leading-none">{{ e.queue_number }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="bg-white rounded-2xl shadow-lg p-12 text-center text-3xl text-gray-400">
+                ยังไม่มีการเรียกคิว
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- คิวที่รอ -->
+    <div>
+        <h2 class="text-2xl font-semibold text-gray-500 mb-4">คิวถัดไป</h2>
+        {% if waiting %}
+            <div class="grid grid-cols-3 gap-3">
+                {% for e in waiting %}
+                <div class="bg-white rounded-xl shadow p-4 text-center text-4xl font-bold text-gray-700">
+                    {{ e.queue_number }}
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="bg-white/60 rounded-xl p-8 text-center text-xl text-gray-400">ไม่มีคิวรอ</div>
+        {% endif %}
+    </div>
+</div>

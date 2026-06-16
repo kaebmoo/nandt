@@ -1,0 +1,90 @@
+<!-- templates/queue/checkin.html — หน้าเช็คอิน (เปิดจาก QR ที่จุดบริการ) -->
+<!-- standalone: ไม่ extends base.html เพราะเป็นหน้าผู้รับบริการ (Phase 4 จะกลายเป็น LIFF/Telegram Mini App) -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>เช็คอิน — {{ service_point.name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .form-input:focus { outline: none; border-color: #9333ea; box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1); }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
+    <div class="max-w-md mx-auto px-4 py-8">
+
+        <!-- header -->
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-purple-100 mb-3">
+                <svg class="w-7 h-7 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900">เช็คอิน</h1>
+            <p class="text-gray-600 mt-1">{{ service_point.name }}</p>
+        </div>
+
+        <!-- flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="mb-4 px-4 py-3 rounded-lg text-sm
+                  {{ 'bg-red-50 text-red-700 border border-red-200' if category == 'error'
+                     else 'bg-blue-50 text-blue-700 border border-blue-200' }}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" class="bg-white rounded-xl shadow-md p-6 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    ชื่อ-นามสกุล <span class="text-red-500">*</span>
+                </label>
+                <input type="text" name="patient_name" autocomplete="name"
+                       class="form-input w-full px-3 py-2 border border-gray-300 rounded-lg"
+                       placeholder="เช่น สมชาย ใจดี">
+                <p class="text-xs text-gray-500 mt-1">สำหรับยืนยันตัวตนและติดต่อกลับ</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    เบอร์โทร <span class="text-gray-400">(จำเป็นถ้าไม่มีรหัสการจอง)</span>
+                </label>
+                <input type="tel" name="patient_phone" inputmode="tel" autocomplete="tel"
+                       class="form-input w-full px-3 py-2 border border-gray-300 rounded-lg"
+                       placeholder="08x-xxx-xxxx">
+            </div>
+
+            <div class="pt-2 border-t border-gray-100">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    รหัสการจอง <span class="text-gray-400">(ถ้ามีนัดล่วงหน้า)</span>
+                </label>
+                <input type="text" name="booking_reference"
+                       class="form-input w-full px-3 py-2 border border-gray-300 rounded-lg uppercase"
+                       placeholder="เช่น VN-A1B2C3">
+                <p class="text-xs text-gray-500 mt-1">ถ้ามีนัดไว้แล้ว กรอกรหัสเพื่อเช็คอินตามนัด</p>
+            </div>
+
+            <!-- ปุ่มล่าง: เผื่อ safe-area (LINE/Android edge-to-edge ไม่ทับ navigation bar) -->
+            <div class="sticky bottom-0 -mx-6 -mb-6 px-6 pt-3 bg-white border-t border-gray-100"
+                 style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
+                <button type="submit"
+                        class="w-full py-3 px-6 rounded-lg bg-purple-600 text-white font-medium
+                               hover:bg-purple-700 transition-colors">
+                    เช็คอิน
+                </button>
+            </div>
+        </form>
+
+        <p class="text-center text-xs text-gray-400 mt-4">นัดดี · NudDee</p>
+    </div>
+</body>
+</html>

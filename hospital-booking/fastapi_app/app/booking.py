@@ -12,7 +12,8 @@ import sys
 import logging
 
 # Import database and models
-from shared_db.database import SessionLocal
+from shared_db.database import SessionLocal, bind_tenant
+from .tenant import resolve_schema
 from shared_db import models
 
 from .email_service import (
@@ -42,23 +43,26 @@ def get_db():
     try:
         yield db
     finally:
+        # คืน connection สะอาด (rollback + unbind + reset public ให้ติด connection)
+        db.rollback()
+        bind_tenant(db, None)
+        db.execute(text("SET search_path TO public"))
+        db.commit()
         db.close()
 
-def get_tenant_db(subdomain: str):
-    """สร้าง dependency ที่ return function สำหรับ FastAPI"""
-    def _get_db():
-        db = SessionLocal()
-        try:
-            schema_name = f"tenant_{subdomain}"
-            # Set search_path ทันที (ไม่ commit — ให้อยู่ใน transaction เดียวกับ query)
-            db.execute(text(f'SET search_path TO "{schema_name}", public'))
-            yield db
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
-        finally:
-            db.close()
-    return _get_db
+
+def _set_tenant(db, schema_name):
+    """ผูก session กับ tenant + SET search_path ให้ transaction ปัจจุบัน
+
+    bind_tenant -> event after_begin (database.py) คุม search_path ให้ทุก transaction ถัดไป
+    (รวม transaction ใหม่หลัง commit()/refresh()) — จำเป็นเพราะ unbound session ถูกบังคับ public
+    ทุก transaction ใหม่ ถ้าไม่ bind จะ query หลัง commit พัง
+    """
+    bind_tenant(db, schema_name)
+    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+
+
+# (ลบ get_tenant_db factory เดิมที่ deprecated + ไม่มีใครใช้ — endpoints ใช้ Depends(get_db) + _set_tenant)
 
 # --- Pydantic Models ---
 class TimeSlot(BaseModel):
@@ -141,6 +145,7 @@ class EventTypeDetail(BaseModel):
     duration_minutes: int
     color: Optional[str] = None
     template_id: Optional[int] = None
+    requires_queue: bool = False
     # เพิ่ม field อื่นๆ ที่จำเป็นสำหรับหน้า reschedule
     max_advance_days: Optional[int] = None
     min_notice_hours: int
@@ -517,9 +522,9 @@ async def get_event_type_details(
 ):
     """Get details for a single event type."""
     # Set search_path for the correct tenant
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
     try:
-        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        _set_tenant(db, schema_name)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
 
@@ -544,8 +549,8 @@ async def get_booking_availability(
 ):
     # Set search_path (ไม่ commit — ให้ SET อยู่ใน transaction เดียวกับ query
     # เพราะ commit จะคืน connection กลับ pool และ search_path อาจหายไป)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     try:
         # 1. Get event type with template
@@ -567,7 +572,8 @@ async def get_booking_availability(
             "name": event_type.name,
             "duration": event_type.duration_minutes,
             "buffer_before": event_type.buffer_before_minutes,
-            "buffer_after": event_type.buffer_after_minutes
+            "buffer_after": event_type.buffer_after_minutes,
+            "requires_queue": event_type.requires_queue,
         }
 
         response_data = {
@@ -789,9 +795,9 @@ async def create_booking(
     """Create a new appointment booking"""
     
     # Set search_path ด้วยตัวเองในแต่ละ function (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
     try:
-        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        _set_tenant(db, schema_name)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Tenant not found: {subdomain}")
     
@@ -950,8 +956,8 @@ async def get_booking_details(
     """Get booking details by reference"""
     
     # Set search_path ทุกครั้ง (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     appointment = db.query(models.Appointment).filter_by(
         booking_reference=booking_reference
@@ -983,7 +989,8 @@ async def get_booking_details(
         "event_type": {
             "id": event_type.id if event_type else None,
             "name": event_type.name,
-            "duration": event_type.duration_minutes
+            "duration": event_type.duration_minutes,
+            "requires_queue": event_type.requires_queue,
         } if event_type else None,
         "provider": {
             "name": f"{provider.title} {provider.name}" if provider.title else provider.name,
@@ -1004,8 +1011,8 @@ async def reschedule_booking(
     """Reschedule an existing booking"""
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     try:
         # 1. Find original appointment
@@ -1140,8 +1147,8 @@ async def restore_booking(
     """Restore a previously cancelled booking if the original slot is still available."""
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     try:
         appointment = db.query(models.Appointment).filter_by(
@@ -1242,8 +1249,8 @@ async def cancel_booking(
 ):
     """Cancel an existing booking"""
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     try:
         # Find appointment
@@ -1312,8 +1319,8 @@ async def search_appointments(
     """Search appointments by email, phone, or reference"""
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_booking_availability)
-    schema_name = f"tenant_{subdomain}"
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    schema_name = resolve_schema(db, subdomain)
+    _set_tenant(db, schema_name)
 
     try:
         # Build query based on search type
@@ -1372,7 +1379,8 @@ async def search_appointments(
                 "event_type": {
                     "id": event_type.id,
                     "name": event_type.name,
-                    "duration": event_type.duration_minutes
+                    "duration": event_type.duration_minutes,
+                    "requires_queue": event_type.requires_queue,
                 } if event_type else None,
                 "provider": {
                     "name": f"{provider.title} {provider.name}" if provider else None,

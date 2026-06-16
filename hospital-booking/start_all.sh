@@ -149,14 +149,34 @@ wait_for_port() {
 cleanup() {
     trap - INT TERM EXIT   # กันไม่ให้ cleanup ถูกเรียกซ้ำ
     echo ""
-    echo "🛑 กำลังหยุดทุก service..."
+    echo "🛑 กำลังหยุดทุก service (รอสูงสุด 5 วินาที)..."
     if [ "${#PIDS[@]}" -gt 0 ]; then
         for i in "${!PIDS[@]}"; do
             # kill ทั้ง process group (ครอบคลุม reloader ของ uvicorn/werkzeug)
             kill -TERM -- -"${PIDS[$i]}" 2>/dev/null || kill -TERM "${PIDS[$i]}" 2>/dev/null
         done
+
+        # รอให้ service ปิดตัวอย่างนุ่มนวล
+        for _ in {1..5}; do
+            local all_dead=true
+            for pid in "${PIDS[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    all_dead=false
+                    break
+                fi
+            done
+            $all_dead && break
+            sleep 1
+        done
+
+        # ถ้ายังมี process เหลืออยู่ ให้บังคับ kill (SIGKILL)
+        for pid in "${PIDS[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                echo "⚠️  บังคับ kill process $pid ที่ยังค้างอยู่..."
+                kill -9 -- -"$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null
+            fi
+        done
     fi
-    wait 2>/dev/null
     echo "👋 หยุดครบทุกตัวแล้ว"
     exit 0
 }

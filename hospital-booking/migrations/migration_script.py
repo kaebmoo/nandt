@@ -121,6 +121,7 @@ def create_event_types_table(db, schema_name):
             duration_minutes INTEGER NOT NULL DEFAULT 15,
             color VARCHAR(7) DEFAULT '#6366f1',
             is_active BOOLEAN DEFAULT TRUE,
+            requires_queue BOOLEAN NOT NULL DEFAULT FALSE,
             buffer_before_minutes INTEGER DEFAULT 0,
             buffer_after_minutes INTEGER DEFAULT 0,
             max_bookings_per_day INTEGER,

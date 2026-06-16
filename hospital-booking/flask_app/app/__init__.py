@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from celery.schedules import crontab
 
 from .utils.url_helper import build_url_with_context
-from shared_db.database import engine, PublicBase, TenantBase, get_db_session
+from shared_db.database import engine, PublicBase, TenantBase, get_db_session, bind_tenant
 # Import models (จะใช้ PublicBase แทน Base)
 from shared_db import models 
 
@@ -113,13 +113,23 @@ def create_app() -> Flask:
             broker_url=os.environ.get("REDIS_URL"),
             result_backend=os.environ.get("REDIS_URL"),
             # เพิ่ม task imports ที่นี่ ถ้ามี
-            imports=("app.tasks",),
+            imports=("flask_app.app.tasks",),
             # ADD the beat schedule
             beat_schedule={
                 'sync-holidays-annually': {
                     'task': 'tasks.sync_all_tenant_holidays',
                     # Runs on January 2nd at 3:15 AM
                     'schedule': crontab(minute='15', hour='3', day_of_month='2', month_of_year='1'),
+                },
+                # 1B.2: materialize queue sessions จาก availability ล่วงหน้า 14 วัน — ทุกคืน 02:30
+                'sync-sessions-daily': {
+                    'task': 'tasks.sync_all_tenant_sessions',
+                    'schedule': crontab(minute='30', hour='2'),
+                },
+                # Phase 2.5: ปิดคิว checked_in ที่เลยเวลาปิด session/appointment เป็น no_show
+                'sweep-no-shows-every-5-minutes': {
+                    'task': 'tasks.sweep_all_tenant_no_shows',
+                    'schedule': crontab(minute='*/5'),
                 },
             }
         ),
@@ -198,8 +208,11 @@ def create_app() -> Flask:
         g.subdomain = subdomain
         g.hospital = hospital
 
+        # ผูก session กับ tenant schema -> ทุก transaction ของ g.db (รวม transaction ใหม่หลัง
+        # commit/rollback ใน service) จะ SET search_path ให้เองผ่าน after_begin (database.py)
+        bind_tenant(db, hospital_schema)
         if hospital_schema:
-            # FIX: ใช้ text() กับคำสั่ง SET search_path ด้วยเพื่อความปลอดภัย
+            # SET ให้ transaction ปัจจุบันด้วย (เปิดไปแล้วตอน query hospital ด้านบน ก่อน bind)
             db.execute(text(f'SET search_path TO "{hospital_schema}", public'))
         else:
             db.execute(text('SET search_path TO public'))
@@ -211,15 +224,16 @@ def create_app() -> Flask:
         db = g.pop('db', None)
         if db is not None:
             try:
-                if exception:
-                    db.rollback()  # Rollback ถ้ามี error
-                # Reset search path ก่อนคืน connection กลับไปที่ pool
+                # rollback เสมอ: ทิ้งงานที่ยังไม่ commit (เหมือน close() เดิม) + เคลียร์ transaction
+                # (route ที่เขียนข้อมูลต้อง commit เอง — queue_service commit ภายในให้แล้ว)
+                db.rollback()
+                bind_tenant(db, None)                          # ปลด tenant ออกจาก session
                 db.execute(text('SET search_path TO public'))
+                db.commit()                                    # commit ให้ SET public "ติด" connection
+                # (ถ้าไม่ commit, close() จะ rollback SET public -> connection ค้าง tenant path กลับ pool)
             except Exception as e:
-                # ใช้ app.logger จะดีกว่า print()
                 app.logger.error(f"Error during session teardown: {e}")
             finally:
-                # ปิด session เสมอ
                 db.close()
     # --- Template Helpers ---
     from .core.template_helpers import register_template_filters, register_template_context
@@ -305,6 +319,14 @@ def create_app() -> Flask:
     # 6. ลงทะเบียน Provider Management Routes
     from .provider_routes import provider_bp
     app.register_blueprint(provider_bp)
+
+    # 7. ลงทะเบียน Queue Routes (check-in / staff console / จอแสดงคิว)
+    from .queue_routes import queue_bp
+    app.register_blueprint(queue_bp)
+
+    # 8. ลงทะเบียน Analytics Routes (queue + messaging cost dashboard)
+    from .analytics_routes import analytics_bp
+    app.register_blueprint(analytics_bp)
 
     # Exempt the specific view from CSRF protection
     # csrf.exempt('booking.get_availability')

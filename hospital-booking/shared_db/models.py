@@ -1,8 +1,10 @@
 # hospital-booking/shared_db/models.py
 
-from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey,
-                        create_engine, event, Boolean,
+from sqlalchemy import (Column, Integer, BigInteger, SmallInteger, Numeric,
+                        String, DateTime, ForeignKey,
+                        create_engine, event, Boolean, Index, func, text,
                         Time, Text, Enum as SQLEnum, JSON, Date, UniqueConstraint, ARRAY)
+from sqlalchemy.dialects.postgresql import JSONB
 # from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import relationship, foreign
 from sqlalchemy.schema import CreateSchema
@@ -166,6 +168,7 @@ class EventType(TenantBase):
     duration_minutes = Column(Integer, nullable=False, default=30)
     color = Column(String(7), default="#6366f1")
     is_active = Column(Boolean, default=True)
+    requires_queue = Column(Boolean, nullable=False, default=False, server_default=text('false'))
     
     # ใช้ template_id แทน availability_id (ใหม่!)
     template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='SET NULL'), nullable=True)
@@ -410,15 +413,25 @@ class Appointment(TenantBase):
     
     rescheduled_from_id = Column(Integer, ForeignKey('appointments.id'))
     reschedule_count = Column(Integer, default=0)
-    
+
+    # --- Queue/check-in extensions (Phase 0) ---
+    # slot_type: 'exact' = พฤติกรรมเดิม (นัดเวลาตรง) | 'window' = นัดช่วงเวลาแล้วจับคิวหน้างาน
+    slot_type = Column(String(10), nullable=False, server_default=text("'exact'"))
+    session_id = Column(Integer, ForeignKey('sessions.id'))
+    service_point_id = Column(Integer, ForeignKey('service_points.id'))
+    appointment_type = Column(String(100))
+    patient_category = Column(String(50))
+
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
-    
+
     patient = relationship("Patient")
     provider = relationship("Provider", back_populates="appointments")
     event_type = relationship("EventType", back_populates="appointments")
     service_type = relationship("ServiceType", back_populates="appointments")
     rescheduled_from = relationship("Appointment", remote_side=[id])
+    service_point = relationship("ServicePoint")
+    service_session = relationship("ServiceSession")
 
 class AuditLog(TenantBase):
     """Log sensitive data access and actions"""
@@ -440,6 +453,229 @@ class AuditLog(TenantBase):
     # Passed User class directly because they are in different declarative bases (Registries)
     user = relationship(User, primaryjoin=lambda: foreign(AuditLog.user_id) == User.id, uselist=False)
 
+# ===========================================================================
+# Queue / Check-in / Messaging models (Phase 0)
+# ตรงกับ migrations/add_queue_messaging_structures.py (แผนส่วนที่ 4.1–4.10)
+# ทุกตัวเป็น TenantBase — timestamp ใช้ timezone=True (TIMESTAMPTZ) + server_default now()
+# ===========================================================================
+
+class ServicePoint(TenantBase):
+    """จุดบริการ (ห้อง/เคาน์เตอร์/หมอ) ที่คิวแยกกัน — 4.1"""
+    __tablename__ = 'service_points'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    sp_type = Column(String(20), nullable=False, server_default=text("'room'"))   # room | counter | doctor
+    parallel_servers = Column(SmallInteger, nullable=False, server_default=text('1'))
+    is_active = Column(Boolean, nullable=False, server_default=text('true'))
+    # 1B.0: ผูกจุดบริการกับ availability template (ตัว template จริง) — source ของ session generator (§5.8)
+    # nullable: service_point ที่เป็น walk-in-only ไม่ต้องผูก template; many service_points : one template
+    # ondelete='SET NULL' (P1): ลบ template ที่ถูก map → sp กลายเป็น unmapped (ไม่ FK-violation/500)
+    # — ตรงกับ event_types.template_id (fk_event_type_template ... ON DELETE SET NULL)
+    availability_template_id = Column(Integer, ForeignKey('availability_templates.id', ondelete='SET NULL'))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    availability_template = relationship("AvailabilityTemplate")
+
+
+class ServiceSession(TenantBase):
+    """ช่วงเวลาบริการต่อจุดบริการต่อวัน (table 'sessions') — 4.2
+
+    หมายเหตุ: คลาสชื่อ ServiceSession (ไม่ใช่ Session) เพื่อกัน clash กับ
+    sqlalchemy.orm.Session ใน service layer; ชื่อตาราง = 'sessions' ตามแผน
+    """
+    __tablename__ = 'sessions'
+
+    id = Column(Integer, primary_key=True)
+    service_point_id = Column(Integer, ForeignKey('service_points.id'), nullable=False)
+    session_date = Column(Date, nullable=False)
+    name = Column(String(100), nullable=False)            # 'เช้า' | 'บ่าย' | ฯลฯ
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    capacity = Column(Integer)                            # nullable = ไม่จำกัด
+    is_active = Column(Boolean, nullable=False, server_default=text('true'))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    service_point = relationship("ServicePoint")
+
+    __table_args__ = (
+        UniqueConstraint('service_point_id', 'session_date', 'name', name='sessions_service_point_id_session_date_name_key'),
+    )
+
+
+class QueueEntry(TenantBase):
+    """แกนกลางของระบบคิว (รวม appointment + walk-in) — 4.4"""
+    __tablename__ = 'queue_entries'
+
+    id = Column(Integer, primary_key=True)
+    appointment_id = Column(Integer, ForeignKey('appointments.id'))   # NULL = walk-in
+    service_point_id = Column(Integer, ForeignKey('service_points.id'), nullable=False)
+    session_id = Column(Integer, ForeignKey('sessions.id'))
+    session_date = Column(Date, nullable=False)
+    patient_ref = Column(String(100), nullable=False)
+    entry_class = Column(String(20), nullable=False, server_default=text("'walkin'"))  # appointment | walkin (effective หลัง grace)
+    queue_number = Column(Integer)                        # ออกตอน check-in
+    status = Column(String(20), nullable=False, server_default=text("'checked_in'"))
+    # checked_in | called | in_service | done | no_show | skipped
+    priority_score = Column(Numeric(10, 3))
+    check_in_at = Column(DateTime(timezone=True))
+    called_at = Column(DateTime(timezone=True))
+    service_start_at = Column(DateTime(timezone=True))
+    service_end_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    appointment = relationship("Appointment")
+    service_point = relationship("ServicePoint")
+    service_session = relationship("ServiceSession")
+
+    __table_args__ = (
+        Index('idx_queue_entries_active', 'service_point_id', 'session_date', 'status'),
+        Index('idx_queue_entries_appt', 'appointment_id'),
+        # backstop: appointment เดียวมี active entry ได้ไม่เกิน 1 แถว (กันคิวซ้ำจาก race)
+        Index('uq_queue_active_appointment', 'appointment_id', unique=True,
+              postgresql_where=text(
+                  "appointment_id IS NOT NULL AND status IN ('checked_in','called','in_service')")),
+    )
+
+
+class QueueEvent(TenantBase):
+    """append-only event log (ขับ display + analytics + ML อนาคต) — 4.5
+
+    กฎ: ทุกครั้งที่ queue_entries.status เปลี่ยน ต้อง insert หนึ่งแถวเสมอ (append-only, ห้าม update/delete)
+    """
+    __tablename__ = 'queue_events'
+
+    id = Column(BigInteger, primary_key=True)
+    queue_entry_id = Column(Integer, ForeignKey('queue_entries.id'), nullable=False)
+    event_type = Column(String(40), nullable=False)   # check_in | call | start_service | end_service | no_show | reclass | skip
+    from_status = Column(String(20))
+    to_status = Column(String(20))
+    actor = Column(String(20), nullable=False, server_default=text("'system'"))  # staff | system | patient
+    occurred_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # attribute ชื่อ event_metadata เพราะ 'metadata' เป็นชื่อสงวนของ declarative base
+    event_metadata = Column("metadata", JSONB)
+
+    queue_entry = relationship("QueueEntry")
+
+    __table_args__ = (
+        Index('idx_queue_events_entry', 'queue_entry_id'),
+        Index('idx_queue_events_time', 'occurred_at'),
+    )
+
+
+class ChannelLink(TenantBase):
+    """ผูก patient เข้ากับ messaging identity — 4.6"""
+    __tablename__ = 'channel_links'
+
+    id = Column(Integer, primary_key=True)
+    patient_ref = Column(String(100), nullable=False)
+    channel = Column(String(20), nullable=False)       # line | telegram | pwa
+    external_id = Column(String(255), nullable=False)  # LINE userId | Telegram chat_id | PWA subscription id
+    is_active = Column(Boolean, nullable=False, server_default=text('true'))
+    raw_profile = Column(JSONB)                         # PWA subscription (endpoint + keys) เก็บที่นี่
+    linked_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('channel', 'external_id', name='channel_links_channel_external_id_key'),
+        Index('idx_channel_links_patient', 'patient_ref'),
+    )
+
+
+class MessagingConfig(TenantBase):
+    """config การส่งข้อความต่อ tenant (1 แถวต่อ schema) — 4.7
+
+    *_enc ทุก column ต้องเข้ารหัส (Fernet) ก่อนเก็บ — ห้าม plaintext (ดู shared_db/crypto.py)
+    """
+    __tablename__ = 'messaging_config'
+
+    id = Column(Integer, primary_key=True)
+    line_channel_id = Column(String(100))
+    line_channel_secret_enc = Column(Text)             # ENCRYPTED
+    line_channel_token_enc = Column(Text)              # ENCRYPTED
+    line_login_channel_id = Column(String(100))
+    line_liff_id = Column(String(100))
+    line_status = Column(String(20), nullable=False, server_default=text("'not_configured'"))
+    line_last_error = Column(Text)
+    telegram_bot_token_enc = Column(Text)              # ENCRYPTED
+    telegram_bot_username = Column(String(100))
+    telegram_bot_ownership = Column(String(10), nullable=False, server_default=text("'saas'"))
+    telegram_webhook_secret_enc = Column(Text)          # ENCRYPTED
+    telegram_mini_app_short_name = Column(String(100))
+    telegram_status = Column(String(20), nullable=False, server_default=text("'not_configured'"))
+    telegram_last_error = Column(Text)
+    pwa_status = Column(String(20), nullable=False, server_default=text("'disabled'"))
+    pwa_vapid_public_key = Column(Text)
+    pwa_vapid_private_key_enc = Column(Text)            # ENCRYPTED
+    plan_tier = Column(String(20), server_default=text("'free'"))   # free | light | standard
+    channel_priority = Column(
+        JSONB, nullable=False,
+        server_default=text("""'["telegram","pwa","line_push"]'"""),
+    )  # ลำดับช่องสำหรับ async notification (ถูก→แพง)
+    reminder_enabled = Column(Boolean, nullable=False, server_default=text('false'))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class NotificationLog(TenantBase):
+    """log ทุกการแจ้งเตือน (วิเคราะห์ต้นทุน + กันแจ้งซ้ำ) — 4.8"""
+    __tablename__ = 'notification_log'
+
+    id = Column(BigInteger, primary_key=True)
+    queue_entry_id = Column(Integer, ForeignKey('queue_entries.id'))
+    patient_ref = Column(String(100))
+    event_type = Column(String(40), nullable=False)   # booking_confirm | checkin_confirm | queue_near | queue_turn | reminder
+    channel = Column(String(20), nullable=False)      # line_push | line_reply | liff | telegram | pwa | pull
+    cost_units = Column(SmallInteger, nullable=False, server_default=text('0'))  # 0 = ฟรี, 1 = นับ 1 ข้อความ
+    status = Column(String(20), nullable=False)       # sent | failed | skipped
+    sent_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    error = Column(Text)
+    log_metadata = Column("metadata", JSONB)
+
+    queue_entry = relationship("QueueEntry")
+
+    __table_args__ = (
+        Index('idx_notif_log_time', 'sent_at'),
+    )
+
+
+class QueuePolicy(TenantBase):
+    """นโยบายการเรียกคิว (ต่อ service_point หรือ default ของ tenant เมื่อ service_point_id = NULL) — 4.9"""
+    __tablename__ = 'queue_policy'
+
+    id = Column(Integer, primary_key=True)
+    service_point_id = Column(Integer, ForeignKey('service_points.id'))   # NULL = default ของ tenant
+    mode = Column(String(10), nullable=False, server_default=text("'ratio'"))   # ratio | score
+    # โหมด ratio:
+    appointment_to_walkin_ratio = Column(SmallInteger, nullable=False, server_default=text('3'))
+    walkin_max_wait_minutes = Column(Integer, nullable=False, server_default=text('45'))
+    appointment_early_eligible_minutes = Column(Integer, nullable=False, server_default=text('15'))
+    call_timeout_min = Column(Integer, nullable=False, server_default=text('5'))
+    # โหมด score (weights):
+    w_class = Column(Numeric(6, 3), nullable=False, server_default=text('100'))
+    w_wait = Column(Numeric(6, 3), nullable=False, server_default=text('1'))
+    w_window = Column(Numeric(6, 3), nullable=False, server_default=text('2'))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    service_point = relationship("ServicePoint")
+
+
+class GracePolicy(TenantBase):
+    """นโยบาย grace rule (ต่อ service_point หรือ default เมื่อ service_point_id = NULL) — 4.10"""
+    __tablename__ = 'grace_policy'
+
+    id = Column(Integer, primary_key=True)
+    service_point_id = Column(Integer, ForeignKey('service_points.id'))   # NULL = default
+    grace_before_min = Column(Integer, nullable=False, server_default=text('30'))
+    grace_after_min = Column(Integer, nullable=False, server_default=text('30'))
+    late_arrival_policy = Column(String(20), nullable=False, server_default=text("'demote_to_walkin'"))
+    # demote_to_walkin | reslot_to_current | require_rebook
+    no_show_grace_min = Column(Integer, nullable=False, server_default=text('10'))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    service_point = relationship("ServicePoint")
+
+
 # สำหรับ backward compatibility
 Base = PublicBase
 
@@ -457,9 +693,11 @@ def receive_after_insert(mapper, connection, target):
     connection.execute(CreateSchema(schema_name, if_not_exists=True))
     
     # ต้องสร้างตามลำดับ dependency
+    # service_points + sessions ต้องมาก่อน appointments (appointments FK ไป sessions/service_points)
+    # queue_entries/events ฯลฯ มาหลัง appointments
     tenant_tables_order = [
         Patient.__table__,
-        ServiceType.__table__, 
+        ServiceType.__table__,
         Provider.__table__,
         AvailabilityTemplate.__table__,
         TemplateProvider.__table__,
@@ -470,7 +708,16 @@ def receive_after_insert(mapper, connection, target):
         DateOverride.__table__,
         ProviderLeave.__table__,
         Holiday.__table__,
-        Appointment.__table__
+        ServicePoint.__table__,
+        ServiceSession.__table__,
+        Appointment.__table__,
+        QueueEntry.__table__,
+        QueueEvent.__table__,
+        ChannelLink.__table__,
+        MessagingConfig.__table__,
+        NotificationLog.__table__,
+        QueuePolicy.__table__,
+        GracePolicy.__table__,
     ]
     
     original_schema = TenantBase.metadata.schema

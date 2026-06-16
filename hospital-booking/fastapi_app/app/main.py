@@ -27,6 +27,7 @@ from .event_types import router as event_types_router
 from .availability import router as availability_router
 from .booking import router as booking_router
 from .holidays import router as holidays_router
+from .queue import router as queue_router
 
 # สร้างเฉพาะ public tables
 models.PublicBase.metadata.create_all(bind=engine)
@@ -71,6 +72,7 @@ app.include_router(event_types_router)
 app.include_router(availability_router)
 app.include_router(booking_router)
 app.include_router(holidays_router)
+app.include_router(queue_router)
 
 # --- Dependency ---
 def get_db():

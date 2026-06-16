@@ -9,9 +9,10 @@ from datetime import date
 import logging
 from threading import Lock
 
-from shared_db.database import SessionLocal
+from shared_db.database import SessionLocal, bind_tenant
 from shared_db import models
 from .holiday_service import HolidayService
+from .tenant import resolve_schema
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,18 @@ def get_db():
     try:
         yield db
     finally:
+        # คืน connection สะอาด (rollback + unbind + reset public ให้ติด connection)
+        db.rollback()
+        bind_tenant(db, None)
+        db.execute(text("SET search_path TO public"))
+        db.commit()
         db.close()
+
+
+def _set_tenant(db, schema_name):
+    """ผูก session กับ tenant + SET search_path ให้ transaction ปัจจุบัน (after_begin คุม transaction ถัดไป)"""
+    bind_tenant(db, schema_name)
+    db.execute(text(f'SET search_path TO "{schema_name}", public'))
 
 # --- Pydantic Models ---
 class HolidayBase(BaseModel):
@@ -95,7 +107,7 @@ def sync_tenant_holidays(db: Session, schema_name: str, year: int = None, holida
     added = 0
     skipped = 0
     try:
-        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        _set_tenant(db, schema_name)
         ensure_holiday_table(subdomain, db)
 
         for item in holidays or []:
@@ -122,6 +134,9 @@ def sync_tenant_holidays(db: Session, schema_name: str, year: int = None, holida
         db.rollback()
         raise
     finally:
+        # unbind ก่อน SET public — ไม่งั้น session.info ยังผูก tenant อยู่ transaction ถัดไป
+        # after_begin จะ SET กลับ tenant อีก (SET public ตรงนี้จะถูกย้อน)
+        bind_tenant(db, None)
         db.execute(text('SET search_path TO public'))
         db.commit()
 
@@ -134,11 +149,11 @@ async def get_holidays(
     db: Session = Depends(get_db)
 ):
     """Get holidays with optional filters."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     # Set search_path (ไม่ commit — ให้ SET อยู่ใน transaction เดียวกับ query
     # มิฉะนั้น connection อาจถูกสลับใน pool แล้ว query หลุดไป public schema)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    _set_tenant(db, schema_name)
 
     try:
         ensure_holiday_table(subdomain, db)
@@ -167,7 +182,7 @@ async def sync_holidays(
     db: Session = Depends(get_db)
 ):
     """Syncs holidays from an external source."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     logger.info(f"Syncing holidays for {subdomain}, year: {payload.year}")
     logger.info(f"Received {len(payload.holidays)} holidays")
@@ -189,10 +204,10 @@ async def create_custom_holiday(
     db: Session = Depends(get_db)
 ):
     """Creates a single custom holiday."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    _set_tenant(db, schema_name)
 
     try:
         ensure_holiday_table(subdomain, db)
@@ -212,7 +227,7 @@ async def create_custom_holiday(
         db.add(db_holiday)
         db.commit()
         # commit จบ transaction แล้ว — ต้อง SET ใหม่ก่อน refresh ไม่งั้นอาจอ่านผิด schema
-        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        _set_tenant(db, schema_name)
         db.refresh(db_holiday)
 
         return db_holiday
@@ -229,10 +244,10 @@ async def get_holiday(
     db: Session = Depends(get_db)
 ):
     """Get a single holiday by ID."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    _set_tenant(db, schema_name)
 
     ensure_holiday_table(subdomain, db)
 
@@ -249,10 +264,10 @@ async def update_holiday(
     db: Session = Depends(get_db)
 ):
     """Update holiday (partial update)."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    _set_tenant(db, schema_name)
 
     try:
         ensure_holiday_table(subdomain, db)
@@ -268,7 +283,7 @@ async def update_holiday(
 
         db.commit()
         # commit จบ transaction แล้ว — ต้อง SET ใหม่ก่อน refresh ไม่งั้นอาจอ่านผิด schema
-        db.execute(text(f'SET search_path TO "{schema_name}", public'))
+        _set_tenant(db, schema_name)
         db.refresh(holiday)
         return holiday
     except Exception as e:
@@ -282,10 +297,10 @@ async def delete_holiday(
     db: Session = Depends(get_db)
 ):
     """Deletes a holiday."""
-    schema_name = f"tenant_{subdomain}"
+    schema_name = resolve_schema(db, subdomain)
 
     # Set search_path (ไม่ commit — ดูเหตุผลที่ get_holidays)
-    db.execute(text(f'SET search_path TO "{schema_name}", public'))
+    _set_tenant(db, schema_name)
 
     try:
         ensure_holiday_table(subdomain, db)

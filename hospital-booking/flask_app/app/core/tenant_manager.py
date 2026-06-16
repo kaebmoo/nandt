@@ -24,7 +24,7 @@ class TenantManager:
         # Priority 2: Query parameter
         subdomain = request.args.get('subdomain') or request.args.get('tenant')
         if subdomain:
-            return f"tenant_{subdomain}", subdomain
+            return TenantManager.resolve_schema(subdomain), subdomain
         
         # Priority 3: Subdomain in hostname
         hostname = request.host.split(':')[0]
@@ -38,20 +38,44 @@ class TenantManager:
                 # Special case for *.localhost - treat as valid subdomain
                 if len(parts) == 2 and parts[1] == 'localhost':
                     subdomain = potential_subdomain
-                    return f"tenant_{subdomain}", subdomain
+                    return TenantManager.resolve_schema(subdomain), subdomain
                 # Normal subdomain for production
                 elif potential_subdomain not in ['localhost', '127', '192']:
                     subdomain = potential_subdomain
-                    return f"tenant_{subdomain}", subdomain
+                    return TenantManager.resolve_schema(subdomain), subdomain
         
         # Priority 4: User's default hospital (for logged-in users)
         if 'user_id' in session:
             subdomain = TenantManager._get_user_default_subdomain()
             if subdomain:
-                return f"tenant_{subdomain}", subdomain
+                return TenantManager.resolve_schema(subdomain), subdomain
         
         return None, None
     
+    @staticmethod
+    def resolve_schema(subdomain: Optional[str]) -> Optional[str]:
+        """resolve schema_name จริงจาก public.hospitals ตาม subdomain (คืน None ถ้าไม่เจอ)
+
+        ไม่ reconstruct f"tenant_{subdomain}" เพราะ registration sanitize ชื่อ schema
+        (เช่น subdomain `my-clinic` -> schema `tenant_myclinic`) การ reconstruct จะได้ schema ผิด
+        ใช้ g.db ถ้ามี (ไม่ปิด) มิฉะนั้นเปิด session ชั่วคราวแล้วปิด
+        """
+        if not subdomain:
+            return None
+        from sqlalchemy import text
+        db = g.db if (hasattr(g, 'db') and g.db is not None) else None
+        own = db is None
+        if own:
+            db = SessionLocal()
+        try:
+            return db.execute(
+                text("SELECT schema_name FROM public.hospitals WHERE subdomain = :s"),
+                {"s": subdomain},
+            ).scalar_one_or_none()
+        finally:
+            if own:
+                db.close()
+
     @staticmethod
     def _get_user_default_subdomain() -> Optional[str]:
         """Get subdomain from logged-in user's hospital"""
@@ -157,7 +181,9 @@ def with_tenant(require_access=True, redirect_on_missing=True):
                     return redirect(url_for('main.index'))
             
             # Set context for use in views
-            g.tenant_schema = f"tenant_{subdomain}" if subdomain else None
+            # resolve schema จริงจาก public.hospitals (ไม่ reconstruct f"tenant_{subdomain}"
+            # ซึ่งพังกับ subdomain ที่มี hyphen เพราะ registration sanitize ชื่อ schema)
+            g.tenant_schema = TenantManager.resolve_schema(subdomain)
             g.subdomain = subdomain
             
             return f(*args, **kwargs)

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - NudDee{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Analytics</h1>
+            <p class="mt-2 text-gray-600">ภาพรวมคิวและต้นทุนข้อความจากข้อมูลที่บันทึกในระบบ</p>
+        </div>
+        <form method="GET" class="flex flex-col sm:flex-row gap-3">
+            <label class="text-sm text-gray-700">
+                จากวันที่
+                <input type="date" name="from" value="{{ date_from }}"
+                       class="block mt-1 px-3 py-2 border border-gray-300 rounded-lg">
+            </label>
+            <label class="text-sm text-gray-700">
+                ถึงวันที่
+                <input type="date" name="to" value="{{ date_to }}"
+                       class="block mt-1 px-3 py-2 border border-gray-300 rounded-lg">
+            </label>
+            <button type="submit"
+                    class="self-start sm:self-end px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700">
+                ดูรายงาน
+            </button>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <p class="text-sm text-gray-500">จำนวนเข้าคิว</p>
+            <p class="text-3xl font-bold text-gray-900 mt-2">{{ queue.total_entries }}</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <p class="text-sm text-gray-500">ให้บริการเสร็จ</p>
+            <p class="text-3xl font-bold text-green-700 mt-2">{{ queue.throughput }}</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <p class="text-sm text-gray-500">เวลารอเฉลี่ย</p>
+            <p class="text-3xl font-bold text-purple-700 mt-2">{{ queue.avg_wait_minutes|round(1) }} นาที</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <p class="text-sm text-gray-500">No-show rate</p>
+            <p class="text-3xl font-bold text-red-700 mt-2">{{ (queue.no_show_rate * 100)|round(1) }}%</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Check-in ตามชั่วโมง</h2>
+            <canvas id="hourlyChart" height="140"></canvas>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">ต้นทุนข้อความตามช่องทาง</h2>
+            <canvas id="messageCostChart" height="140"></canvas>
+        </section>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">สถานะคิว</h2>
+            <div class="space-y-2">
+                {% for status, count in queue.status_counts.items() %}
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">{{ status }}</span>
+                        <span class="font-semibold text-gray-900">{{ count }}</span>
+                    </div>
+                {% else %}
+                    <p class="text-sm text-gray-500">ยังไม่มีข้อมูลคิวในช่วงนี้</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">ข้อความ</h2>
+            <div class="space-y-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">จำนวน log ทั้งหมด</span>
+                    <span class="font-semibold text-gray-900">{{ messaging.total_notifications }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Paid cost units</span>
+                    <span class="font-semibold text-gray-900">{{ messaging.total_cost_units }}</span>
+                </div>
+                {% for status, count in messaging.status_counts.items() %}
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">{{ status }}</span>
+                        <span class="font-semibold text-gray-900">{{ count }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const hourlyData = {{ queue.hourly_checkins|tojson }};
+    const messageByChannel = {{ messaging.by_channel|tojson }};
+
+    new Chart(document.getElementById('hourlyChart'), {
+        type: 'bar',
+        data: {
+            labels: hourlyData.map(row => row.hour),
+            datasets: [{
+                label: 'Check-in',
+                data: hourlyData.map(row => row.count),
+                backgroundColor: '#7c3aed'
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    new Chart(document.getElementById('messageCostChart'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(messageByChannel),
+            datasets: [{
+                label: 'Cost units',
+                data: Object.values(messageByChannel).map(row => row.cost_units),
+                backgroundColor: '#dc2626'
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+</script>
+{% endblock %}
