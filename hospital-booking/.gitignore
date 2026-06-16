@@ -16,6 +16,8 @@ dump.rdb
 logs/
 *.log
 *.pid
+# Celery beat scheduler state (PersistentScheduler shelve; regenerated on run)
+celerybeat-schedule*
 
 # Database backups from migration scripts (may contain data)
 migrations/backups/
