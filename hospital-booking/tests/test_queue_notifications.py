@@ -1,4 +1,5 @@
 import datetime
+import types
 
 import pytest
 
@@ -95,6 +96,24 @@ def test_enqueue_queue_event_uses_worker_dotted_path():
         {"queue_number": 9},
     )
     assert kwargs == {"job_timeout": "2m"}
+
+
+def test_enqueue_queue_turn_threads_pwa_url(monkeypatch):
+    # The PWA push click target must ride along in the context, or _send_pwa
+    # falls back to "/" in the real queued path (the sender test injects it manually).
+    fake = FakeQueue()
+    monkeypatch.setattr(qn.redis_manager, "get_queue", lambda name: fake)
+    entry = types.SimpleNamespace(
+        id=7, queue_number=7, service_point_id=1, session_id=None,
+        session_date=datetime.date(2026, 6, 16), status="called",
+    )
+
+    qn.enqueue_queue_turn("tenant_humnoi", entry, url="https://h.example/queue/ticket/tok")
+    assert fake.calls[0][0][5]["url"] == "https://h.example/queue/ticket/tok"
+
+    fake.calls.clear()
+    qn.enqueue_queue_turn("tenant_humnoi", entry)          # no url → key absent (sender uses "/")
+    assert "url" not in fake.calls[0][0][5]
 
 
 def test_notify_queue_event_job_sends_queue_turn_via_free_telegram(

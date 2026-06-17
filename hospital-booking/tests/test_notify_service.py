@@ -3,6 +3,9 @@ import threading
 import time
 from collections import Counter
 
+import pytest
+
+from shared_db import crypto
 from shared_db import models
 from flask_app.app.services import notify_service as ns
 
@@ -61,6 +64,11 @@ def _queue_entry(db, service_point):
     db.commit()
     db.refresh(entry)
     return entry
+
+
+@pytest.fixture()
+def messaging_key(monkeypatch):
+    monkeypatch.setenv(crypto.ENV_KEY, crypto.generate_key())
 
 
 def test_notify_prefers_telegram_free_before_line_push(db, service_point):
@@ -174,6 +182,47 @@ def test_notify_falls_back_after_failed_channel(db):
         ('telegram', 'failed', 0),
         ('pwa', 'sent', 0),
     ]
+
+
+def test_notify_default_pwa_sender_uses_webpush(db, messaging_key, monkeypatch):
+    cfg = models.MessagingConfig(
+        pwa_status='active',
+        pwa_vapid_public_key='public-key',
+        pwa_vapid_private_key_enc=crypto.encrypt('private-key'),
+        channel_priority=['pwa'],
+    )
+    db.add(cfg)
+    db.commit()
+    link = models.ChannelLink(
+        patient_ref='patient:10',
+        channel='pwa',
+        external_id='https://push.example/sub/10',
+        is_active=True,
+        raw_profile={'endpoint': 'https://push.example/sub/10', 'keys': {'p256dh': 'k', 'auth': 'a'}},
+    )
+    db.add(link)
+    db.commit()
+    calls = []
+
+    def fake_webpush(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(ns, '_webpush', fake_webpush)
+
+    result = ns.notify(
+        db,
+        'patient:10',
+        'queue_turn',
+        'critical',
+        context={'queue_number': 10, 'url': '/queue/ticket/10'},
+        now=DT(2026, 6, 15, 9, 0),
+    )
+
+    assert result == ns.NotificationResult('pwa', 0, 'sent')
+    assert calls[0]['subscription_info'] == link.raw_profile
+    assert calls[0]['vapid_private_key'] == 'private-key'
+    assert calls[0]['vapid_claims'] == {'sub': 'mailto:noreply@nuddee.com'}
+    assert '"url": "/queue/ticket/10"' in calls[0]['data']
 
 
 def test_notify_uses_only_active_channel_statuses(db):

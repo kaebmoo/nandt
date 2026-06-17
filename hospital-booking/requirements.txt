@@ -30,6 +30,10 @@ pydantic==2.12.5
 stripe==6.6.0
 requests==2.32.5
 
+# Web Push (PWA queue notifications — notify_service.py; sender fail-closed if absent)
+# pulls py-vapid (needs cryptography>=46, satisfied by the pin above)
+pywebpush==2.3.0
+
 # Auth / OTP
 pyotp==2.9.0
 

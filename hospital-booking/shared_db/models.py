@@ -98,6 +98,46 @@ class User(PublicBase):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+
+class SaasTelegramAccount(PublicBase):
+    """Control-plane registry for SaaS-managed Telegram accounts (no credentials)."""
+    __tablename__ = 'saas_telegram_accounts'
+    __table_args__ = (
+        {'schema': 'public'},
+    )
+
+    id = Column(Integer, primary_key=True)
+    label = Column(String(100), nullable=False, unique=True)
+    bot_capacity = Column(SmallInteger, nullable=False, server_default=text('20'))
+    status = Column(String(10), nullable=False, server_default=text("'active'"))  # active | full | disabled
+    contact_note = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    bots = relationship("SaasTelegramBot", back_populates="account")
+
+
+class SaasTelegramBot(PublicBase):
+    """Bot allocation metadata. Bot tokens live encrypted in tenant messaging_config."""
+    __tablename__ = 'saas_telegram_bots'
+    __table_args__ = (
+        Index('idx_saas_tg_bots_account', 'saas_account_id'),
+        Index('idx_saas_tg_bots_tenant', 'tenant_schema'),
+        Index('uq_saas_tg_bots_allocated_tenant', 'tenant_schema', unique=True,
+              postgresql_where=text("tenant_schema IS NOT NULL AND status = 'allocated'")),
+        {'schema': 'public'},
+    )
+
+    id = Column(Integer, primary_key=True)
+    saas_account_id = Column(Integer, ForeignKey('public.saas_telegram_accounts.id'), nullable=False)
+    tenant_schema = Column(String(63), ForeignKey('public.hospitals.schema_name'))
+    bot_username = Column(String(100), nullable=False, unique=True)
+    status = Column(String(10), nullable=False, server_default=text("'allocated'"))  # allocated | spare | revoked
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    account = relationship("SaasTelegramAccount", back_populates="bots")
+
 # --- Tenant Specific Models ---
 
 class AvailabilityTemplate(TenantBase):

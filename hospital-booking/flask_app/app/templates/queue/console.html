@@ -48,6 +48,24 @@
         </button>
     </form>
 
+    {% if checkin_links %}
+    <section class="bg-white rounded-xl shadow-md p-4 mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">ลิงก์สำหรับ QR เช็คอิน</h2>
+        <div class="space-y-2">
+            {% for channel, link in checkin_links.items() %}
+            <div class="text-sm">
+                <span class="inline-block w-24 text-gray-500">
+                    {{ {'web': 'เว็บ', 'line_liff': 'LINE', 'telegram': 'Telegram'}.get(channel, channel) }}
+                </span>
+                <a href="{{ link }}" target="_blank" class="text-purple-600 hover:text-purple-700 break-all">
+                    {{ link }}
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
     <!-- serving -->
     <h2 class="text-xl font-semibold text-gray-900 mb-3">กำลังเรียก / รับบริการ</h2>
     {% if serving %}
