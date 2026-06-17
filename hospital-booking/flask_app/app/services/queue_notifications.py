@@ -86,27 +86,36 @@ def enqueue_queue_event(
 
 
 def enqueue_for_entry(schema_name: str | None, entry: models.QueueEntry,
-                      event_type: str, urgency: str) -> bool:
+                      event_type: str, urgency: str, *, url: str | None = None) -> bool:
+    context = _entry_context(entry)
+    if url:
+        # PWA push click target (patient's signed ticket). Built at enqueue time in the
+        # request, where url_helper knows subdomain vs host mode — the worker has no
+        # request context. Without it _send_pwa falls back to "/" (wrong page).
+        context["url"] = url
     return enqueue_queue_event(
         schema_name,
         entry.id,
         event_type,
         urgency,
-        context=_entry_context(entry),
+        context=context,
     )
 
 
-def enqueue_checkin_confirm(schema_name: str | None, entry: models.QueueEntry) -> bool:
-    return enqueue_for_entry(schema_name, entry, "checkin_confirm", "normal")
+def enqueue_checkin_confirm(schema_name: str | None, entry: models.QueueEntry,
+                            *, url: str | None = None) -> bool:
+    return enqueue_for_entry(schema_name, entry, "checkin_confirm", "normal", url=url)
 
 
-def enqueue_queue_turn(schema_name: str | None, entry: models.QueueEntry) -> bool:
-    return enqueue_for_entry(schema_name, entry, "queue_turn", "critical")
+def enqueue_queue_turn(schema_name: str | None, entry: models.QueueEntry,
+                       *, url: str | None = None) -> bool:
+    return enqueue_for_entry(schema_name, entry, "queue_turn", "critical", url=url)
 
 
-def enqueue_queue_near(schema_name: str | None, entry: models.QueueEntry) -> bool:
+def enqueue_queue_near(schema_name: str | None, entry: models.QueueEntry,
+                       *, url: str | None = None) -> bool:
     # Hook for the future near-turn detector; call_next currently wires queue_turn only.
-    return enqueue_for_entry(schema_name, entry, "queue_near", "critical")
+    return enqueue_for_entry(schema_name, entry, "queue_near", "critical", url=url)
 
 
 def _validate_schema_name(schema_name: str) -> None:

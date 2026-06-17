@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Messaging Channels - NudDee{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Messaging Channels</h1>
+        <p class="mt-2 text-gray-600">ตั้งค่า LINE, Telegram และ PWA สำหรับคิวและการแจ้งเตือน</p>
+    </div>
+
+    <div class="space-y-8">
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">LINE</h2>
+                    <p class="text-sm text-gray-500">Messaging API + LINE Login/LIFF สำหรับ webhook, Mini App และ push</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {{ config.line_status }}
+                </span>
+            </div>
+
+            <form method="POST" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="line">
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Messaging channel ID</label>
+                    <input type="text" name="line_channel_id" value="{{ config.line_channel_id or '' }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">LINE Login channel ID</label>
+                    <input type="text" name="line_login_channel_id" value="{{ config.line_login_channel_id or '' }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">LIFF ID</label>
+                    <input type="text" name="line_liff_id" value="{{ config.line_liff_id or '' }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select name="line_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        {% for status in ['not_configured', 'active', 'disabled', 'error'] %}
+                        <option value="{{ status }}" {% if config.line_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Channel secret</label>
+                    <input type="password" name="line_channel_secret"
+                           placeholder="เว้นว่างเพื่อคงค่าเดิม"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Channel access token</label>
+                    <input type="password" name="line_channel_token"
+                           placeholder="เว้นว่างเพื่อคงค่าเดิม"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                {% if config.line_last_error %}
+                <div class="md:col-span-2 text-sm text-red-600">ล่าสุด: {{ config.line_last_error }}</div>
+                {% endif %}
+                <div class="md:col-span-2 flex justify-end">
+                    <button type="submit" class="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        บันทึก LINE
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">Telegram</h2>
+                    <p class="text-sm text-gray-500">วาง bot token เพื่อ verify getMe, setWebhook, Menu Button และ commands</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {{ config.telegram_status }}
+                </span>
+            </div>
+
+            <form method="POST" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="telegram">
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bot username</label>
+                    <input type="text" value="{{ config.telegram_bot_username or '' }}" disabled
+                           class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ownership</label>
+                    <select name="telegram_bot_ownership" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        {% for ownership in ['tenant', 'saas'] %}
+                        <option value="{{ ownership }}" {% if config.telegram_bot_ownership == ownership %}selected{% endif %}>{{ ownership }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mini App short name</label>
+                    <input type="text" name="telegram_mini_app_short_name" value="{{ config.telegram_mini_app_short_name or '' }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status เมื่อไม่ใส่ token ใหม่</label>
+                    <select name="telegram_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        {% for status in ['not_configured', 'active', 'disabled', 'error'] %}
+                        <option value="{{ status }}" {% if config.telegram_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bot token</label>
+                    <input type="password" name="telegram_bot_token"
+                           placeholder="ใส่เมื่อต้องการ provision/rotate token"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Web App URL override</label>
+                    <input type="url" name="telegram_web_app_url"
+                           placeholder="เว้นว่างเพื่อใช้ค่า default"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                {% if config.telegram_last_error %}
+                <div class="md:col-span-2 text-sm text-red-600">ล่าสุด: {{ config.telegram_last_error }}</div>
+                {% endif %}
+                <div class="md:col-span-2 flex justify-end">
+                    <button type="submit" class="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        บันทึก / Provision Telegram
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">PWA Web Push</h2>
+                    <p class="text-sm text-gray-500">เก็บ VAPID key ต่อ tenant; private key จะถูก encrypt ก่อนบันทึก</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {{ config.pwa_status }}
+                </span>
+            </div>
+
+            <form method="POST" class="grid grid-cols-1 gap-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="pwa">
+
+                <div class="max-w-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select name="pwa_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        {% for status in ['disabled', 'active', 'error'] %}
+                        <option value="{{ status }}" {% if config.pwa_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">VAPID public key</label>
+                    <textarea name="pwa_vapid_public_key" rows="2"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg">{{ config.pwa_vapid_public_key or '' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">VAPID private key</label>
+                    <input type="password" name="pwa_vapid_private_key"
+                           placeholder="เว้นว่างเพื่อคงค่าเดิม"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        บันทึก PWA
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}

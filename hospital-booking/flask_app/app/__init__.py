@@ -328,6 +328,15 @@ def create_app() -> Flask:
     from .analytics_routes import analytics_bp
     app.register_blueprint(analytics_bp)
 
+    # 9. ลงทะเบียน Messaging Webhooks (external providers sign their own payloads)
+    from .webhook_routes import webhook_bp
+    csrf.exempt(webhook_bp)
+    app.register_blueprint(webhook_bp)
+
+    # 10. ลงทะเบียน PWA manifest/service worker (root scope)
+    from .pwa_routes import pwa_bp
+    app.register_blueprint(pwa_bp)
+
     # Exempt the specific view from CSRF protection
     # csrf.exempt('booking.get_availability')
 

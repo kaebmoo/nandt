@@ -44,6 +44,7 @@ def index():
 
     queue = analytics_service.queue_summary(g.db, date_from, date_to)
     messaging = analytics_service.message_cost_summary(g.db, date_from, date_to)
+    line_quota = analytics_service.line_message_quota(g.db)  # best-effort; None if LINE off/down
 
     return render_template(
         'analytics/index.html',
@@ -51,4 +52,5 @@ def index():
         date_to=date_to,
         queue=queue,
         messaging=messaging,
+        line_quota=line_quota,
     )

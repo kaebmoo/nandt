@@ -10,7 +10,8 @@ import logging
 from shared_db.models import (Appointment, User, Hospital, 
                               Provider, EventType, Patient, 
                               ServiceType, AvailabilityTemplate,
-                              TemplateProvider, AuditLog)
+                              TemplateProvider, AuditLog, MessagingConfig)
+from shared_db import crypto
 from .auth import login_required, check_tenant_access
 from .utils.logger import log_route_access
 from .utils.url_helper import get_dashboard_url, build_url_with_context
@@ -18,6 +19,7 @@ from .services.appointment_notifications import (
     notify_patient_appointment_change,
     notify_reschedule_request,
 )
+from .services import telegram_provisioning
 from shared_db.database import SessionLocal, get_db_session
 from .auth import get_current_user
 from .core.tenant_manager import with_tenant, TenantManager
@@ -1095,6 +1097,124 @@ def admin_check_database():
 def working_hours():
     """หน้าตั้งค่าเวลาทำการ (เก่า - redirect ไปใหม่)"""
     return redirect(build_url_with_context('availability.availability_settings'))
+
+
+def _deny_messaging_settings_access():
+    current_user = get_current_user()
+    hospital = getattr(current_user, 'hospital', None) if current_user else None
+    if not current_user or not hospital or hospital.subdomain != getattr(g, 'subdomain', None):
+        flash('ไม่สามารถเข้าถึงได้', 'error')
+        return redirect(build_url_with_context('main.index'))
+    return None
+
+
+def _tenant_messaging_config():
+    cfg = g.db.query(MessagingConfig).order_by(MessagingConfig.id.asc()).first()
+    if cfg is None:
+        cfg = MessagingConfig()
+        g.db.add(cfg)
+        g.db.flush()
+    return cfg
+
+
+def _choice(value, allowed, default):
+    return value if value in allowed else default
+
+
+@bp.route('/settings/messaging', methods=['GET', 'POST'])
+@login_required
+def messaging_settings():
+    """Tenant messaging channel settings (LINE / Telegram / PWA)."""
+    denied = _deny_messaging_settings_access()
+    if denied:
+        return denied
+
+    cfg = _tenant_messaging_config()
+    if request.method == 'POST':
+        section = request.form.get('section')
+        try:
+            if section == 'line':
+                cfg.line_channel_id = (request.form.get('line_channel_id') or '').strip() or None
+                cfg.line_login_channel_id = (request.form.get('line_login_channel_id') or '').strip() or None
+                cfg.line_liff_id = (request.form.get('line_liff_id') or '').strip() or None
+                cfg.line_status = _choice(
+                    request.form.get('line_status'),
+                    {'not_configured', 'active', 'disabled', 'error'},
+                    'not_configured',
+                )
+                line_secret = (request.form.get('line_channel_secret') or '').strip()
+                line_token = (request.form.get('line_channel_token') or '').strip()
+                if line_secret:
+                    cfg.line_channel_secret_enc = crypto.encrypt(line_secret)
+                if line_token:
+                    cfg.line_channel_token_enc = crypto.encrypt(line_token)
+                cfg.line_last_error = None if cfg.line_status == 'active' else cfg.line_last_error
+                g.db.commit()
+                flash('บันทึกการตั้งค่า LINE แล้ว', 'success')
+
+            elif section == 'telegram':
+                token = (request.form.get('telegram_bot_token') or '').strip()
+                ownership = _choice(
+                    request.form.get('telegram_bot_ownership'),
+                    {'tenant', 'saas'},
+                    'tenant',
+                )
+                mini_app_short_name = (request.form.get('telegram_mini_app_short_name') or '').strip() or None
+                web_app_url = (request.form.get('telegram_web_app_url') or '').strip() or None
+                if not web_app_url:
+                    # Default the Mini App menu to the tenant-bound deep-link router
+                    # (queue.enter forwards ?startapp=sp_<id> to check-in, else home).
+                    # build_url_with_context handles subdomain-host vs ?subdomain= modes;
+                    # the helper's own fallback uses ?tenant=<schema> which middleware ignores.
+                    web_app_url = build_url_with_context('queue.enter', _external=True)
+                if not token:
+                    cfg.telegram_bot_ownership = ownership
+                    cfg.telegram_mini_app_short_name = mini_app_short_name
+                    cfg.telegram_status = _choice(
+                        request.form.get('telegram_status'),
+                        {'not_configured', 'active', 'disabled', 'error'},
+                        cfg.telegram_status or 'not_configured',
+                    )
+                    g.db.commit()
+                    flash('บันทึก metadata Telegram แล้ว (ยังไม่ได้ provision token ใหม่)', 'success')
+                else:
+                    tenant_key = getattr(g, 'tenant', None) or getattr(getattr(g, 'hospital', None), 'schema_name', None)
+                    telegram_provisioning.provision_telegram_bot(
+                        g.db,
+                        tenant_key=tenant_key,
+                        token=token,
+                        ownership=ownership,
+                        public_base_url=request.url_root,
+                        mini_app_short_name=mini_app_short_name,
+                        web_app_url=web_app_url,
+                    )
+                    flash('Provision Telegram bot สำเร็จ', 'success')
+
+            elif section == 'pwa':
+                cfg.pwa_status = _choice(
+                    request.form.get('pwa_status'),
+                    {'disabled', 'active', 'error'},
+                    'disabled',
+                )
+                cfg.pwa_vapid_public_key = (request.form.get('pwa_vapid_public_key') or '').strip() or None
+                pwa_private_key = (request.form.get('pwa_vapid_private_key') or '').strip()
+                if pwa_private_key:
+                    cfg.pwa_vapid_private_key_enc = crypto.encrypt(pwa_private_key)
+                g.db.commit()
+                flash('บันทึกการตั้งค่า PWA แล้ว', 'success')
+            else:
+                flash('ไม่พบส่วนการตั้งค่าที่ต้องการบันทึก', 'error')
+        except telegram_provisioning.TelegramProvisioningError as exc:
+            g.db.rollback()
+            safe_message = str(exc)[:200] or 'บันทึกการตั้งค่าไม่สำเร็จ'
+            flash(safe_message, 'error')
+        except Exception:
+            g.db.rollback()
+            flash('บันทึกการตั้งค่าไม่สำเร็จ', 'error')
+
+        return redirect(build_url_with_context('main.messaging_settings'))
+
+    return render_template('settings/messaging.html', config=cfg)
 
 # @bp.route('/settings/availability')
 # @login_required  

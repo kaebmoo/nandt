@@ -6,7 +6,12 @@ Business calculations stay in Python; templates only render precomputed values.
 import datetime
 from collections import Counter, defaultdict
 
-from shared_db import models
+import requests
+
+from shared_db import crypto, models
+
+LINE_QUOTA_URL = "https://api.line.me/v2/bot/message/quota"
+LINE_CONSUMPTION_URL = "https://api.line.me/v2/bot/message/quota/consumption"
 
 
 def _date_bounds(date_from, date_to):
@@ -129,3 +134,45 @@ def message_cost_summary(db, date_from, date_to):
         'by_channel': dict(by_channel),
         'by_event': dict(by_event),
     }
+
+
+def _line_quota_from_api(token, http_client=requests):
+    """Pure HTTP+math half of line_message_quota (no DB) — easy to unit test.
+
+    type='limited'  → {limit, used, remaining}
+    type='none'     → unlimited plan, nothing to count
+    4xx / bad data  → None (caller treats as 'unavailable')
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    r1 = http_client.get(LINE_QUOTA_URL, headers=headers, timeout=10)
+    if r1.status_code >= 400:
+        return None
+    quota = r1.json()
+    if quota.get("type") != "limited":
+        return {"type": quota.get("type") or "none", "limit": None, "used": None, "remaining": None}
+    r2 = http_client.get(LINE_CONSUMPTION_URL, headers=headers, timeout=10)
+    if r2.status_code >= 400:
+        return None
+    limit = int(quota.get("value") or 0)
+    used = int(r2.json().get("totalUsage") or 0)
+    return {"type": "limited", "limit": limit, "used": used, "remaining": max(0, limit - used)}
+
+
+def line_message_quota(db, http_client=requests):
+    """Live LINE push quota for this tenant (best-effort; None if not configured/down).
+
+    Spent cost comes from notification_log (message_cost_summary); this adds the
+    REMAINING side straight from LINE so staff see how close they are to the free
+    cap. Any network/credential error returns None — analytics must never 500
+    because LINE is unreachable.
+    """
+    config = db.query(models.MessagingConfig).order_by(models.MessagingConfig.id.asc()).first()
+    if not config or getattr(config, 'line_status', None) != 'active':
+        return None
+    token_enc = getattr(config, 'line_channel_token_enc', None)
+    if not token_enc:
+        return None
+    try:
+        return _line_quota_from_api(crypto.decrypt(token_enc), http_client=http_client)
+    except Exception:
+        return None

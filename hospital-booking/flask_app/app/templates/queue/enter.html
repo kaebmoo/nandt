@@ -1,0 +1,25 @@
+<!-- templates/queue/enter.html — Mini App / LIFF entry router (deep-link → check-in) -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>กำลังเปิด NudDee…</title>
+    <style>
+      body { font-family: -apple-system, 'Sarabun', sans-serif; min-height: 100vh; margin: 0;
+             display: flex; align-items: center; justify-content: center; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <p>กำลังเปิด…</p>
+    <script>
+      // queue_mini_app.js reads the deep-link param and redirects; if none, it goes here.
+      // lineLiffId lets it run liff.init() to resolve LINE's liff.state params.
+      window.NUDDEE_MINI_APP = {
+        entryDefaultUrl: {{ default_url|tojson }},
+        lineLiffId: {{ (line_liff_id or '')|tojson }}
+      };
+    </script>
+    <script src="{{ url_for('static', filename='js/queue_mini_app.js') }}"></script>
+</body>
+</html>

@@ -22,6 +22,11 @@ PAID_CHANNELS = {'line_push'}
 DEFAULT_PRIORITY = ['telegram', 'pwa', 'line_push']
 RESPONSIVE_EVENTS = {'booking_confirm', 'checkin_confirm'}
 
+try:
+    from pywebpush import webpush as _webpush
+except ImportError:  # pragma: no cover - optional production dependency
+    _webpush = None
+
 
 @dataclass(frozen=True)
 class NotificationResult:
@@ -220,6 +225,32 @@ def _send_line_reply(config, reply_token, event_type, context):
     return data is not None
 
 
+def _send_pwa(config, link, event_type, context):
+    if _webpush is None or link is None:
+        return False
+    if not getattr(config, 'pwa_vapid_private_key_enc', None):
+        return False
+    subscription = link.raw_profile
+    if not isinstance(subscription, dict) or not subscription.get('endpoint'):
+        return False
+    private_key = crypto.decrypt(config.pwa_vapid_private_key_enc)
+    payload = json.dumps({
+        "title": "NudDee",
+        "body": _message_text(event_type, context),
+        "url": (context or {}).get("url") or "/",
+    }, ensure_ascii=False)
+    try:
+        _webpush(
+            subscription_info=subscription,
+            data=payload,
+            vapid_private_key=private_key,
+            vapid_claims={"sub": "mailto:noreply@nuddee.com"},
+        )
+    except Exception:  # noqa: BLE001 - transport failure falls through to next channel
+        return False
+    return True
+
+
 def _default_sender(channel=None, event_type=None, context=None, reply_token=None,
                     link=None, config=None, **kwargs):
     """Default transports for server-side async/sync messaging channels."""
@@ -229,7 +260,9 @@ def _default_sender(channel=None, event_type=None, context=None, reply_token=Non
         return _send_line_push(config, link, event_type, context)
     if channel == 'line_reply':
         return _send_line_reply(config, reply_token, event_type, context)
-    # PWA and LIFF client-side sends are wired in their own channel phases.
+    if channel == 'pwa':
+        return _send_pwa(config, link, event_type, context)
+    # LIFF client-side sends are wired in their own channel phase.
     return False
 
 
