@@ -655,6 +655,7 @@ class MessagingConfig(TenantBase):
         server_default=text("""'["telegram","pwa","line_push"]'"""),
     )  # ลำดับช่องสำหรับ async notification (ถูก→แพง)
     reminder_enabled = Column(Boolean, nullable=False, server_default=text('false'))
+    audio_config = Column(JSONB)   # 21 มิ.ย. 2026 §14: {enabled, template, volume, repeat, rooms} (null = defaults)
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 

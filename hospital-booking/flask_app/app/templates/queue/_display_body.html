@@ -1,4 +1,7 @@
 {# fragment: เนื้อหาจอแสดงคิว — render server-side, ถูก poll มาสลับ innerHTML (display ล้วน) #}
+{# เสียงเรียก (§14): key เปลี่ยน = เรียกใหม่ -> display.js เล่น playlist ทีละ clip ไม่ทับ #}
+<div id="queue-audio" data-key="{{ audio.key }}" data-clips='{{ audio.clips | tojson }}'
+     data-volume="{{ audio.volume }}" data-repeat="{{ audio.repeat }}" hidden></div>
 <div class="grid lg:grid-cols-3 gap-6">
 
     <!-- กำลังเรียก (เด่นสุด) -->

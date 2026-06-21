@@ -148,6 +148,7 @@ DDL_STATEMENTS = [
         plan_tier                        VARCHAR(20) DEFAULT 'free',
         channel_priority                 JSONB NOT NULL DEFAULT '["telegram","pwa","line_push"]',
         reminder_enabled                 BOOLEAN NOT NULL DEFAULT FALSE,
+        audio_config                     JSONB,
         updated_at                       TIMESTAMPTZ NOT NULL DEFAULT now()
     )
     """,

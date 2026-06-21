@@ -29,6 +29,13 @@
         </div>
     </div>
 
+    <!-- ปุ่ม unlock เสียง (browser block autoplay จนกว่าจะมี user gesture) — §14 -->
+    <button id="audio-unlock"
+            class="fixed bottom-6 right-6 px-5 py-3 rounded-full bg-purple-600 text-white text-lg
+                   font-semibold shadow-lg hover:bg-purple-700 transition-colors z-50">
+        🔊 เริ่มระบบเสียง
+    </button>
+
     <script>
         // display ล้วน — JS เป็นแค่ adapter (ดึง fragment ที่ render จาก server แล้วสลับ), logic อยู่ Python
         const POLL_URL = "{{ nav_url('queue.display_body', service_point_id=service_point.id) }}";
@@ -39,6 +46,7 @@
                 const res = await fetch(POLL_URL, { headers: { 'X-Requested-With': 'fetch' } });
                 if (res.ok) {
                     document.getElementById('queue-body').innerHTML = await res.text();
+                    checkAudio();
                 }
             } catch (e) { /* เครือข่ายสะดุด — รอบหน้า poll ใหม่ */ }
         }
@@ -48,6 +56,50 @@
                 new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
 
+        // ----- เสียงเรียกคิว (§14): เล่น playlist ทีละ clip ไม่ทับ; เล่นเมื่อ key เปลี่ยน -----
+        const audioEl = new Audio();
+        let unlocked = false, lastKey = null, queue = [], playing = false;
+
+        function playNext() {
+            if (queue.length === 0) { playing = false; return; }
+            playing = true;
+            audioEl.src = queue.shift();
+            audioEl.play().catch(() => { playing = false; });
+        }
+        audioEl.onended = playNext;
+        audioEl.onerror = playNext;   // clip หาย -> ข้ามไปตัวถัดไป ไม่ค้าง
+
+        function enqueue(clips, repeat, volume) {
+            audioEl.volume = Math.max(0, Math.min(1, volume || 1));
+            for (let r = 0; r < (repeat || 1); r++) clips.forEach(c => queue.push(c));
+            if (!playing) playNext();
+        }
+
+        function currentAudio() {
+            const el = document.getElementById('queue-audio');
+            if (!el) return null;
+            let clips = [];
+            try { clips = JSON.parse(el.dataset.clips || '[]'); } catch (e) {}
+            return { key: el.dataset.key || '', clips,
+                     volume: parseFloat(el.dataset.volume || '1'),
+                     repeat: parseInt(el.dataset.repeat || '1', 10) };
+        }
+
+        function checkAudio() {           // เรียกหลัง poll: ถ้ามีการเรียกใหม่ -> เล่น
+            const a = currentAudio();
+            if (!a || !a.key || a.key === lastKey) return;
+            lastKey = a.key;
+            if (unlocked && a.clips.length) enqueue(a.clips, a.repeat, a.volume);
+        }
+
+        document.getElementById('audio-unlock').addEventListener('click', function () {
+            unlocked = true;
+            this.style.display = 'none';
+            const a = currentAudio();     // เล่นคิวที่กำลังเรียกอยู่ทันที (อยู่ใน user gesture -> unlock)
+            if (a && a.clips.length) { lastKey = a.key; enqueue(a.clips, a.repeat, a.volume); }
+        });
+
+        checkAudio();                     // บันทึก key ปัจจุบัน (ยังไม่เล่นจนกว่าจะ unlock)
         setInterval(refresh, REFRESH_MS);
         setInterval(tick, 1000);
         tick();

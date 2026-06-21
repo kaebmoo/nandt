@@ -15,6 +15,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from .auth import login_required, get_current_user
 from .core.tenant_manager import TenantManager
 from .utils.url_helper import build_url_with_context
+from .services import audio_service
 from .services import grace_service as gs
 from .services import identity_service as ids
 from .services import messaging_identity as mi
@@ -489,7 +490,27 @@ def _display_context(sp):
     waiting = (base.filter(models.QueueEntry.status == 'checked_in')
                .order_by(models.QueueEntry.queue_number.asc()).limit(12).all())
     return {'service_point': sp, 'now_serving': now_serving,
-            'waiting': waiting, 'status_labels': STATUS_TH}
+            'waiting': waiting, 'status_labels': STATUS_TH,
+            'audio': _announce_audio(sp, now_serving)}
+
+
+def _announce_audio(sp, now_serving):
+    """เสียงเรียกของ entry ที่เพิ่งถูก 'called' ล่าสุด (Patch 21 §14). display-only.
+
+    key เปลี่ยน = มีการเรียกใหม่ -> จอเล่น playlist (JS เล่นทีละ clip ไม่ทับ).
+    """
+    announce = next((e for e in now_serving if e.status == 'called'), None)
+    config = _messaging_config()
+    acfg = audio_service.get_audio_config(config)
+    if announce is None:
+        return {'key': '', 'clips': [], 'volume': float(acfg.get('volume', 1.0)),
+                'repeat': int(acfg.get('repeat', 1))}
+    return {
+        'key': f"{announce.id}:{announce.called_at.isoformat() if announce.called_at else ''}",
+        'clips': audio_service.playlist_for(g.tenant, sp, announce.queue_number, config),
+        'volume': float(acfg.get('volume', 1.0)),
+        'repeat': int(acfg.get('repeat', 1)),
+    }
 
 
 @queue_bp.route('/display/<int:service_point_id>')
