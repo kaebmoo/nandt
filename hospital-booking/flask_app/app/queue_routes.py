@@ -227,14 +227,10 @@ def checkin(service_point_id):
             if patient_ref is None:
                 flash('นัดนี้ยังไม่มีข้อมูลระบุตัวตนที่ใช้ผูกคิวได้ กรุณากรอกเบอร์โทรหรือแจ้งเจ้าหน้าที่', 'error')
                 return _render_checkin(sp)
-        elif phone:
-            patient_ref = ids.resolve_patient_ref(phone=phone, required=False)
-            if patient_ref is None:
-                flash('เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง', 'error')
-                return _render_checkin(sp)
         else:
-            flash('กรุณากรอกเบอร์โทรศัพท์ หรือรหัสการจอง', 'error')
-            return _render_checkin(sp)
+            # walk-in: ใช้เบอร์ถ้ากรอก ไม่งั้นออก anon:{token} (technical fallback ตาม §4.6.1
+            # — ไม่บล็อกคนเดินเข้าที่ไม่ให้เบอร์; ผูก channel ภายหลังได้ผ่าน ticket)
+            patient_ref = ids.resolve_patient_ref(phone=phone, allow_anon=True)
 
         try:
             # check_in บังคับว่า นัดต้องตรงกับจุดบริการ/session ของจุดนี้ (กันสแกน QR ผิดจุด)

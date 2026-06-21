@@ -8,10 +8,14 @@
 from __future__ import annotations
 
 import re
+import secrets
 
 PATIENT_PREFIX = "patient:"
 PHONE_PREFIX = "phone:"
+ANON_PREFIX = "anon:"
 _MIN_PHONE_DIGITS = 8
+# anon token: URL-safe, >=22 chars (secrets.token_urlsafe(16) yields 22). Never derived from PII.
+_ANON_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{22,}$")
 
 
 class IdentityResolutionError(ValueError):
@@ -65,6 +69,16 @@ def patient_ref_for_phone(phone: str | None) -> str | None:
     return f"{PHONE_PREFIX}{normalized}" if normalized else None
 
 
+def mint_anon_ref() -> str:
+    """Mint a fresh anonymous patient_ref for a walk-in with no patients.id and no phone.
+
+    Technical fallback for the queue_entries.patient_ref NOT NULL contract — NOT a
+    privacy mode (NudDee stays consent-based PDPA). The token is random URL-safe,
+    unique per visit, and never derived from PII.
+    """
+    return f"{ANON_PREFIX}{secrets.token_urlsafe(16)}"
+
+
 def canonicalize_patient_ref(patient_ref: str | None) -> str | None:
     """Return a canonical patient_ref, or None if the input is not linkable."""
     if patient_ref is None:
@@ -78,6 +92,9 @@ def canonicalize_patient_ref(patient_ref: str | None) -> str | None:
         return patient_ref_for_patient_id(value[len(PATIENT_PREFIX):])
     if value.startswith(PHONE_PREFIX):
         return patient_ref_for_phone(value[len(PHONE_PREFIX):])
+    if value.startswith(ANON_PREFIX):
+        token = value[len(ANON_PREFIX):]
+        return value if _ANON_TOKEN_RE.match(token) else None
     return patient_ref_for_phone(value)
 
 
@@ -86,10 +103,12 @@ def is_canonical_patient_ref(patient_ref: str | None) -> bool:
 
 
 def resolve_patient_ref(*, appointment=None, patient=None, patient_id=None,
-                        phone=None, fallback_ref=None, required=False) -> str | None:
+                        phone=None, fallback_ref=None, allow_anon=False,
+                        required=False) -> str | None:
     """Resolve a canonical patient_ref from known identity sources.
 
-    Precedence is intentionally stable: verified patient id first, then phone.
+    Precedence is intentionally stable: verified patient id, then phone, then
+    (only when allow_anon) a fresh anon token for walk-ins with neither.
     Names are never used as identity keys.
     """
     for candidate_id in (
@@ -113,6 +132,8 @@ def resolve_patient_ref(*, appointment=None, patient=None, patient_id=None,
         if ref:
             return ref
 
+    if allow_anon:
+        return mint_anon_ref()
     if required:
         raise IdentityResolutionError("canonical patient_ref could not be resolved")
     return None
