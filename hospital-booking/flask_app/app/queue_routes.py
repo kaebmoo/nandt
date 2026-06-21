@@ -37,7 +37,7 @@ STATUS_TH = {
     'skipped': 'ข้ามคิว',
 }
 
-# action ปุ่มใน console -> สถานะปลายทาง
+# action ปุ่มใน console -> สถานะปลายทาง (status-machine transitions)
 _ACTION_TO_STATUS = {
     'start': 'in_service',
     'done': 'done',
@@ -353,6 +353,37 @@ def ticket_arrived(token):
 
 # ============================ Staff: console ============================
 
+def _console_context(sp, notice=None):
+    """ข้อมูลห้องสำหรับ console fragment (_room.html). ใช้ทั้งหน้าเต็ม + polling + หลัง action"""
+    day = qs.today()
+    base = (g.db.query(models.QueueEntry)
+            .filter_by(service_point_id=sp.id, session_date=day))
+    waiting = (base.filter(models.QueueEntry.status == 'checked_in')
+               .order_by(models.QueueEntry.queue_number.asc()).all())
+    serving = (base.filter(models.QueueEntry.status.in_(('called', 'in_service')))
+               .order_by(models.QueueEntry.queue_number.asc()).all())
+    done_count = base.filter(models.QueueEntry.status == 'done').count()
+    other_points = (g.db.query(models.ServicePoint)
+                    .filter(models.ServicePoint.id != sp.id)
+                    .order_by(models.ServicePoint.name.asc()).all())
+    # token ต่อ entry สำหรับลิงก์ "ดูบัตร/QR" ของคนไข้ (ไม่ enumerable)
+    ticket_tokens = {e.id: make_ticket_token(e.id, g.tenant) for e in (serving + waiting)}
+    return dict(service_point=sp, day=day, waiting=waiting, serving=serving,
+                done_count=done_count,
+                in_service_count=sum(1 for e in serving if e.status == 'in_service'),
+                status_labels=STATUS_TH, other_points=other_points,
+                ticket_tokens=ticket_tokens, notice=notice)
+
+
+def _console_response(sp, notice=None):
+    """HTMX -> ส่ง fragment ห้อง (swap ไม่ reload); request ปกติ -> flash + redirect (fallback)"""
+    if request.headers.get('HX-Request'):
+        return render_template('queue/_room.html', **_console_context(sp, notice=notice))
+    if notice:
+        flash(notice, 'info')
+    return redirect(build_url_with_context('queue.console', service_point_id=sp.id))
+
+
 @queue_bp.route('/console/<int:service_point_id>')
 @login_required
 def console(service_point_id):
@@ -361,28 +392,21 @@ def console(service_point_id):
         return denied
 
     sp = _service_point_or_404(service_point_id)
-    day = qs.today()
-    base = (g.db.query(models.QueueEntry)
-            .filter_by(service_point_id=sp.id, session_date=day))
-
-    waiting = (base.filter(models.QueueEntry.status == 'checked_in')
-               .order_by(models.QueueEntry.queue_number.asc()).all())
-    serving = (base.filter(models.QueueEntry.status.in_(('called', 'in_service')))
-               .order_by(models.QueueEntry.queue_number.asc()).all())
-    done_count = base.filter(models.QueueEntry.status == 'done').count()
-    messaging_config = _messaging_config()
     checkin_links = messaging_links.build_checkin_links(
-        messaging_config,
-        request.url_root,
-        sp.id,
-        subdomain=g.subdomain,
-    )
+        _messaging_config(), request.url_root, sp.id, subdomain=g.subdomain)
+    return render_template('queue/console.html', checkin_links=checkin_links,
+                           **_console_context(sp))
 
-    return render_template('queue/console.html', service_point=sp, day=day,
-                           waiting=waiting, serving=serving, done_count=done_count,
-                           in_service_count=sum(1 for e in serving if e.status == 'in_service'),
-                           status_labels=STATUS_TH,
-                           checkin_links=checkin_links)
+
+@queue_bp.route('/console/<int:service_point_id>/body')
+@login_required
+def console_body(service_point_id):
+    """fragment ห้องสำหรับ HTMX polling (hx-trigger every Ns) + เป็น seam ไป SSE ภายหลัง"""
+    denied = _deny_if_not_staff()
+    if denied:
+        return denied
+    sp = _service_point_or_404(service_point_id)
+    return render_template('queue/_room.html', **_console_context(sp))
 
 
 @queue_bp.route('/console/<int:service_point_id>/call-next', methods=['POST'])
@@ -393,15 +417,15 @@ def call_next(service_point_id):
         return denied
 
     sp = _service_point_or_404(service_point_id)
-    # Phase 2: atomic priority pick+call (ratio/score + starvation + capacity)
+    # Phase 2: atomic priority pick+call (ratio/score + starvation + capacity); push async via RQ
     entry = ps.call_next(g.db, sp.id, qs.today(), actor='staff')
     if entry is None:
-        flash('ไม่มีคิวที่รออยู่', 'info')
+        notice = 'ไม่มีคิวที่รออยู่'
     else:
         qn.enqueue_queue_turn(g.tenant, entry, url=build_url_with_context(
             'queue.ticket', token=make_ticket_token(entry.id, g.tenant), _external=True))
-        flash(f'เรียกคิวหมายเลข {entry.queue_number} แล้ว', 'success')
-    return redirect(build_url_with_context('queue.console', service_point_id=sp.id))
+        notice = f'เรียกคิวหมายเลข {entry.queue_number} แล้ว'
+    return _console_response(sp, notice)
 
 
 @queue_bp.route('/entry/<int:entry_id>/<action>', methods=['POST'])
@@ -411,25 +435,46 @@ def entry_action(entry_id, action):
     if denied:
         return denied
 
-    to_status = _ACTION_TO_STATUS.get(action)
-    if to_status is None:
-        abort(404)
-
     entry = g.db.query(models.QueueEntry).filter_by(id=entry_id).first()
     if entry is None:
         abort(404)
-    sp_id = entry.service_point_id          # เก็บก่อน transition (entry จะ expire หลัง commit)
+    sp_id = entry.service_point_id          # ห้องที่ staff ดูอยู่ (เก็บก่อน action; entry expire หลัง commit)
     number = entry.queue_number
 
     try:
-        qs.transition(g.db, entry_id, to_status, actor='staff')
+        to_status = _ACTION_TO_STATUS.get(action)
+        if to_status is not None:
+            qs.transition(g.db, entry_id, to_status, actor='staff')
+            notice = f'คิวหมายเลข {number}: {STATUS_TH[to_status]}'
+        elif action == 'arrived-ack':
+            qs.record_arrived_ack(g.db, entry_id, actor='staff')
+            notice = f'คิวหมายเลข {number}: ถึงแล้ว'
+        elif action == 'reset':
+            qs.reset_to_waiting(g.db, entry_id, actor='staff')
+            notice = f'คิวหมายเลข {number}: กลับไปรอเรียก'
+        elif action == 'remove':
+            qs.remove_entry(g.db, entry_id, actor='staff')
+            notice = f'คิวหมายเลข {number}: นำออกจากคิว'
+        elif action == 'reclass':
+            qs.reclass_entry(g.db, entry_id,
+                             (request.form.get('entry_class') or '').strip(), actor='staff')
+            notice = f'คิวหมายเลข {number}: ปรับประเภทแล้ว'
+        elif action == 'move':
+            target = request.form.get('service_point_id')
+            if not target:
+                abort(400)
+            qs.move_entry(g.db, entry_id, int(target), actor='staff')
+            notice = f'คิวหมายเลข {number}: ย้ายแล้ว'
+        else:
+            abort(404)
     except qs.InvalidTransition:
-        flash(f'คิวหมายเลข {number}: เปลี่ยนเป็น "{STATUS_TH[to_status]}" ไม่ได้ '
-              f'(สถานะปัจจุบันไม่อนุญาต — อาจมีการกดซ้ำ)', 'warning')
-        return redirect(build_url_with_context('queue.console', service_point_id=sp_id))
+        notice = (f'คิวหมายเลข {number}: ดำเนินการไม่ได้ '
+                  f'(สถานะปัจจุบันไม่อนุญาต — อาจมีการกดซ้ำ)')
+    except (ValueError, TypeError):
+        abort(400)
 
-    flash(f'คิวหมายเลข {number}: {STATUS_TH[to_status]}', 'success')
-    return redirect(build_url_with_context('queue.console', service_point_id=sp_id))
+    sp = _service_point_or_404(sp_id)
+    return _console_response(sp, notice)
 
 
 # ============================ จอแสดงคิว (TV) ============================

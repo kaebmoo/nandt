@@ -219,6 +219,99 @@ def record_arrived_ack(db, entry_id, actor='patient', now=None):
     return entry
 
 
+def _assign_queue_number(db, service_point_id, session_date) -> int:
+    """ออกเลขคิวถัดไปแบบ atomic ต่อ (schema, service_point, date).
+
+    advisory xact lock ปล่อยอัตโนมัติตอน commit; ใช้ current_schema() ใน key เพื่อไม่ให้
+    tenant ต่างกันแย่ง lock กัน (advisory lock เป็น database-global). ใช้ทั้ง check-in และ move.
+    """
+    db.execute(
+        text("SELECT pg_advisory_xact_lock("
+             "hashtextextended(current_schema() || ':' || :sp || ':' || :d, 0))"),
+        {"sp": int(service_point_id), "d": session_date.isoformat()},
+    )
+    return db.execute(
+        text("SELECT COALESCE(MAX(queue_number), 0) + 1 FROM queue_entries "
+             "WHERE service_point_id = :sp AND session_date = :d"),
+        {"sp": int(service_point_id), "d": session_date},
+    ).scalar()
+
+
+def _lock_entry(db, entry_id):
+    entry = (db.query(models.QueueEntry)
+             .filter(models.QueueEntry.id == entry_id)
+             .with_for_update()
+             .one_or_none())
+    if entry is None:
+        raise ValueError(f"queue_entry {entry_id} not found")
+    return entry
+
+
+def reset_to_waiting(db, entry_id, actor='staff'):
+    """revert called -> checked_in (เรียกผิด/คนยังไม่มา) — คืน capacity + เคลียร์ ack (Patch 21 §13)"""
+    entry = _lock_entry(db, entry_id)
+    if entry.status != 'called':
+        raise InvalidTransition(f"reset ได้เฉพาะ called (entry {entry_id} เป็น {entry.status})")
+    entry.status = 'checked_in'
+    entry.called_at = None
+    entry.arrived_ack_at = None
+    db.flush()
+    record_event(db, entry, 'reset', 'called', 'checked_in', actor=actor,
+                 metadata={'reason': 'reset_to_waiting'})
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def reclass_entry(db, entry_id, new_class, actor='staff'):
+    """override entry_class (appointment <-> walkin) ด้วยมือ + queue_events('reclass') (Patch 21 §13)"""
+    if new_class not in ('appointment', 'walkin'):
+        raise ValueError(f"entry_class ไม่ถูกต้อง: {new_class!r}")
+    entry = _lock_entry(db, entry_id)
+    old_class = entry.entry_class
+    if old_class != new_class:
+        entry.entry_class = new_class
+        db.flush()
+        record_event(db, entry, 'reclass', entry.status, entry.status, actor=actor,
+                     metadata={'from_class': old_class, 'to_class': new_class,
+                               'reason': 'manual_override'})
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def remove_entry(db, entry_id, actor='staff'):
+    """เอา entry ออกจากคิว (เพิ่มผิด/ซ้ำ) (Patch 21 §13).
+
+    ponytail: ไม่มี status 'removed' แยก — ปิดเป็น 'skipped' (terminal) + metadata reason='removed'
+    ผ่าน state machine เดิม (skipped อนุญาตจาก checked_in/called); ถ้าต้องแยก analytics ค่อยเพิ่ม status.
+    """
+    entry = _lock_entry(db, entry_id)
+    _apply_transition(db, entry, 'skipped', actor, metadata={'reason': 'removed'})
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def move_entry(db, entry_id, new_service_point_id, actor='staff'):
+    """ย้าย entry ไป service_point อื่น + ออกเลขคิวใหม่ในห้องปลายทาง (Patch 21 §13)"""
+    entry = _lock_entry(db, entry_id)
+    if entry.status not in _ACK_ELIGIBLE_STATUSES:
+        raise InvalidTransition(f"ย้ายได้เฉพาะคิวที่ยัง active (entry {entry_id} เป็น {entry.status})")
+    old_sp = entry.service_point_id
+    new_sp = int(new_service_point_id)
+    if new_sp != old_sp:
+        new_no = _assign_queue_number(db, new_sp, entry.session_date)
+        entry.service_point_id = new_sp
+        entry.queue_number = new_no
+        db.flush()
+        record_event(db, entry, 'move', entry.status, entry.status, actor=actor,
+                     metadata={'from_sp': old_sp, 'to_sp': new_sp, 'queue_number': new_no})
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 def _naive_local(dt):
     """normalize datetime ให้เป็น naive local สำหรับเทียบกับเวลาจาก DB ที่เป็น local naive"""
     if dt is not None and getattr(dt, 'tzinfo', None) is not None:
@@ -466,19 +559,7 @@ def check_in(db, appointment_id, service_point_id, patient_ref,
         )
 
     # --- atomic queue_number ---
-    # advisory xact lock ต่อ (schema, service_point, date): serialize concurrent check-in
-    # ของจุด+วันเดียวกัน lock ปล่อยอัตโนมัติตอน commit. ใช้ current_schema() ใน key เพื่อ
-    # ไม่ให้ tenant ต่างกันแย่ง lock กัน (advisory lock เป็น database-global)
-    db.execute(
-        text("SELECT pg_advisory_xact_lock("
-             "hashtextextended(current_schema() || ':' || :sp || ':' || :d, 0))"),
-        {"sp": int(service_point_id), "d": session_date.isoformat()},
-    )
-    next_no = db.execute(
-        text("SELECT COALESCE(MAX(queue_number), 0) + 1 FROM queue_entries "
-             "WHERE service_point_id = :sp AND session_date = :d"),
-        {"sp": int(service_point_id), "d": session_date},
-    ).scalar()
+    next_no = _assign_queue_number(db, service_point_id, session_date)
 
     entry = models.QueueEntry(
         appointment_id=appointment_id,

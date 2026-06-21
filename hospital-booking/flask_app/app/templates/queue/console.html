@@ -2,6 +2,10 @@
 {% block title %}คอนโซลคิว — {{ service_point.name }}{% endblock %}
 
 {% block content %}
+{# Patch 21 §13: HTMX swap-fragment เฉพาะ staff console (exception ที่ log ไว้ของ §0.1) —
+   logic อยู่ Python (queue_service), JS แค่ขน HTML ที่ server render #}
+<script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+
 <div class="max-w-4xl mx-auto px-4 py-8">
 
     <!-- header -->
@@ -22,32 +26,6 @@
         </a>
     </div>
 
-    <!-- stat row -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white rounded-xl shadow-md p-4 text-center">
-            <div class="text-3xl font-bold text-purple-600">{{ waiting | length }}</div>
-            <div class="text-sm text-gray-500 mt-1">รอเรียก</div>
-        </div>
-        <div class="bg-white rounded-xl shadow-md p-4 text-center">
-            <div class="text-3xl font-bold text-blue-600">{{ serving | length }}</div>
-            <div class="text-sm text-gray-500 mt-1">กำลังเรียก/บริการ</div>
-        </div>
-        <div class="bg-white rounded-xl shadow-md p-4 text-center">
-            <div class="text-3xl font-bold text-green-600">{{ done_count }}</div>
-            <div class="text-sm text-gray-500 mt-1">เสร็จแล้ววันนี้</div>
-        </div>
-    </div>
-
-    <!-- call next -->
-    <form method="POST" action="{{ nav_url('queue.call_next', service_point_id=service_point.id) }}" class="mb-8">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit"
-                class="w-full py-3 px-6 rounded-lg bg-purple-600 text-white text-lg font-medium
-                       hover:bg-purple-700 transition-colors">
-            เรียกคิวถัดไป
-        </button>
-    </form>
-
     {% if checkin_links %}
     <section class="bg-white rounded-xl shadow-md p-4 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-3">ลิงก์สำหรับ QR เช็คอิน</h2>
@@ -57,80 +35,20 @@
                 <span class="inline-block w-24 text-gray-500">
                     {{ {'web': 'เว็บ', 'line_liff': 'LINE', 'telegram': 'Telegram'}.get(channel, channel) }}
                 </span>
-                <a href="{{ link }}" target="_blank" class="text-purple-600 hover:text-purple-700 break-all">
-                    {{ link }}
-                </a>
+                <a href="{{ link }}" target="_blank" class="text-purple-600 hover:text-purple-700 break-all">{{ link }}</a>
             </div>
             {% endfor %}
         </div>
     </section>
     {% endif %}
 
-    <!-- serving -->
-    <h2 class="text-xl font-semibold text-gray-900 mb-3">กำลังเรียก / รับบริการ</h2>
-    {% if serving %}
-        <div class="space-y-3 mb-8">
-            {% for e in serving %}
-            <div class="bg-white rounded-xl shadow-md p-4 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-4">
-                    <div class="text-2xl font-bold text-purple-600 w-12 text-center">{{ e.queue_number }}</div>
-                    <div>
-                        <div class="font-semibold text-gray-900">{{ e.patient_ref }}</div>
-                        <div class="text-sm
-                            {{ 'text-blue-600' if e.status == 'in_service' else 'text-amber-600' }}">
-                            {{ status_labels.get(e.status, e.status) }}
-                            {% if e.entry_class == 'appointment' %}
-                                <span class="ml-1 text-xs text-gray-400">(นัดหมาย)</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    {% if e.status == 'called' %}
-                    <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='start') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors">เริ่มบริการ</button>
-                    </form>
-                    {% endif %}
-                    {% if e.status == 'in_service' %}
-                    <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='done') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition-colors">เสร็จสิ้น</button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='skip') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors">ข้ามคิว</button>
-                    </form>
-                    <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='no-show') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors">ไม่มา</button>
-                    </form>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    {% else %}
-        <div class="bg-gray-100 rounded-xl p-6 text-center text-gray-500 mb-8">ยังไม่มีคิวที่กำลังเรียก</div>
-    {% endif %}
-
-    <!-- waiting -->
-    <h2 class="text-xl font-semibold text-gray-900 mb-3">คิวที่รออยู่</h2>
-    {% if waiting %}
-        <div class="space-y-2">
-            {% for e in waiting %}
-            <div class="bg-white rounded-lg shadow-sm p-3 flex items-center gap-4">
-                <div class="text-xl font-bold text-gray-400 w-12 text-center">{{ e.queue_number }}</div>
-                <div class="font-medium text-gray-800">{{ e.patient_ref }}</div>
-                {% if e.entry_class == 'appointment' %}
-                    <span class="ml-auto text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">นัดหมาย</span>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-    {% else %}
-        <div class="bg-gray-100 rounded-xl p-6 text-center text-gray-500">ไม่มีคิวที่รออยู่</div>
-    {% endif %}
+    <!-- live room: action ปุ่ม hx-post -> swap innerHTML; polling ทุก 5s (seam ไป SSE) -->
+    <div id="console-body"
+         hx-get="{{ nav_url('queue.console_body', service_point_id=service_point.id) }}"
+         hx-trigger="every 5s"
+         hx-swap="innerHTML">
+        {% include 'queue/_room.html' %}
+    </div>
 
 </div>
 {% endblock %}
