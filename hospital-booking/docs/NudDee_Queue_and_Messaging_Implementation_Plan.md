@@ -106,6 +106,12 @@ fastapi_app/app/availability.py           # FastAPI availability endpoints
 - **Platform integration / handoff** (เชื่อมหลังบ้านเฉพาะทาง เช่น Telemed) แยกเป็นเอกสาร [`docs/NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) — NudDee = ประตูหน้าบ้าน; **design ล็อก, build deferred** จนมี demand (เพิ่ม 20 มิ.ย. 2026)
 - **Phase 4 (notification 4.1/4.13 + identity A + called-timeout D)** wired แล้ว (commit `9151965`, 20 มิ.ย. 2026): `notify_service.notify()` + identity gate (`no_linked_identity` skip เมื่อไม่มี `channel_links`), `queue_service.close_stale_called()` + sweeper + `call_next` preflight, queue wiring (เช็คอิน/call_next → `queue_notifications`); pytest `144 passed`
 - **A1 `event_types.requires_queue`** implement แล้ว: migration + SQLAlchemy model + FastAPI create/update/response + settings UI + check-in arrival-only path + tests
+- **Patch 21 มิ.ย. 2026 (console HTMX + เสียง WAV + anon identity + arrived_ack)** implement แล้ว (branch `feat/queue-patch-21`, pytest `164 passed`):
+  - anon identity (§4.6.1) — `identity_service.mint_anon_ref()` + `anon:{token}` เป็น resolver fallback ที่ 3 + canonicalize รับ anon; walk-in ไม่ให้เบอร์ check-in ได้ (anon); notify gate: linked-anon → push, unlinked → pull/log (commit `8dd7fb5`)
+  - arrived_ack (§3.2/§4.4) — `queue_entries.arrived_ack_at` (model + canonical DDL + migration `add_queue_arrived_ack.py`) + `queue_service.record_arrived_ack(patient|staff)` + `queue_events('arrived_ack')`; `close_stale_called` ยกเว้น acked; ปุ่มที่ status page + console (commit `a7739fa`)
+  - Staff Console HTMX (§13) — `_room.html` fragment swap (hx-post/hx-trigger every 5s, no full reload); actions: call-next/start/done/skip/no_show/arrived-ack/reset/reclass/move/remove/show-QR; `call_next` atomic เดิม; destructive ใช้ hx-confirm; badge "ถึงแล้ว" (commit `ff02ee1`)
+  - เสียงเรียกคิว WAV (§14) — `audio_service.build_playlist` (full→per-digit fallback) + clip library ต่อ schema + `_default` ชุดไทย (placeholder tones, แทนด้วยเสียงจริงได้โดยไม่แตะ code) + `messaging_config.audio_config` JSONB (migration `add_messaging_config_audio.py`) + display autoplay-unlock + audio queue ไม่ทับ (commit `8a3f96f`)
+  - ตามคนไข้ 5 ทาง (§5.6 ภาคผนวก) — pull (ticket) / push turn (call_next→RQ, channel_priority) / จอ+เสียง / arrived_ack / manual ครบ; `queue_near` enqueue helper พร้อมไว้รอ near-detector (future)
 
 ### 1.5 Known Issues / pre-existing (นอกขอบเขตแผนนี้ แต่ต้องรู้)
 - **ปุ่ม save บนหน้า template edit** (`/settings/availability/template/{id}/edit`) **ยังไม่ทำงาน** ณ สิ้นสุด session ล่าสุด → ถ้างานในแผนนี้ต้องพึ่งหน้านั้น ให้แจ้งและแก้ก่อน แต่ไม่ใช่เป้าหมายหลักของแผนนี้
@@ -1157,6 +1163,7 @@ override.is_unavailable → ไม่มี session; override custom hours → s
 ---
 
 ### Patch 21 มิ.ย. 2026 — prototype field-feedback: console (HTMX) + เสียง (WAV) + anon identity
+> ✅ **implement แล้ว 21 มิ.ย. 2026** (branch `feat/queue-patch-21`, pytest `164 passed`) — สรุป commit + รายละเอียดที่ §1.4
 ที่มา: feedback จากระบบคิว prototype หน้างานจริง (คลินิกเมด) — สรุป decision ที่ล็อก:
 - **anon identity (§4.6.1):** เพิ่ม `anon:{token}` เป็น fallback ที่ 3, 2 รูปเดิมไม่เปลี่ยน, **เป็น technical fallback ไม่ใช่ privacy mode** (NudDee = consent-based PDPA), **ไม่เพิ่ม `identity_mode` field** (force zero-PII = defer)
 - **arrived_ack (§3.2/§4.4):** `arrived_ack_at` + event `arrived_ack`; signal ระหว่าง called→in_service; sweeper ยกเว้น entry ที่ ack แล้ว
