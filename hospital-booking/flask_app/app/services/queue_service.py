@@ -183,6 +183,42 @@ def transition(db, entry_id, to_status, actor='system', metadata=None) -> None:
     db.commit()   # after_begin (database.py) จัดการ search_path ของ transaction ถัดไปให้เอง
 
 
+# สถานะที่รับ arrived_ack ได้ (ยัง active) — ack เป็น signal ไม่ใช่ status/gate
+_ACK_ELIGIBLE_STATUSES = ('checked_in', 'called', 'in_service')
+
+
+def record_arrived_ack(db, entry_id, actor='patient', now=None):
+    """บันทึก "ถึงหน้าห้องแล้ว" (Patch 21 §4.4): set arrived_ack_at + queue_events('arrived_ack').
+
+    ไม่ใช่ status ใหม่ ไม่ใช่ gate — เป็น signal ให้ close_stale_called ยกเว้น entry นี้
+    (คนมาถึงแล้วต้องไม่ถูกปิดเป็น no_show) + ให้ staff เห็น badge "ถึงแล้ว".
+    actor = 'patient' (กดเองที่ status page) หรือ 'staff' (กดแทนที่ console).
+    idempotent: ถ้า ack ไปแล้วคืน entry เดิมโดยไม่เขียน event ซ้ำ;
+    คืน None ถ้า entry ปิดไปแล้ว (ack ไม่มีผล).
+    """
+    now = now or _now()
+    entry = (db.query(models.QueueEntry)
+             .filter(models.QueueEntry.id == entry_id)
+             .with_for_update()
+             .one_or_none())
+    if entry is None:
+        raise ValueError(f"queue_entry {entry_id} not found")
+    if entry.arrived_ack_at is not None:
+        db.commit()
+        db.refresh(entry)
+        return entry                       # idempotent — ไม่เขียน event ซ้ำ
+    if entry.status not in _ACK_ELIGIBLE_STATUSES:
+        db.commit()
+        return None                        # entry ปิดแล้ว — ack ไม่มีผล
+    entry.arrived_ack_at = now
+    db.flush()
+    record_event(db, entry, 'arrived_ack', entry.status, entry.status,
+                 actor=actor, metadata={'arrived_ack': True})
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 def _naive_local(dt):
     """normalize datetime ให้เป็น naive local สำหรับเทียบกับเวลาจาก DB ที่เป็น local naive"""
     if dt is not None and getattr(dt, 'tzinfo', None) is not None:
@@ -241,7 +277,10 @@ def close_stale_called(db, service_point_id=None, session_date=None,
     policy_cache = {}
     count = 0
 
-    query = db.query(models.QueueEntry).filter(models.QueueEntry.status == 'called')
+    # arrived_ack: คนยืนยันว่าถึงหน้าห้องแล้ว ห้ามปิดเป็น stale/no_show (Patch 21 §4.4)
+    query = (db.query(models.QueueEntry)
+             .filter(models.QueueEntry.status == 'called',
+                     models.QueueEntry.arrived_ack_at.is_(None)))
     if service_point_id is not None:
         query = query.filter(models.QueueEntry.service_point_id == service_point_id)
     if session_date is not None:

@@ -303,6 +303,8 @@ def ticket(token):
                            status_labels=STATUS_TH,
                            messaging_config=_messaging_config(),
                            checkin_confirm=request.args.get('checkin_confirm') == '1',
+                           arrived_confirm=request.args.get('arrived') == '1',
+                           arrived_url=build_url_with_context('queue.ticket_arrived', token=token),
                            pwa_subscribe_url=build_url_with_context(
                                'queue.ticket_pwa_subscription',
                                token=token,
@@ -334,6 +336,19 @@ def ticket_pwa_subscription(token):
         g.db.rollback()
         return jsonify({'linked': False, 'error': str(exc)}), 400
     return jsonify({'linked': True, 'channel': link.channel})
+
+
+@queue_bp.route('/ticket/<token>/arrived', methods=['POST'])
+def ticket_arrived(token):
+    """ผู้รับบริการกด "ถึงหน้าห้องแล้ว" จาก status page (Patch 21 §4.4) — ไม่ใช่ gate"""
+    entry_id = read_ticket_token(token, g.tenant)
+    if entry_id is None:
+        abort(404)
+    try:
+        qs.record_arrived_ack(g.db, entry_id, actor='patient')
+    except ValueError:
+        abort(404)
+    return redirect(build_url_with_context('queue.ticket', token=token, arrived=1))
 
 
 # ============================ Staff: console ============================

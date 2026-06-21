@@ -86,6 +86,7 @@ DDL_STATEMENTS = [
         priority_score   NUMERIC(10,3),
         check_in_at      TIMESTAMPTZ,
         called_at        TIMESTAMPTZ,
+        arrived_ack_at   TIMESTAMPTZ,
         service_start_at TIMESTAMPTZ,
         service_end_at   TIMESTAMPTZ,
         created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),

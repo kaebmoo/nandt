@@ -727,3 +727,70 @@ def test_count_ahead_counts_only_active_earlier_numbers(db, service_point):
     qs.transition(db, e1.id, 'done')             # #1 เสร็จ -> ไม่นับเป็นคิวก่อนหน้าอีก
     assert qs.count_ahead(db, service_point.id, day, e3.queue_number) == 1
     assert qs.count_ahead(db, service_point.id, day, e1.queue_number) == 0
+
+
+# ---------- arrived_ack (Patch 21 §4.4) ----------
+
+def _called_entry(db, service_point, number=1, status='called'):
+    entry = models.QueueEntry(
+        service_point_id=service_point.id,
+        session_date=datetime.date(2026, 6, 15),
+        patient_ref=f"phone:+6681000{number:04d}",
+        entry_class='walkin',
+        queue_number=number,
+        status=status,
+        check_in_at=datetime.datetime(2026, 6, 15, 8, 50),
+        called_at=datetime.datetime(2026, 6, 15, 9, 0) if status != 'checked_in' else None,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@pytest.mark.parametrize("actor", ['patient', 'staff'])
+def test_record_arrived_ack_sets_timestamp_and_event(db, service_point, actor):
+    entry = _called_entry(db, service_point)
+    now = datetime.datetime(2026, 6, 15, 9, 2, tzinfo=UTC)
+
+    out = qs.record_arrived_ack(db, entry.id, actor=actor, now=now)
+
+    assert out is not None and out.arrived_ack_at is not None
+    assert out.status == 'called'                 # ack ไม่เปลี่ยน status (ไม่ใช่ gate)
+    ev = (db.query(models.QueueEvent)
+          .filter_by(queue_entry_id=entry.id, event_type='arrived_ack').one())
+    assert ev.actor == actor
+    assert (ev.from_status, ev.to_status) == ('called', 'called')
+
+
+def test_record_arrived_ack_is_idempotent(db, service_point):
+    entry = _called_entry(db, service_point)
+    qs.record_arrived_ack(db, entry.id, actor='patient')
+    qs.record_arrived_ack(db, entry.id, actor='patient')      # กดซ้ำ
+    assert db.query(models.QueueEvent).filter_by(
+        queue_entry_id=entry.id, event_type='arrived_ack').count() == 1
+
+
+def test_record_arrived_ack_noop_on_closed_entry(db, service_point):
+    entry = _called_entry(db, service_point, status='called')
+    qs.transition(db, entry.id, 'no_show')
+    assert qs.record_arrived_ack(db, entry.id, actor='staff') is None
+    db.refresh(entry)
+    assert entry.arrived_ack_at is None
+
+
+def test_sweep_excludes_arrived_ack_called(db, service_point):
+    db.add(models.QueuePolicy(service_point_id=None, call_timeout_min=5))
+    db.commit()
+    acked = _called_entry(db, service_point, number=1)
+    stale = _called_entry(db, service_point, number=2)
+    qs.record_arrived_ack(db, acked.id, actor='patient',
+                          now=datetime.datetime(2026, 6, 15, 9, 1))
+
+    # both are well past the 5-min call timeout, but the acked one must survive
+    n = qs.sweep_no_shows(db, now=datetime.datetime(2026, 6, 15, 9, 30))
+
+    assert n == 1
+    db.refresh(acked); db.refresh(stale)
+    assert acked.status == 'called'              # arrived -> not closed
+    assert stale.status == 'no_show'

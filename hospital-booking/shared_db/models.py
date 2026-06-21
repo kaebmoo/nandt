@@ -561,6 +561,7 @@ class QueueEntry(TenantBase):
     priority_score = Column(Numeric(10, 3))
     check_in_at = Column(DateTime(timezone=True))
     called_at = Column(DateTime(timezone=True))
+    arrived_ack_at = Column(DateTime(timezone=True))   # 21 มิ.ย. 2026: คนไข้/staff ยืนยัน "ถึงหน้าห้อง" (called->in_service) — ไม่ใช่ status/gate
     service_start_at = Column(DateTime(timezone=True))
     service_end_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -589,7 +590,7 @@ class QueueEvent(TenantBase):
 
     id = Column(BigInteger, primary_key=True)
     queue_entry_id = Column(Integer, ForeignKey('queue_entries.id'), nullable=False)
-    event_type = Column(String(40), nullable=False)   # check_in | call | start_service | end_service | no_show | reclass | skip
+    event_type = Column(String(40), nullable=False)   # check_in | call | arrived_ack | start_service | end_service | no_show | reclass | skip
     from_status = Column(String(20))
     to_status = Column(String(20))
     actor = Column(String(20), nullable=False, server_default=text("'system'"))  # staff | system | patient
