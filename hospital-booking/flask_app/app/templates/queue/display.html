@@ -70,7 +70,7 @@
         audioEl.onerror = playNext;   // clip หาย -> ข้ามไปตัวถัดไป ไม่ค้าง
 
         function enqueue(clips, repeat, volume) {
-            audioEl.volume = Math.max(0, Math.min(1, volume || 1));
+            audioEl.volume = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1));  // honor 0 (mute)
             for (let r = 0; r < (repeat || 1); r++) clips.forEach(c => queue.push(c));
             if (!playing) playNext();
         }

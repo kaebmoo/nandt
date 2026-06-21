@@ -37,6 +37,14 @@ def test_get_audio_config_defaults_and_override():
     assert cfg["template"] == audio.DEFAULT_TEMPLATE   # null template -> fall back to default
 
 
+def test_get_audio_config_coerces_bad_volume_repeat():
+    # tenant typo in JSONB must not crash the public display -> coerce to numeric defaults
+    cfg = audio.get_audio_config(type("C", (), {"audio_config": {"volume": "high", "repeat": "x"}})())
+    assert cfg["volume"] == 1.0 and cfg["repeat"] == 1
+    cfg2 = audio.get_audio_config(type("C", (), {"audio_config": {"volume": 0}})())
+    assert cfg2["volume"] == 0.0   # explicit mute preserved (not coerced to 1)
+
+
 def demo():
     # runnable check: fallback chain is the load-bearing logic
     assert audio.build_playlist(["{queue}"], {"queue": "42"}, {"4", "2"}) == ["4.wav", "2.wav"]

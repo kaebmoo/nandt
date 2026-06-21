@@ -2,7 +2,7 @@
    logic อยู่ Python (queue_service); JS แค่ขน HTML ที่ server render. ปุ่ม destructive ใช้ hx-confirm.
    kebab "เพิ่มเติม" ใช้ <details> (native, ไม่ต้อง JS). #}
 {% macro action_form(e, action, label, css, confirm=None) %}
-<form method="POST"
+<form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action=action) }}"
       hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action=action) }}"
       hx-target="#console-body" hx-swap="innerHTML"
       {% if confirm %}hx-confirm="{{ confirm }}"{% endif %}>
@@ -19,7 +19,7 @@
         {{ action_form(e, 'reset', 'กลับไปรอเรียก', 'px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors') }}
         {% endif %}
         {{ action_form(e, 'no-show', 'ไม่มา', 'px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors', confirm='ยืนยันว่าคิวนี้ไม่มาตามนัด?') }}
-        <form method="POST"
+        <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='reclass') }}"
               hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action='reclass') }}"
               hx-target="#console-body" hx-swap="innerHTML">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -29,7 +29,7 @@
             </button>
         </form>
         {% if other_points %}
-        <form method="POST"
+        <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='move') }}"
               hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action='move') }}"
               hx-target="#console-body" hx-swap="innerHTML" class="flex items-center gap-1">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -71,7 +71,7 @@
 </div>
 
 <!-- call next (ปุ่มหลัก 90% ของงาน) -->
-<form method="POST"
+<form method="POST" action="{{ nav_url('queue.call_next', service_point_id=service_point.id) }}"
       hx-post="{{ nav_url('queue.call_next', service_point_id=service_point.id) }}"
       hx-target="#console-body" hx-swap="innerHTML" class="mb-8">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

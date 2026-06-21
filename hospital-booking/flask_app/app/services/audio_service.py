@@ -73,14 +73,27 @@ def clip_url(schema, filename):
     return url_for("static", filename=rel)
 
 
+def _coerce(value, cast, default):
+    try:
+        return cast(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def get_audio_config(messaging_config) -> dict:
-    """Merge tenant audio_config (JSONB) over defaults; always returns a usable template."""
+    """Merge tenant audio_config (JSONB) over defaults; always returns a usable template.
+
+    volume/repeat are coerced to numbers — a typo in the tenant JSONB (e.g. volume='high')
+    must not 500 the public display.
+    """
     cfg = dict(DEFAULT_AUDIO_CONFIG)
     raw = getattr(messaging_config, "audio_config", None) if messaging_config else None
     if isinstance(raw, dict):
         cfg.update({k: v for k, v in raw.items() if v is not None})
     if not cfg.get("template"):
         cfg["template"] = DEFAULT_TEMPLATE
+    cfg["volume"] = _coerce(cfg.get("volume"), float, 1.0)
+    cfg["repeat"] = _coerce(cfg.get("repeat"), int, 1)
     return cfg
 
 
