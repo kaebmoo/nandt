@@ -124,9 +124,9 @@ fastapi_app/app/availability.py           # FastAPI availability endpoints
 | Platform / Telemed handoff | ✅ [`NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) (journey + 3 message types ครบ) | defer จนมี demand (locked) |
 | Unskip — ดึง `skipped` กลับเข้า active | ✅ §3.2 หมายเหตุ + §12 decisions log | future (Phase หลัง channel) |
 | UI React component port | ✅ [`MIGRATION_AUDIT.md`](../MIGRATION_AUDIT.md) + skill `nuddee-design/MIGRATION_PLAN.md` (map ต่อ template + priority) | visuals/Tailwind ทำแล้ว; React port ยังไม่ทำ |
-| `queue_near` near-detector | ⚠️ event + enqueue helper + dispatcher มี (§4.13/§5.6/§10) — **ยังไม่มี spec ตัว detector** (logic ตัดสินว่าเหลืออีกกี่คิวแล้วยิง `queue_near`) | future — ต้องเขียน spec ก่อนทำ |
-| Reminder scheduler (เตือนล่วงหน้า 1 วัน) | ⚠️ sender + `reminder_enabled` gate + cost map มี (§5.6/§6.2) — **ยังไม่มี spec ของ cron/job ที่ trigger** | future — ต้องเขียน spec ก่อนทำ |
-| RBAC enforcement ใน main Flask routes | ⚠️ ระบุเป็น known gap ([CLAUDE.md](../CLAUDE.md), [DEPLOYMENT.md](../DEPLOYMENT.md) §7) — **ยังไม่มี plan วิธี enforce** | future — ต้องเขียน plan ก่อนทำ |
+| `queue_near` near-detector | ✅ **spec §15.1** (detector หลัง call_next + `near_threshold`) | future — spec พร้อม implement |
+| Reminder scheduler (เตือนล่วงหน้า) | ✅ **spec §15.2** (Celery job + `reminder_sent` dedupe) | future — spec พร้อม implement |
+| RBAC enforcement ใน main Flask routes | ✅ **spec §15.3** (`@require_role` decorator; app-wide) | future — spec พร้อม implement |
 | Deploy/ops (systemd, Nginx+SSL, Stripe live, secret rotation, backup/monitoring) | ✅ [`DEPLOYMENT.md`](../DEPLOYMENT.md) | 🧰 owner/ops |
 | อัดเสียงไทยจริงแทน placeholder tones | ✅ [`flask_app/app/static/queue_audio/README.md`](../flask_app/app/static/queue_audio/README.md) | 🧰 owner |
 
@@ -1258,6 +1258,44 @@ override.is_unavailable → ไม่มี session; override custom hours → s
 5. **manual fallback** — staff เรียกเสียง/โทรเองได้เหมือนเดิมถ้า digital ล่ม
 
 **ข้อจำกัด:** push ทำงานเมื่อผูก `channel_links` แล้ว — คนไม่ผูก (ผู้สูงอายุ/ไม่มี smartphone) ตกไปที่ จอ+เสียง+manual → ระบบ "ลด" การตามด้วยมือ ไม่ใช่ลบ 100%
+
+---
+
+## 15. Backlog specs (post-Patch-21, ร่าง 28 มิ.ย. 2026) — queue_near / reminder / RBAC
+
+3 งานที่เหลือซึ่ง §1.4.1 ตั้งธง ⚠️ ไว้ — ร่าง spec สั้นพอ implement ได้ ทำแยกกันได้ (commit ละข้อ + test). ทุกข้อยึด §0 (Flask-first, tenant search_path, append-only events, push critical ผ่าน RQ, timezone Asia/Bangkok) และ **ห้าม regress** baseline `165 passed`.
+> 📋 **kickoff prompt พร้อมส่ง Claude Code:** [`docs/claude_code_prompt_2026-06-28.md`](./claude_code_prompt_2026-06-28.md) (อิง §15 นี้)
+
+### 15.1 `queue_near` near-detector
+- **เป้าหมาย:** ยิง push `queue_near` เมื่อคนไข้ "ใกล้ถึงคิว" (เหลืออีก ≤ N) — เติมช่องว่างระหว่าง pull (ticket) กับ `queue_turn`. Event/enqueue/dispatcher มีครบแล้ว ขาด **ตัวตัดสินว่าใครใกล้ถึง**
+- **กลไก:** หลัง `priority_service.call_next()` เรียกคนถัดไปสำเร็จ (ลำดับขยับ) → สแกน entries `status='checked_in'` ของ service_point เดียวกัน, คำนวณ position ด้วย `queue_service.count_ahead(db, sp_id, session_date, queue_number)`; entry ที่ `0 < position ≤ near_threshold` → `queue_notifications.enqueue_queue_near(g.tenant, entry, url=ticket_url)` (async RQ, urgency `critical`)
+- **กันส่งซ้ำ:** พึ่ง dedupe เดิมของ `notify()` (advisory lock + `notification_log` ต่อ `(schema, patient_ref, event_type)`) — คนเดิมจะได้ `queue_near` ครั้งเดียวแม้ call_next หลายรอบ
+- **identity gate:** เหมือน `queue_turn` — unlinked → log `skipped` ไม่ push
+- **config:** เพิ่ม `queue_policy.near_threshold INT DEFAULT 2` (migration idempotent `ADD COLUMN IF NOT EXISTS` + canonical DDL + model + drift); 0/NULL = ปิด near-detector
+- **files:** `priority_service.call_next` (เพิ่ม near-scan ท้ายฟังก์ชัน, นอก advisory lock ของ call เดิมก็ได้แต่ใน request เดียว), `queue_routes.call_next` (สร้าง ticket url ตอน enqueue เหมือน queue_turn), migration, tests
+- **acceptance:** call_next แล้ว entry ที่เพิ่งเข้าเขต ≤ threshold ได้ `queue_near` 1 ครั้ง (ไม่ซ้ำข้ามรอบ); unlinked → log ไม่ push; near_threshold=0 → ไม่ยิง; tests ครอบ เข้าเขต/ไม่เข้า/ไม่ซ้ำ/gate
+
+### 15.2 Reminder scheduler (เตือนล่วงหน้าก่อนนัด)
+- **เป้าหมาย:** เตือนนัดล่วงหน้า (default 24 ชม.) ผ่านช่องฟรีก่อน เพื่อลด no-show — low urgency, opt-in ด้วย `messaging_config.reminder_enabled` (มีแล้ว). sender path (`notify` urgency `low` event `reminder`) + gate มีแล้ว ขาด **job ที่หา "นัดที่ถึงเวลาเตือน" แล้ว enqueue**
+- **กลไก:** Celery `@shared_task(name="tasks.send_all_tenant_reminders")` + beat entry ใน `flask_app/app/__init__.py` (เช่น `crontab(minute='0', hour='*')` รายชั่วโมง). ต่อ tenant ที่ `HospitalStatus.ACTIVE` (loop แบบ `sync_all_tenant_*` เดิม, bind tenant, reset search_path ก่อน close):
+  - ถ้า `messaging_config.reminder_enabled` = false → ข้าม tenant
+  - query `appointments` ที่ `start_time` อยู่ในกรอบ `[now + lead, now + lead + window]` (Asia/Bangkok) และ `reminder_sent = false` (คอลัมน์มีอยู่แล้ว — ใช้กัน dedupe)
+  - resolve `patient_ref` (identity_service) → `queue_notifications.enqueue_*`/`notify(urgency='low', event_type='reminder')` ผ่าน RQ → set `reminder_sent=true, reminder_sent_at=now` หลัง enqueue
+- **กันส่งซ้ำ:** `appointments.reminder_sent` (มีแล้ว) + `notification_log` ของ `notify()` (สองชั้น)
+- **config:** เพิ่ม `messaging_config.reminder_lead_hours INT DEFAULT 24` (optional; ไม่เพิ่มก็ hardcode 24); `reminder_enabled` มีแล้ว
+- **timezone:** กรอบเวลาเทียบใน Asia/Bangkok (§0.4) — `appointments.start_time` เป็น DateTime
+- **identity gate:** unlinked → ส่งไม่ได้ (low urgency เลือกช่องฟรีก่อน ไม่ fallback line_push เสียเงินโดยไม่จำเป็น)
+- **files:** `flask_app/app/tasks.py` (reminder task ตามแพตเทิร์น `sync_all_tenant_*`) + beat entry ใน `__init__.py`, (optional) migration `reminder_lead_hours`, tests
+- **acceptance:** นัดพรุ่งนี้ที่ linked + reminder_enabled → ได้ reminder 1 ครั้งผ่านช่องฟรี + `reminder_sent=true`; reminder_enabled=false → ไม่ส่ง; รัน job ซ้ำ → ไม่ส่งซ้ำ; tests ครอบ window selection + dedupe + gate
+
+### 15.3 RBAC enforcement ใน main Flask routes (cross-cutting — ไม่ใช่ queue-only)
+- **สภาพปัจจุบัน:** `UserRole` มีแค่ `SUPER_ADMIN`, `HOSPITAL_ADMIN` (ยังไม่มี role ละเอียดเช่น staff/front-desk). `admin_app` บังคับ `super_admin_required` แล้ว; **main Flask app เช็คแค่ login + tenant ownership ไม่เช็ค role** (`queue_routes._deny_if_not_staff` = login+tenant). enum มี แต่ route ไม่ enforce (CLAUDE.md / DEPLOYMENT §7)
+- **เป้าหมาย (ขั้นต่ำ lazy):** decorator `@require_role(*roles)` ใน `flask_app/app/auth.py` — อ่าน `get_current_user().role`, ไม่อยู่ใน allowed → flash + redirect (หรือ 403); ใช้ต่อจาก `@login_required` + tenant check เดิม. **ห้าม `db.close()` ใน decorator** (บทเรียน search_path เดิม)
+- **scope แรก (ไม่ต้องครอบทุก route วันเดียว):** ทาบกับ route ที่ sensitive ก่อน — `settings/*` (availability, messaging), การลบ/แก้ template, analytics = `HOSPITAL_ADMIN`; staff console/check-in คงเดิม (login+tenant)
+- **ถ้าต้องการ role ละเอียด (optional, แยก decision):** เพิ่มค่า enum เช่น `STAFF`/`FRONT_DESK` + ช่องกำหนด role ตอนสร้าง user + migration — **เป็น decision ก่อนทำ ไม่ทำเองโดยไม่ถาม**
+- **files:** `auth.py` (`require_role`), routes ที่ทาบ (`routes.py`, `availability_routes.py`, messaging settings ใน `routes.py`), tests
+- **acceptance:** user role ไม่พอ เข้า route admin-only → ถูกปฏิเสธ (ไม่ 500, ไม่หลุด search_path); role พอ → เข้าได้; decorator ครอบ sensitive routes; tests ครอบ allow/deny ต่อ role
+- **note:** แยกเป็น patch ของตัวเอง (app-wide) — ไม่ผูกกับ queue; ระวัง regress flow ที่ user เป็น HOSPITAL_ADMIN อยู่แล้ว (ส่วนใหญ่ผ่าน)
 
 ---
 
