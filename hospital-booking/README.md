@@ -4,12 +4,26 @@
 
 ## เอกสาร
 
-| เอกสาร | สำหรับ |
-|---|---|
-| README.md (ไฟล์นี้) | นักพัฒนา — ติดตั้งและรันระบบ |
-| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | ผู้ดูแลโรงพยาบาล — คู่มือการใช้งานระบบ |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | แผนการ deploy ขึ้น production |
-| [CLAUDE.md](CLAUDE.md) | สถาปัตยกรรมและแนวทางแก้โค้ด (สำหรับ AI/นักพัฒนา) |
+**Active — reference / คู่มือ (ใช้อยู่):**
+
+| เอกสาร | สำหรับ | สถานะ |
+|---|---|---|
+| README.md (ไฟล์นี้) | นักพัฒนา — ติดตั้งและรันระบบ | 📘 reference |
+| [CLAUDE.md](CLAUDE.md) | สถาปัตยกรรมและแนวทางแก้โค้ด (สำหรับ AI/นักพัฒนา) | 📘 reference |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | ผู้ดูแลโรงพยาบาล — คู่มือการใช้งาน | 📘 reference |
+| [MIGRATION_AUDIT.md](MIGRATION_AUDIT.md) | audit การ migrate UI ไป design system (คู่กับ skill `nuddee-design`) | 🔧 in-progress |
+| [TENANT_MANAGEMENT_PLAN.md](TENANT_MANAGEMENT_PLAN.md) | แผนระบบ Super Admin จัดการ tenant | 📘 reference (สร้างแล้วเป็นส่วนใหญ่) |
+
+**แผนงาน (plan / roadmap):**
+
+| เอกสาร | สำหรับ | สถานะ |
+|---|---|---|
+| [docs/NudDee_Queue_and_Messaging_Implementation_Plan.md](docs/NudDee_Queue_and_Messaging_Implementation_Plan.md) | spec ระบบคิว/check-in/LINE-Telegram-PWA | ✅ Phase 0–5 + Patch 21 เสร็จ (ดู §1.4); future hooks ยังเหลือ |
+| [docs/NudDee_AI_ML_Roadmap.md](docs/NudDee_AI_ML_Roadmap.md) | service-time learning / no-show / assistant | 🔜 Phase 5+ (ยังไม่ทำ) |
+| [docs/NudDee_Platform_Integration_Plan.md](docs/NudDee_Platform_Integration_Plan.md) | handoff contract กับระบบหลังบ้านเฉพาะทาง | 🔜 design lock, build deferred |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | แผน deploy ขึ้น production | ⏳ ยังไม่ deploy จริง |
+
+**[docs/archive/](docs/archive/)** — งานที่ทำเสร็จแล้ว / บันทึกย้อนหลัง (TODO เก่า, debug log, fix report, kickoff prompt) แยกไว้กันสับสน
 
 ## Quick Start (วิธีที่แนะนำ)
 

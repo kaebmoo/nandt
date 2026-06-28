@@ -216,7 +216,7 @@ Test both URL modes:
 
 ## Known Issues
 
-- URL generation inconsistency (see `subdomain_fixed.md` for details)
+- URL generation inconsistency (see `docs/archive/subdomain_fixed.md` for details)
 - Some template filters are duplicated across files
 - Error handling needs improvement in API integration points
 - N+1 query issues in dashboard data loading
