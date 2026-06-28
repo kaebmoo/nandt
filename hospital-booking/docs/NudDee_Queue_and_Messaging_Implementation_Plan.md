@@ -106,15 +106,33 @@ fastapi_app/app/availability.py           # FastAPI availability endpoints
 - **Platform integration / handoff** (เชื่อมหลังบ้านเฉพาะทาง เช่น Telemed) แยกเป็นเอกสาร [`docs/NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) — NudDee = ประตูหน้าบ้าน; **design ล็อก, build deferred** จนมี demand (เพิ่ม 20 มิ.ย. 2026)
 - **Phase 4 (notification 4.1/4.13 + identity A + called-timeout D)** wired แล้ว (commit `9151965`, 20 มิ.ย. 2026): `notify_service.notify()` + identity gate (`no_linked_identity` skip เมื่อไม่มี `channel_links`), `queue_service.close_stale_called()` + sweeper + `call_next` preflight, queue wiring (เช็คอิน/call_next → `queue_notifications`); pytest `144 passed`
 - **A1 `event_types.requires_queue`** implement แล้ว: migration + SQLAlchemy model + FastAPI create/update/response + settings UI + check-in arrival-only path + tests
-- **Patch 21 มิ.ย. 2026 (console HTMX + เสียง WAV + anon identity + arrived_ack)** implement แล้ว (branch `feat/queue-patch-21`, pytest `164 passed`):
+- **Patch 21 มิ.ย. 2026 (console HTMX + เสียง WAV + anon identity + arrived_ack)** implement + **merged + pushed → origin/main** (`23d4211`, pytest `165 passed`); migration `arrived_ack_at` + `audio_config` rolled `--all` ครบ **ทั้ง 4 tenants** (humnoi/ccui/monnum/nannasi, verified):
   - anon identity (§4.6.1) — `identity_service.mint_anon_ref()` + `anon:{token}` เป็น resolver fallback ที่ 3 + canonicalize รับ anon; walk-in ไม่ให้เบอร์ check-in ได้ (anon); notify gate: linked-anon → push, unlinked → pull/log (commit `8dd7fb5`)
   - arrived_ack (§3.2/§4.4) — `queue_entries.arrived_ack_at` (model + canonical DDL + migration `add_queue_arrived_ack.py`) + `queue_service.record_arrived_ack(patient|staff)` + `queue_events('arrived_ack')`; `close_stale_called` ยกเว้น acked; ปุ่มที่ status page + console (commit `a7739fa`)
   - Staff Console HTMX (§13) — `_room.html` fragment swap (hx-post/hx-trigger every 5s, no full reload); actions: call-next/start/done/skip/no_show/arrived-ack/reset/reclass/move/remove/show-QR; `call_next` atomic เดิม; destructive ใช้ hx-confirm; badge "ถึงแล้ว" (commit `ff02ee1`)
   - เสียงเรียกคิว WAV (§14) — `audio_service.build_playlist` (full→per-digit fallback) + clip library ต่อ schema + `_default` ชุดไทย (placeholder tones, แทนด้วยเสียงจริงได้โดยไม่แตะ code) + `messaging_config.audio_config` JSONB (migration `add_messaging_config_audio.py`) + display autoplay-unlock + audio queue ไม่ทับ (commit `8a3f96f`)
   - ตามคนไข้ 5 ทาง (§5.6 ภาคผนวก) — pull (ticket) / push turn (call_next→RQ, channel_priority) / จอ+เสียง / arrived_ack / manual ครบ; `queue_near` enqueue helper พร้อมไว้รอ near-detector (future)
 
+### 1.4.1 Backlog / ยังไม่ทำ — doc-coverage map (ตรวจ 28 มิ.ย. 2026)
+สถานะงานที่เหลือ + เอกสารที่รองรับ (single source กันงง — ✅ มี spec ครบ / ⚠️ มีร่องรอยแต่ยังไม่มี spec ของส่วนที่เหลือ / 🧰 owner/ops)
+
+| งานที่เหลือ | เอกสารรองรับ | สถานะ |
+|---|---|---|
+| Service-time learning (Track A, 0-token) | ✅ [`NudDee_AI_ML_Roadmap.md`](./NudDee_AI_ML_Roadmap.md) §Track A (A.1–A.8, สเปกครบ: `estimation/learned_avg.py`, Lv2.5, table `service_time_models`) | ยังไม่เริ่ม — prereq พร้อม เริ่มได้เลย |
+| No-show prediction (Track B, 0-token) | ✅ AI/ML Roadmap §Track B (B.1–B.9) | ยังไม่เริ่ม — ทำหลัง A |
+| Feedback insight / assistant (Track C/D, LLM) | ✅ AI/ML Roadmap §Track C/D + §0.9 `llm_provider` boundary | defer / YAGNI (LLM) |
+| Platform / Telemed handoff | ✅ [`NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) (journey + 3 message types ครบ) | defer จนมี demand (locked) |
+| Unskip — ดึง `skipped` กลับเข้า active | ✅ §3.2 หมายเหตุ + §12 decisions log | future (Phase หลัง channel) |
+| UI React component port | ✅ [`MIGRATION_AUDIT.md`](../MIGRATION_AUDIT.md) + skill `nuddee-design/MIGRATION_PLAN.md` (map ต่อ template + priority) | visuals/Tailwind ทำแล้ว; React port ยังไม่ทำ |
+| `queue_near` near-detector | ⚠️ event + enqueue helper + dispatcher มี (§4.13/§5.6/§10) — **ยังไม่มี spec ตัว detector** (logic ตัดสินว่าเหลืออีกกี่คิวแล้วยิง `queue_near`) | future — ต้องเขียน spec ก่อนทำ |
+| Reminder scheduler (เตือนล่วงหน้า 1 วัน) | ⚠️ sender + `reminder_enabled` gate + cost map มี (§5.6/§6.2) — **ยังไม่มี spec ของ cron/job ที่ trigger** | future — ต้องเขียน spec ก่อนทำ |
+| RBAC enforcement ใน main Flask routes | ⚠️ ระบุเป็น known gap ([CLAUDE.md](../CLAUDE.md), [DEPLOYMENT.md](../DEPLOYMENT.md) §7) — **ยังไม่มี plan วิธี enforce** | future — ต้องเขียน plan ก่อนทำ |
+| Deploy/ops (systemd, Nginx+SSL, Stripe live, secret rotation, backup/monitoring) | ✅ [`DEPLOYMENT.md`](../DEPLOYMENT.md) | 🧰 owner/ops |
+| อัดเสียงไทยจริงแทน placeholder tones | ✅ [`flask_app/app/static/queue_audio/README.md`](../flask_app/app/static/queue_audio/README.md) | 🧰 owner |
+
 ### 1.5 Known Issues / pre-existing (นอกขอบเขตแผนนี้ แต่ต้องรู้)
-- **ปุ่ม save บนหน้า template edit** (`/settings/availability/template/{id}/edit`) **ยังไม่ทำงาน** ณ สิ้นสุด session ล่าสุด → ถ้างานในแผนนี้ต้องพึ่งหน้านั้น ให้แจ้งและแก้ก่อน แต่ไม่ใช่เป้าหมายหลักของแผนนี้
+- **ปุ่ม save บนหน้า template edit** (`/settings/availability/template/{id}/edit`) เคยรายงานว่า **ยังไม่ทำงาน** ณ สิ้นสุด session ก่อน → ถ้างานในแผนนี้ต้องพึ่งหน้านั้น ให้แจ้งและแก้ก่อน แต่ไม่ใช่เป้าหมายหลักของแผนนี้
+  - _(review 28 มิ.ย. 2026): code path ตรวจแล้วโครงสร้างถูก — route ทำ `validate_on_submit()` → PUT → flash, form มี `{{ form.hidden_tag() }}` (CSRF ครบ), `submitForm()` ถูกต้อง. reproduce จาก static ไม่ได้ → ต้อง **manual click-test** เพื่อยืนยัน/หาสาเหตุจริง (น่าจะเป็น WTForms validate ล้มเงียบจาก field ของวันที่ disabled — ยังไม่ยืนยัน)_
 
 ---
 
@@ -970,6 +988,7 @@ def provision_telegram_bot(tenant, token: str, ownership: str,
 | 4.13 | ผูก dispatcher เข้ากับ event คิว: checkin_confirm, queue_near, queue_turn | `services/queue_service.py` | call_next → queue_turn ไปคนถูกคน + ช่องถูก (LINE/Telegram/PWA), log ครบ |
 
 ### Phase 5 — Analytics dashboard (ทำหลังมีข้อมูลจริงพอ)
+> ✅ **implement แล้ว** — `analytics_service.py` (queue_summary, message_cost_summary, line_message_quota) + `analytics_routes.py` + `templates/analytics/index.html` (Chart.js, logic อยู่ Python); 5.1/5.2/5.3 ครบ ตาม metric ที่ล็อกด้านล่าง
 | Task | รายละเอียด | Files | Acceptance |
 |---|---|---|---|
 | 5.1 | SQL aggregation: avg wait/ชม., throughput, no-show rate, peak | `services/analytics_service.py` | query คืนค่าถูกต้องเทียบ manual |
