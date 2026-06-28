@@ -1,0 +1,143 @@
+{# Console room fragment (Patch 21 §13) — HTMX swaps this into #console-body.
+   logic อยู่ Python (queue_service); JS แค่ขน HTML ที่ server render. ปุ่ม destructive ใช้ hx-confirm.
+   kebab "เพิ่มเติม" ใช้ <details> (native, ไม่ต้อง JS). #}
+{% macro action_form(e, action, label, css, confirm=None) %}
+<form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action=action) }}"
+      hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action=action) }}"
+      hx-target="#console-body" hx-swap="innerHTML"
+      {% if confirm %}hx-confirm="{{ confirm }}"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="{{ css }}">{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% macro entry_more(e, other_points, ticket_tokens) %}
+<details class="relative">
+    <summary class="cursor-pointer list-none px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 select-none">เพิ่มเติม</summary>
+    <div class="mt-2 flex flex-wrap items-center gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
+        {% if e.status == 'called' %}
+        {{ action_form(e, 'reset', 'กลับไปรอเรียก', 'px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors') }}
+        {% endif %}
+        {{ action_form(e, 'no-show', 'ไม่มา', 'px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors', confirm='ยืนยันว่าคิวนี้ไม่มาตามนัด?') }}
+        <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='reclass') }}"
+              hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action='reclass') }}"
+              hx-target="#console-body" hx-swap="innerHTML">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="entry_class" value="{{ 'walkin' if e.entry_class == 'appointment' else 'appointment' }}">
+            <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors">
+                {{ 'ทำเป็น walk-in' if e.entry_class == 'appointment' else 'ทำเป็นนัดหมาย' }}
+            </button>
+        </form>
+        {% if other_points %}
+        <form method="POST" action="{{ nav_url('queue.entry_action', entry_id=e.id, action='move') }}"
+              hx-post="{{ nav_url('queue.entry_action', entry_id=e.id, action='move') }}"
+              hx-target="#console-body" hx-swap="innerHTML" class="flex items-center gap-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="service_point_id" class="rounded-lg border border-gray-300 text-sm py-1.5 px-2">
+                {% for sp in other_points %}<option value="{{ sp.id }}">{{ sp.name }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors">ย้าย</button>
+        </form>
+        {% endif %}
+        {% if ticket_tokens.get(e.id) %}
+        <a href="{{ nav_url('queue.ticket', token=ticket_tokens[e.id]) }}" target="_blank"
+           class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-white transition-colors">ดูบัตร/QR</a>
+        {% endif %}
+        {{ action_form(e, 'remove', 'นำออกจากคิว', 'px-3 py-1.5 rounded-lg border border-red-300 text-red-700 text-sm hover:bg-red-50 transition-colors', confirm='ยืนยันการนำคิวนี้ออกจากคิว?') }}
+    </div>
+</details>
+{% endmacro %}
+
+{% if notice %}
+<div class="mb-4 px-4 py-2 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-sm">
+    {{ notice }}
+</div>
+{% endif %}
+
+<!-- stat row -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-md p-4 text-center">
+        <div class="text-3xl font-bold text-purple-600">{{ waiting | length }}</div>
+        <div class="text-sm text-gray-500 mt-1">รอเรียก</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md p-4 text-center">
+        <div class="text-3xl font-bold text-blue-600">{{ serving | length }}</div>
+        <div class="text-sm text-gray-500 mt-1">กำลังเรียก/บริการ</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md p-4 text-center">
+        <div class="text-3xl font-bold text-green-600">{{ done_count }}</div>
+        <div class="text-sm text-gray-500 mt-1">เสร็จแล้ววันนี้</div>
+    </div>
+</div>
+
+<!-- call next (ปุ่มหลัก 90% ของงาน) -->
+<form method="POST" action="{{ nav_url('queue.call_next', service_point_id=service_point.id) }}"
+      hx-post="{{ nav_url('queue.call_next', service_point_id=service_point.id) }}"
+      hx-target="#console-body" hx-swap="innerHTML" class="mb-8">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit"
+            class="w-full py-3 px-6 rounded-lg bg-purple-600 text-white text-lg font-medium
+                   hover:bg-purple-700 transition-colors">
+        เรียกคิวถัดไป
+    </button>
+</form>
+
+<!-- serving -->
+<h2 class="text-xl font-semibold text-gray-900 mb-3">กำลังเรียก / รับบริการ</h2>
+{% if serving %}
+<div class="space-y-3 mb-8">
+    {% for e in serving %}
+    <div class="bg-white rounded-xl shadow-md p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-4">
+                <div class="text-2xl font-bold text-purple-600 w-12 text-center">{{ e.queue_number }}</div>
+                <div>
+                    <div class="font-semibold text-gray-900">{{ e.patient_ref }}</div>
+                    <div class="text-sm {{ 'text-blue-600' if e.status == 'in_service' else 'text-amber-600' }}">
+                        {{ status_labels.get(e.status, e.status) }}
+                        {% if e.entry_class == 'appointment' %}<span class="ml-1 text-xs text-gray-400">(นัดหมาย)</span>{% endif %}
+                        {% if e.arrived_ack_at %}
+                        <span class="ml-1 inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">ถึงแล้ว</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                {% if e.status == 'called' %}
+                    {{ action_form(e, 'start', 'เริ่มบริการ', 'px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors') }}
+                    {% if not e.arrived_ack_at %}
+                    {{ action_form(e, 'arrived-ack', 'ถึงแล้ว', 'px-3 py-1.5 rounded-lg border border-green-300 text-green-700 text-sm hover:bg-green-50 transition-colors') }}
+                    {% endif %}
+                {% endif %}
+                {% if e.status == 'in_service' %}
+                    {{ action_form(e, 'done', 'เสร็จสิ้น', 'px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition-colors') }}
+                {% endif %}
+                {{ action_form(e, 'skip', 'ข้ามคิว', 'px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors') }}
+                {{ entry_more(e, other_points, ticket_tokens) }}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-gray-100 rounded-xl p-6 text-center text-gray-500 mb-8">ยังไม่มีคิวที่กำลังเรียก</div>
+{% endif %}
+
+<!-- waiting -->
+<h2 class="text-xl font-semibold text-gray-900 mb-3">คิวที่รออยู่</h2>
+{% if waiting %}
+<div class="space-y-2">
+    {% for e in waiting %}
+    <div class="bg-white rounded-lg shadow-sm p-3 flex items-center gap-4">
+        <div class="text-xl font-bold text-gray-400 w-12 text-center">{{ e.queue_number }}</div>
+        <div class="font-medium text-gray-800">{{ e.patient_ref }}</div>
+        {% if e.entry_class == 'appointment' %}
+        <span class="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">นัดหมาย</span>
+        {% endif %}
+        <div class="ml-auto">{{ entry_more(e, other_points, ticket_tokens) }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-gray-100 rounded-xl p-6 text-center text-gray-500">ไม่มีคิวที่รออยู่</div>
+{% endif %}

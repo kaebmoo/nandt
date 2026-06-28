@@ -358,6 +358,40 @@ def test_notify_dedupe_lock_prevents_concurrent_double_push(make_session):
     })
 
 
+def test_notify_pushes_to_linked_anon_identity(db):
+    # anon:{token} that linked a channel is addressable -> push (chat_id/subscription is PII-free)
+    anon = 'anon:' + 'A' * 22
+    _config(db, priority=['telegram', 'line_push'])
+    _link(db, anon, 'telegram')
+    calls = []
+
+    result = ns.notify(
+        db, anon, 'queue_turn', 'critical',
+        senders={'telegram': lambda **kwargs: calls.append(kwargs) or True},
+        now=DT(2026, 6, 15, 9, 0),
+    )
+
+    assert result == ns.NotificationResult('telegram', 0, 'sent')
+    assert len(calls) == 1
+    log = _logs(db, anon)[0]
+    assert log.channel == 'telegram' and log.status == 'sent'
+
+
+def test_notify_skips_unlinked_anon_identity(db):
+    anon = 'anon:' + 'B' * 22
+    _config(db, priority=['telegram', 'line_push'])
+
+    result = ns.notify(
+        db, anon, 'queue_turn', 'critical',
+        senders={'telegram': lambda **kwargs: True},
+        now=DT(2026, 6, 15, 9, 0),
+    )
+
+    assert result == ns.NotificationResult('pull', 0, 'skipped', 'no_linked_identity')
+    log = _logs(db, anon)[0]
+    assert log.channel == 'pull' and log.error == 'no_linked_identity'
+
+
 def test_notify_uses_line_reply_free_with_reply_token(db):
     _config(db)
 

@@ -101,7 +101,17 @@ fastapi_app/app/availability.py           # FastAPI availability endpoints
   - decisions ที่ final แล้ว: date override ที่สร้างใหม่เป็น template-specific (ผูก `template_id` กับ `availability_templates`); legacy global override ยังอ่านเป็น fallback ได้เพื่อ backward compatibility; เอา `provider_id` ออกจากทั้ง `availabilities` และ `date_overrides`, migration รันบน schema `tenant_humnoi`
 - **Subdomain URL routing** แก้แล้ว: `http://humnoi.localhost/dashboard` ไม่ append `?subdomain=` ผิด ๆ อีก (จัดการโดย `url_helper.py`)
 - **Queue/priority/grace/session/estimation/notify base/analytics base** implement แล้ว (14–15 มิ.ย. 2026) และ pytest ล่าสุดผ่าน `94 passed`
+- **Priority score mode** implement แล้ว (ไม่ใช่แค่ seam): `priority_service.compute_priority_score` + `QueuePolicy.mode='score'` + weights `w_class/w_wait/w_window` (default ยังเป็น `ratio`) — ดู decision #5
+- **AI/ML upgrade path** (service-time learning / no-show / assistant) แยกเป็น roadmap: [`docs/NudDee_AI_ML_Roadmap.md`](./NudDee_AI_ML_Roadmap.md) — งาน Phase 5+ หลัง Phase 4 (เพิ่ม 20 มิ.ย. 2026)
+- **Platform integration / handoff** (เชื่อมหลังบ้านเฉพาะทาง เช่น Telemed) แยกเป็นเอกสาร [`docs/NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) — NudDee = ประตูหน้าบ้าน; **design ล็อก, build deferred** จนมี demand (เพิ่ม 20 มิ.ย. 2026)
+- **Phase 4 (notification 4.1/4.13 + identity A + called-timeout D)** wired แล้ว (commit `9151965`, 20 มิ.ย. 2026): `notify_service.notify()` + identity gate (`no_linked_identity` skip เมื่อไม่มี `channel_links`), `queue_service.close_stale_called()` + sweeper + `call_next` preflight, queue wiring (เช็คอิน/call_next → `queue_notifications`); pytest `144 passed`
 - **A1 `event_types.requires_queue`** implement แล้ว: migration + SQLAlchemy model + FastAPI create/update/response + settings UI + check-in arrival-only path + tests
+- **Patch 21 มิ.ย. 2026 (console HTMX + เสียง WAV + anon identity + arrived_ack)** implement แล้ว (branch `feat/queue-patch-21`, pytest `164 passed`):
+  - anon identity (§4.6.1) — `identity_service.mint_anon_ref()` + `anon:{token}` เป็น resolver fallback ที่ 3 + canonicalize รับ anon; walk-in ไม่ให้เบอร์ check-in ได้ (anon); notify gate: linked-anon → push, unlinked → pull/log (commit `8dd7fb5`)
+  - arrived_ack (§3.2/§4.4) — `queue_entries.arrived_ack_at` (model + canonical DDL + migration `add_queue_arrived_ack.py`) + `queue_service.record_arrived_ack(patient|staff)` + `queue_events('arrived_ack')`; `close_stale_called` ยกเว้น acked; ปุ่มที่ status page + console (commit `a7739fa`)
+  - Staff Console HTMX (§13) — `_room.html` fragment swap (hx-post/hx-trigger every 5s, no full reload); actions: call-next/start/done/skip/no_show/arrived-ack/reset/reclass/move/remove/show-QR; `call_next` atomic เดิม; destructive ใช้ hx-confirm; badge "ถึงแล้ว" (commit `ff02ee1`)
+  - เสียงเรียกคิว WAV (§14) — `audio_service.build_playlist` (full→per-digit fallback) + clip library ต่อ schema + `_default` ชุดไทย (placeholder tones, แทนด้วยเสียงจริงได้โดยไม่แตะ code) + `messaging_config.audio_config` JSONB (migration `add_messaging_config_audio.py`) + display autoplay-unlock + audio queue ไม่ทับ (commit `8a3f96f`)
+  - ตามคนไข้ 5 ทาง (§5.6 ภาคผนวก) — pull (ticket) / push turn (call_next→RQ, channel_priority) / จอ+เสียง / arrived_ack / manual ครบ; `queue_near` enqueue helper พร้อมไว้รอ near-detector (future)
 
 ### 1.5 Known Issues / pre-existing (นอกขอบเขตแผนนี้ แต่ต้องรู้)
 - **ปุ่ม save บนหน้า template edit** (`/settings/availability/template/{id}/edit`) **ยังไม่ทำงาน** ณ สิ้นสุด session ล่าสุด → ถ้างานในแผนนี้ต้องพึ่งหน้านั้น ให้แจ้งและแก้ก่อน แต่ไม่ใช่เป้าหมายหลักของแผนนี้
@@ -116,7 +126,7 @@ decisions เหล่านี้ตัดสินใจร่วมกับ�
 2. **LINE/Telegram = ทางผ่านเข้าแอป ไม่ใช่ท่อ push** — ดันทุก event ไปช่องฟรีให้มากสุด; LINE เหลือ push เสียเงินเฉพาะ "ใกล้/ถึงคิว", **Telegram push ฟรีเสมอ** (ไม่มีค่าต่อข้อความ)
 3. **Mini App = web app เดิม + SDK glue** — ไม่เขียน SPA ใหม่ หน้า Jinja2 เดิมเป็น LIFF/Telegram Mini App ได้ทันที
 4. **คิว: การจอง = ตั๋วคิว, check-in = ตัวกำหนดลำดับ** — ไม่ซื้อระบบคิว/ตู้กดบัตร, จอคิวคือหน้า Jinja2 บน TV
-5. **Appointment vs walk-in: สลับแบบให้ priority คนนัดมากกว่า** — เริ่มด้วย ratio interleaving (โปร่งใส) แล้วอัปเกรดเป็น score model ได้
+5. **Appointment vs walk-in: สลับแบบให้ priority คนนัดมากกว่า** — เริ่มด้วย ratio interleaving (โปร่งใส) แล้วอัปเกรดเป็น score model ได้ — *(สถานะ 20 มิ.ย. 2026: `mode='score'` implement แล้ว, default ยัง `ratio`; no-show risk จะเสียบเป็น weight `w_noshow` เพิ่มใน score — ดู Track B ใน `docs/NudDee_AI_ML_Roadmap.md`)*
 6. **Grace rule: มีน้ำใจแต่เป็นธรรม** — อยู่ช่วงผ่อนผัน → priority เต็ม; วันเดียวกันแต่นอกช่วง → demote เป็น walk-in; ไม่มาจนปิด → no_show
 7. **Wait estimation: ทำ level 1-2 ก่อน** (avg service time × คนข้างหน้า / servers, ใช้ p50/p80) แต่วาง seam ให้สลับเป็น level 3/4 ได้
 8. **ทุกอย่างขับด้วย config ต่อ tenant** — policy เป็นข้อมูลใน DB ไม่ใช่ hardcode
@@ -144,6 +154,8 @@ no_show              [reclass เป็น walkin]      skipped
 ```
 
 > **หมายเหตุ (re-queue หลัง skipped):** ตอนนี้ `skipped` เป็น terminal แต่จริง ๆ คนที่ถูกข้ามมักกลับมาเรียกใหม่ได้ — เพิ่ม action ให้ staff ดึง skipped กลับเข้า active (insert event ใหม่) เป็น **Phase หลัง channel (หลัง Phase 4)** ไม่ใช่ blocker ตอนนี้
+
+> **arrived_ack (เพิ่ม 21 มิ.ย. 2026):** สัญญาณ "คนไข้ถึงหน้าห้องแล้ว" ระหว่าง `called → in_service` — คนไข้กดเองผ่าน status page (magic-link) หรือ staff กดแทน **ไม่ใช่ status ใหม่ ไม่ใช่ gate** (flow ที่ไม่ต้องการข้ามได้) เก็บที่ `queue_entries.arrived_ack_at` + `queue_events(event_type='arrived_ack')` **called-timeout sweeper ต้องยกเว้น entry ที่มี `arrived_ack_at`** (คนมาถึงแล้วต้องไม่ถูกปิดเป็น stale/no_show) — ดู §4.4 + §13
 
 ### 3.3 Data flow ของการประมาณเวลา + analytics
 ```
@@ -232,6 +244,12 @@ CREATE INDEX IF NOT EXISTS idx_queue_entries_appt
 ```
 > **timestamp 4 ตัว (check_in / called / service_start / service_end) คือฐานของทุกอย่าง** — ต้องเขียนให้ครบทุกครั้งที่สถานะเปลี่ยน ห้ามละเว้น
 
+> **arrived_ack (เพิ่ม 21 มิ.ย. 2026 — ส่วนขยาย §4.4):** เพิ่ม column ผ่าน ALTER idempotent:
+> ```sql
+> ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS arrived_ack_at TIMESTAMPTZ;  -- เวลายืนยัน "ถึงหน้าห้อง" (patient/staff)
+> ```
+> `queue_events.event_type` เพิ่มค่า `arrived_ack` (`actor='patient'|'staff'`); sweeper/preflight ของ called-timeout ต้องเช็ค `arrived_ack_at IS NULL` ก่อนปิด stale `called`
+
 ### 4.5 `queue_events` — append-only event log (ขับทั้ง display + analytics + ML อนาคต)
 ```sql
 CREATE TABLE IF NOT EXISTS queue_events (
@@ -272,6 +290,11 @@ CREATE INDEX IF NOT EXISTS idx_channel_links_patient ON channel_links (patient_r
 - `patient:{id}` — เมื่อมี `patients.id` (ผู้ป่วยที่ระบุตัวตนได้)
 - `phone:{normalized_phone}` — fallback สำหรับ guest/walk-in (normalize ก่อนเสมอให้คงรูปเดียว เช่น E.164 หรือตัด non-digit + เติม country code)
 - **ห้ามใช้ชื่อเป็น key เด็ดขาด** (ไม่ unique, สะกดต่าง, ชนกันข้ามคน)
+- `anon:{token}` — (เพิ่ม 21 มิ.ย. 2026) opaque ไม่มี PII ออกตอน issue/scan QR สำหรับ walk-in/guest ที่ไม่ระบุตัวตน (ไม่มี `patients.id` และไม่ให้เบอร์); `token` = random URL-safe (≥22 chars) unique ต่อ visit, **ห้าม derive จาก PII** — แก้ช่องโหว่จริง: `queue_entries.patient_ref` เป็น NOT NULL แต่ walk-in ที่ไม่ให้เบอร์ไม่มี ref ที่ถูกต้อง **นี่คือ technical fallback ไม่ใช่ privacy mode** (NudDee เดิน consent-based PDPA; flow ที่ระบุตัวตน/ให้เบอร์ ยังเก็บเป็น PII ตามเดิม) **ยังไม่เพิ่ม tenant toggle `identity_mode`** — force zero-PII ทั้ง tenant = defer จนมี demand จริง เพราะต้องทำ enforcement เต็มทุกทางเข้า ไม่ใช่แค่ field
+
+**ลำดับ resolve (เพิ่ม 21 มิ.ย. 2026):** `patient:{id}` → `phone:{normalized_phone}` → `anon:{token}` (fallback ท้ายสุด) — flow ที่ระบุตัวตนได้ใช้ 2 รูปแรกเหมือนเดิม
+
+**identity gate (§5.6) กับ anon:** `anon:{token}` ที่ผูก `channel_links` active แล้ว ถือว่า addressable → **push ได้** (Telegram chat_id / PWA subscription ไม่ใช่ PII — ได้ทั้ง anonymous + push เสถียร เหนือกว่า prototype ที่ต้อง pull อย่างเดียว); `anon:{token}` ที่ยังไม่ผูก channel → pull/log เหมือนเดิม
 
 **กฎการผูก identity (`channel_links`):**
 - ผูก `external_id` (LINE userId / Telegram chat_id / PWA subscription) ↔ `patient_ref` **เฉพาะตอนที่ยืนยันตัวตนได้** — หลักคือตอนเปิด Mini App แบบ authenticated (LIFF ID token verified / Telegram initData validated) ที่ผูกกับ booking/patient อยู่แล้ว หรือผ่าน flow ยืนยันเบอร์
@@ -1116,6 +1139,106 @@ override.is_unavailable → ไม่มี session; override custom hours → s
 - **F §4.7 ↔ Phase 4.0 (§4.7):** §4.7 = target final schema; Phase 4.0 = idempotent upgrade migration สำหรับ table ที่สร้างก่อน 15 มิ.ย.
 - **จุดเล็ก:** `_window_proximity` คืน 0 เมื่อไม่ใช่ appointment (implemented, §5.4); PWA VAPID คง per-tenant เพื่อ white-label (§6.5); re-queue หลัง skipped = Phase หลัง channel (§3.2); Telegram pool race ใส่ re-check ตอน `register_bot()` (§4.11)
 - **ลำดับ implement ที่ล็อก:** patch แผน (นี้) → code `called-timeout` + `identity resolution contract` → แล้วค่อย Phase 4.0/4.13 notification wiring
+
+---
+
+### Patch 20 มิ.ย. 2026 — AI/ML scope แยกเป็น roadmap (Phase 5+)
+แยก AI/ML ออกเป็นเอกสาร [`docs/NudDee_AI_ML_Roadmap.md`](./NudDee_AI_ML_Roadmap.md) เพื่อไม่ให้โครงแผนหลักที่ล็อกแล้วรก:
+- **scope:** service-time learning (estimator factory §5.5), no-show prediction (score `w_noshow` + analytics), feedback insight, conversational assistant (webhook) — ทั้งหมดเป็น **Phase 5+** (Phase 4 + identity A + called-timeout D เสร็จแล้ว commit `9151965` → Track A/B เริ่มได้)
+- **cost:** งานทำนายทุกตัวเป็น local ML = 0 token; LLM เฉพาะ assistant/insight ภายใต้ tiered routing (ปุ่ม/regex→DB ก่อน)
+- **boundary:** ห้าม LLM แทน estimator core / notification template / grace-starvation guard; no-show **เสริม** score ไม่ override decision ที่ล็อก
+- **ลำดับ:** A (service-time, ไม่พึ่ง identity) → B (no-show, พึ่ง identity contract) → C/D (LLM)
+- โค้ดมี seam รับแล้ว 3 จุด: `estimation/get_estimator()`, `priority_service.compute_priority_score()`, `analytics_service` — ไม่ต้อง refactor
+
+---
+
+### Patch 20 มิ.ย. 2026 — Platform Integration (handoff contract) แยกเป็นเอกสาร (deferred)
+แยก contract การเชื่อมหลังบ้านเฉพาะทางออกเป็น [`docs/NudDee_Platform_Integration_Plan.md`](./NudDee_Platform_Integration_Plan.md) — เหตุผลเดียวกับ AI/ML roadmap (กันแผนหลักที่ build อยู่ตอนนี้ปนกับงาน deferred):
+- **positioning:** NudDee = ประตูหน้าบ้าน (engagement layer); ระบบเฉพาะทาง (Telemed ฯลฯ) = หลังบ้าน (handler) เสียบผ่าน contract — ต่อยอด decision #2
+- **contract = 3 ข้อความ:** `handoff` (ออก) / `lifecycle event` (กลับ, เซ็ตปิด accepted|status|ready|completed|failed) / `patient_payload` (ส่งให้คนไข้ผ่าน notify path เดิม Phase 4) — ซองล็อก ไส้ในทึบ
+- **boundary:** `external_ref` opaque แยกจาก `patient_ref` (กัน PII §4.6.1); API key ผูก tenant + resolve schema จาก key เท่านั้น (ยก §0.2 เป็น security boundary กัน cross-tenant breach); ผลคลินิกไม่ไหลกลับมาเก็บ (PDPA)
+- **handoff optional ต่อ service:** ไม่มี handler = NudDee เดิน journey เอง (รองรับ ร.พ. ที่ไม่มี telemed)
+- **สถานะ:** design ล็อก, **build deferred** จนมี demand; LINE OA เป็นของ ร.พ. (NudDee operate); รายละเอียด/Decisions เต็มอยู่ในเอกสารนั้น
+
+---
+
+### Patch 21 มิ.ย. 2026 — prototype field-feedback: console (HTMX) + เสียง (WAV) + anon identity
+> ✅ **implement แล้ว 21 มิ.ย. 2026** (branch `feat/queue-patch-21`, pytest `164 passed`) — สรุป commit + รายละเอียดที่ §1.4
+ที่มา: feedback จากระบบคิว prototype หน้างานจริง (คลินิกเมด) — สรุป decision ที่ล็อก:
+- **anon identity (§4.6.1):** เพิ่ม `anon:{token}` เป็น fallback ที่ 3, 2 รูปเดิมไม่เปลี่ยน, **เป็น technical fallback ไม่ใช่ privacy mode** (NudDee = consent-based PDPA), **ไม่เพิ่ม `identity_mode` field** (force zero-PII = defer)
+- **arrived_ack (§3.2/§4.4):** `arrived_ack_at` + event `arrived_ack`; signal ระหว่าง called→in_service; sweeper ยกเว้น entry ที่ ack แล้ว
+- **Staff Console (§13):** interaction = HTMX (AJAX-swap-fragment, logic อยู่ Python) — exception ที่อนุญาตของ §0.1/§10 เฉพาะ console; `call_next` atomic
+- **เสียงเรียกคิว (§14):** WAV concatenation, config = clip library + template, fallback เต็ม→ทีละหลัก, display-only
+- **ตามคนไข้ (§5.6):** ระบุ 5 ทาง (pull / push / จอ+เสียง / arrived_ack / manual)
+- **future note (ยังไม่ทำ):** เดิน consent-based → ควรเก็บหลักฐาน consent (เวลา/เวอร์ชันข้อความ/ช่อง) เป็นงาน compliance แยก ไม่อยู่ใน scope รอบนี้
+
+---
+
+## 13. Staff Console — หน้าจัดการคิวของพยาบาล (HTMX) (เพิ่ม 21 มิ.ย. 2026)
+
+จุดที่ "มีคนใน loop" — ทุก action ของ staff อยู่ที่นี่ (reference layout = หน้า "Physician Rooms" ของ prototype)
+
+**ที่อยู่:** Flask route (เช่น `flask_app/app/queue_routes.py`) render Jinja2 ต่อ `service_point` (โฟกัสห้องเดียว) + overview หลายห้อง (optional) — ทุกปุ่มยิงเข้า `services/queue_service.py` (logic อยู่ Python ล้วน) → เขียน `queue_entries` + `queue_events(actor='staff')`
+
+**Interaction model — HTMX (decision 21 มิ.ย. 2026):**
+- ปุ่มใช้ `hx-post` → Flask route → `queue_service.transition()` ตัดสินใน Python → return **HTML fragment ที่ server render** (การ์ดห้อง/แถวคิว) → HTMX swap เฉพาะส่วนนั้น ไม่ reload ทั้งหน้า
+- **exception ที่ log ไว้สำหรับ §0.1 + §10:** อนุญาต AJAX-swap-fragment **เฉพาะ staff console** — logic ไม่ย้ายไป JS, JS แค่ขนส่ง HTML ที่ server render → invariant Flask-first ยังครบ (ตรง decision #3 hypermedia ไม่ใช่ SPA)
+- refresh: เริ่ม HTMX polling (`hx-trigger="every Ns"`) วาง seam ไป SSE — ให้เห็น `arrived_ack` + การเปลี่ยนจากสเตชันอื่นแบบสด
+
+**Action (human-in-loop):**
+- หลัก: **"เรียกคิวถัดไป"** ระดับห้อง 1 ปุ่มเด่น (90% ของงาน)
+- รายคิว (ยุบ compact/kebab): start (`in_service`) / done / no_show / skip / reclass override / move (เปลี่ยน `service_point_id`) / reset to waiting (revert `called→checked_in`) / show QR / log (`queue_events`) / remove
+- patient-side: check-in (สแกน), arrived_ack (กดเอง หรือ staff กดแทน)
+
+**ข้อกำหนดที่ต้องทำ:**
+- `call_next` **atomic** (advisory lock หรือ `SELECT ... FOR UPDATE`) — สองสเตชันกดพร้อมกันต้องไม่คว้าคนไข้คนเดียวกัน (ครอบ preflight called-timeout (D) เดิม)
+- push critical ไป async ผ่าน RQ เสมอ (§10 H) → request ปุ่ม return ทันที ไม่ค้างรอ LINE/Telegram
+- confirm dialog สำหรับ destructive (remove, no_show)
+- badge "ถึงแล้ว" บนแถวที่มี `arrived_ack_at`
+- tablet-friendly (Bootstrap 5 responsive)
+
+**Acceptance:** กดเรียก/จบ/ack แล้วการ์ดห้อง update โดยไม่ reload ทั้งหน้า; logic อยู่ Python (route ไม่มี business decision ใน JS); สองสเตชันเรียกพร้อมกันไม่ได้คนซ้ำ; pytest ครอบ transition + atomic call_next
+
+---
+
+## 14. เสียงเรียกคิว (WAV concatenation) (เพิ่ม 21 มิ.ย. 2026)
+
+จอคิว (decision #4, Jinja2 บน TV) เล่นเสียงเรียกได้ — **display-only ตรง Flask-first** (Python ตัดสินว่าเรียกใคร = `call_next`; จอแค่ "เล่นไฟล์ตามลำดับ")
+
+**กลไก:** concatenative — server (Python) สร้าง **playlist (ลำดับชื่อไฟล์ WAV)** จาก template + ค่า queue/room; จอเล่นต่อกัน (หรือ server pre-concat เป็นไฟล์เดียว cache ไว้)
+
+**Config ต่อ tenant — มีแค่ 2 อย่าง (ง่าย ไม่ยุ่งยาก ตามที่ตกลง):**
+1. **clip library** — โฟลเดอร์ไฟล์เสียงต่อ schema (อัปโหลดผ่าน settings)
+2. **template** — ลำดับ token เช่น `["call_prefix", "{queue}", "room_prefix", "{room}"]`
+
+**token 2 ชนิด:**
+- **literal** = ชื่อไฟล์ตรง ๆ (`call_prefix` → เล่น `call_prefix.wav` ที่อัดว่า "เชิญหมายเลข")
+- **placeholder** `{queue}` / `{room}` = ระบบหาไฟล์ "ค่าเต็ม" ก่อน (เช่น `355.wav`) **ไม่เจอ → fallback อ่านทีละหลัก** (`3.wav 5.wav 5.wav`)
+→ "อ่านเป็นแบบไหนก็อัดแบบนั้น": อยากอ่านเต็มอัด `355.wav`; อยากทีละหลักอัดแค่ `0-9.wav`; **โปรแกรม fallback ให้เอง ไม่ต้องแก้ code**; เปลี่ยนคำพูด = แก้ template + วาง WAV ไม่ใช่แก้โปรแกรม
+
+**default มาให้พร้อมใช้ (ชุดไทย):** `0-9.wav` + `call_prefix.wav` ("เชิญหมายเลข") + `room_prefix.wav` ("ที่ห้อง") + template ด้านบน → "เชิญหมายเลข สาม-ห้า-ห้า ที่ห้อง หนึ่ง-สาม"
+
+**กฎ:**
+- **ไม่อ่านตัวอักษร series (เช่น L)** — เก็บบนจอเท่านั้น เสียงพูดแต่เลข (`queue_number` unique ต่อ service_point ต่อวันอยู่แล้ว); tenant อยากพูดตัวอักษรค่อยอัด clip ใส่ template เอง
+- **gotcha (ต้องทำ):** (ก) browser block autoplay → หน้า display ต้องมีปุ่ม "เริ่มระบบเสียง" กดครั้งเดียวตอนเปิดจอ unlock audio (ข) audio queue เล่นทีละประกาศ ไม่ทับ (client-side state) (ค) preload clips ตอนเปิดจอ
+- per-tenant: toggle เปิด/ปิดต่อห้อง, ความดัง, จำนวนครั้งซ้ำ (config-driven, decision #8)
+
+**scope:** display enhancement ไม่ block core notify loop; ชุดไทย default มาให้, tenant ทับได้
+
+**Acceptance:** เรียกคิว → จอเล่น "เชิญหมายเลข ... ที่ห้อง ..." ถูกต้อง; ไม่มีไฟล์เต็ม → fallback ทีละหลัก; autoplay-unlock ทำงาน; เรียกถี่ไม่เสียงทับ; เปลี่ยน template/clip โดยไม่แตะ code
+
+---
+
+## ภาคผนวก — "ตามคนไข้" (ขยาย §5.6, เพิ่ม 21 มิ.ย. 2026)
+
+แก้ pain "โทรตามคนไข้ยาก" ของ prototype ด้วย 5 ทางซ้อนกัน:
+1. **pull** — status page (link เฉพาะ/mini app): เลขคิว, สถานะ, คนข้างหน้า, เวลารอประมาณ (baseline, ฟรี) → ลดคนที่ต้องตามจริง
+2. **push ใกล้/ถึงคิว** (`queue_near`/`queue_turn`) ตาม `channel_priority` telegram→pwa→line_push (ถูก→แพง)
+3. **จอ + เสียง** (§14) สำหรับคน on-site ที่ไม่ดูมือถือ
+4. **arrived_ack** — คนไข้กดยืนยัน → ปิด loop กลับ staff
+5. **manual fallback** — staff เรียกเสียง/โทรเองได้เหมือนเดิมถ้า digital ล่ม
+
+**ข้อจำกัด:** push ทำงานเมื่อผูก `channel_links` แล้ว — คนไม่ผูก (ผู้สูงอายุ/ไม่มี smartphone) ตกไปที่ จอ+เสียง+manual → ระบบ "ลด" การตามด้วยมือ ไม่ใช่ลบ 100%
 
 ---
 

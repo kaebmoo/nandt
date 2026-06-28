@@ -86,6 +86,7 @@ DDL_STATEMENTS = [
         priority_score   NUMERIC(10,3),
         check_in_at      TIMESTAMPTZ,
         called_at        TIMESTAMPTZ,
+        arrived_ack_at   TIMESTAMPTZ,
         service_start_at TIMESTAMPTZ,
         service_end_at   TIMESTAMPTZ,
         created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -147,6 +148,7 @@ DDL_STATEMENTS = [
         plan_tier                        VARCHAR(20) DEFAULT 'free',
         channel_priority                 JSONB NOT NULL DEFAULT '["telegram","pwa","line_push"]',
         reminder_enabled                 BOOLEAN NOT NULL DEFAULT FALSE,
+        audio_config                     JSONB,
         updated_at                       TIMESTAMPTZ NOT NULL DEFAULT now()
     )
     """,
